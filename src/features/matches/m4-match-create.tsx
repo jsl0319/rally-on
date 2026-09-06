@@ -3,10 +3,8 @@
 import {
   ArrowLeft,
   ArrowRight,
-  CalendarBlank,
   CheckCircle,
   CurrencyKrw,
-  MapPin,
   MagnifyingGlass,
   Minus,
   PencilSimple,
@@ -15,7 +13,6 @@ import {
   TennisBall,
   UsersThree,
 } from "@phosphor-icons/react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { forwardRef, useEffect, useState, type ReactNode } from "react";
 
@@ -134,17 +131,6 @@ const MaskedTimeField = forwardRef<HTMLDivElement, TimePickerFieldProps>(({ inpu
 ));
 MaskedTimeField.displayName = "MaskedTimeField";
 
-function formatSchedule(date: string, startTime: string, endTime: string) {
-  if (!date || !startTime || !endTime) return "일시를 선택해 주세요";
-  const [year, month, day] = date.split("-");
-
-  return `${year}년 ${Number(month)}월 ${Number(day)}일 · ${startTime}~${endTime}`;
-}
-
-function getLabel<Value extends string>(items: readonly (readonly [Value, string, string])[], value: string) {
-  return items.find(([item]) => item === value)?.[1] ?? value;
-}
-
 function getDescription<Value extends string>(items: readonly (readonly [Value, string, string])[], value: string) {
   return items.find(([item]) => item === value)?.[2] ?? "";
 }
@@ -172,7 +158,6 @@ function isCourtPlaceSearchItem(value: unknown): value is CourtPlaceSearchItem {
 
 export function M4MatchCreate() {
   const router = useRouter();
-  const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [courtSearchQuery, setCourtSearchQuery] = useState("");
@@ -287,30 +272,16 @@ export function M4MatchCreate() {
     setIsManualCourtEntry(false);
   };
 
-  const next = () => {
-    setError("");
-    if (step === 1 && (!form.date || !form.startTime || !form.endTime)) {
-      setError("날짜, 시작 시간, 종료 시간을 모두 선택해 주세요.");
-      return;
-    }
-    if (step === 1 && form.endTime <= form.startTime) {
-      setError("종료 시간은 시작 시간보다 늦어야 해요.");
-      return;
-    }
-    if (step === 1 && (!form.courtName.trim() || !form.address.trim())) {
-      setError("예약한 코트의 이름과 주소를 입력해 주세요.");
-      return;
-    }
-    if (step === 2 && (!form.title.trim() || form.playPurposes.length === 0 || form.recruitCount < 1)) {
-      setError("매칭 제목, 모집 인원, 원하는 플레이를 확인해 주세요.");
-      return;
-    }
-    if (step === 3 && (form.totalCourtFeeKrw === "" || !Number.isInteger(totalCourtFee) || totalCourtFee < 0 || totalCourtFee > MAX_COURT_FEE_KRW)) {
-      setError(`전체 코트 비용을 0원 이상 ${MAX_COURT_FEE_KRW.toLocaleString("ko-KR")}원 이하의 정수로 입력해 주세요.`);
-      return;
+  const validateForm = () => {
+    if (!form.date || !form.startTime || !form.endTime) return "날짜, 시작 시간, 종료 시간을 모두 선택해 주세요.";
+    if (form.endTime <= form.startTime) return "종료 시간은 시작 시간보다 늦어야 해요.";
+    if (!form.courtName.trim() || !form.address.trim()) return "예약한 코트의 이름과 주소를 입력해 주세요.";
+    if (!form.title.trim() || form.playPurposes.length === 0 || form.recruitCount < 1) return "매칭 제목, 모집 인원, 원하는 플레이를 확인해 주세요.";
+    if (form.totalCourtFeeKrw === "" || !Number.isInteger(totalCourtFee) || totalCourtFee < 0 || totalCourtFee > MAX_COURT_FEE_KRW) {
+      return `전체 코트 비용을 0원 이상 ${MAX_COURT_FEE_KRW.toLocaleString("ko-KR")}원 이하의 정수로 입력해 주세요.`;
     }
 
-    setStep((current) => current + 1);
+    return null;
   };
 
   const submit = async () => {
@@ -354,52 +325,54 @@ export function M4MatchCreate() {
     }
   };
 
-  const action = step === 1 ? "모집 정보 입력" : step === 2 ? "비용 안내 입력" : step === 3 ? "미리보기" : "매칭 공개하기";
+  const handleSubmit = () => {
+    const message = validateForm();
+    if (message) {
+      setError(message);
+      return;
+    }
+    void submit();
+  };
 
   return (
     <main className="min-h-svh bg-[#F4F6FA] pb-36 text-[var(--tm-text-primary)]">
       <section className="mx-auto max-w-[560px]">
         <header className="sticky top-0 z-20 bg-[#F4F6FA]/95 px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur">
-          <div className="relative flex min-h-11 items-center justify-between">
+          <div className="relative flex min-h-11 items-center">
             <button
-              aria-label={step === 1 ? "이전 화면으로 돌아가기" : "이전 단계"}
+              aria-label="이전 화면으로 돌아가기"
               className="grid size-11 shrink-0 place-items-center rounded-full text-[var(--tm-text-primary)] transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)]"
-              onClick={() => (step === 1 ? router.replace("/") : setStep((current) => current - 1))}
+              onClick={() => router.replace("/")}
               type="button"
             >
               <ArrowLeft aria-hidden size={25} weight="bold" />
             </button>
-            <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-xl font-bold tracking-[-0.04em]">{step === 1 ? "매칭 개설" : "매칭 만들기"}</h1>
-            <p className="text-xs font-semibold text-[var(--tm-text-secondary)]">{step} / 4</p>
-          </div>
-          <div aria-label="매칭 등록 진행" aria-valuemax={4} aria-valuemin={1} aria-valuenow={step} className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--tm-border-default)]" role="progressbar">
-            <div className="h-full rounded-full bg-[var(--tm-action-primary)] transition-[width] duration-300" style={{ width: `${step * 25}%` }} />
+            <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-xl font-bold tracking-[-0.04em]">매칭 개설</h1>
           </div>
         </header>
 
         <div className="px-5 pt-6">
-          {step === 1 ? (
-            <StepOne
-              form={form}
-              onCourtNameChange={(value) => set("courtName", value)}
-              onCourtAddressChange={(value) => set("address", value)}
-              onCourtSearchClose={closeCourtSearch}
-              onCourtSearchOpen={openCourtSearch}
-              onManualCourtEntryOpen={openManualCourtEntry}
-              onCourtPlaceQueryChange={updateCourtSearchQuery}
-              onCourtPlaceSelect={selectCourtPlace}
-              courtSearchError={courtSearchError}
-              courtSearchLoading={courtSearchLoading}
-              courtSearchQuery={courtSearchQuery}
-              courtSearchResults={courtSearchResults}
-              isCourtSearchOpen={isCourtSearchOpen}
-              isManualCourtEntry={isManualCourtEntry}
-              set={set}
-            />
-          ) : null}
-          {step === 2 ? <StepTwo form={form} onRecruitChange={updateRecruitCount} onTogglePurpose={togglePurpose} set={set} /> : null}
-          {step === 3 ? <StepThree expectedPeople={expectedPeople} fee={fee} form={form} set={set} /> : null}
-          {step === 4 ? <StepFour expectedPeople={expectedPeople} fee={fee} form={form} /> : null}
+          <PageIntro description="일정, 코트, 모집 정보를 한 번에 입력하고 바로 공개할 수 있어요." eyebrow="테니스 메이트 모집" title="필요한 정보를 입력해 주세요" />
+
+          <CourtScheduleSection
+            courtSearchError={courtSearchError}
+            courtSearchLoading={courtSearchLoading}
+            courtSearchQuery={courtSearchQuery}
+            courtSearchResults={courtSearchResults}
+            form={form}
+            isCourtSearchOpen={isCourtSearchOpen}
+            isManualCourtEntry={isManualCourtEntry}
+            onCourtAddressChange={(value) => set("address", value)}
+            onCourtNameChange={(value) => set("courtName", value)}
+            onCourtPlaceQueryChange={updateCourtSearchQuery}
+            onCourtPlaceSelect={selectCourtPlace}
+            onCourtSearchClose={closeCourtSearch}
+            onCourtSearchOpen={openCourtSearch}
+            onManualCourtEntryOpen={openManualCourtEntry}
+            set={set}
+          />
+          <RecruitDetailsSection form={form} onRecruitChange={updateRecruitCount} onTogglePurpose={togglePurpose} set={set} />
+          <CostAndNoticeSection expectedPeople={expectedPeople} fee={fee} form={form} set={set} />
 
           {error ? (
             <p className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]" role="alert">
@@ -408,19 +381,17 @@ export function M4MatchCreate() {
           ) : null}
         </div>
 
-        <ActionFooter
-          action={action}
-          disabled={saving}
-          onBack={step === 1 ? undefined : () => setStep((current) => current - 1)}
-          onNext={() => (step < 4 ? next() : void submit())}
-          saving={saving}
-        />
+        <ActionFooter disabled={saving} onSubmit={handleSubmit} saving={saving} />
       </section>
     </main>
   );
 }
 
-function StepOne({
+function PageIntro({ description, eyebrow, title }: { description: string; eyebrow: string; title: ReactNode }) {
+  return <header><p className="text-sm font-bold text-[var(--tm-action-primary)]">{eyebrow}</p><h1 className="mt-2 text-[28px] font-bold leading-[1.32] tracking-[-0.04em]">{title}</h1><p className="mt-3 max-w-[420px] text-sm leading-6 text-[var(--tm-text-secondary)]">{description}</p></header>;
+}
+
+function CourtScheduleSection({
   form,
   onCourtAddressChange,
   onCourtNameChange,
@@ -485,14 +456,6 @@ function StepOne({
           <p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">2시간을 넘는 일정도 등록할 수 있어요. 자정을 넘는 일정은 현재 등록할 수 없어요.</p>
         </div>
       </FormPanel>
-
-      <section className="mt-5 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5">
-        <p className="text-sm font-bold">아직 코트를 예약하지 않았나요?</p>
-        <p className="mt-1 text-sm leading-6 text-[var(--tm-text-secondary)]">운영자가 준비한 시간으로 코트 매칭을 열 수 있어요.</p>
-        <Link className="mt-3 inline-flex min-h-10 items-center gap-1 rounded-xl bg-[var(--tm-bg-subtle)] px-3 text-sm font-semibold text-[var(--tm-action-primary)]" href="/partner-sessions">
-          코트 매칭 둘러보기 <ArrowRight aria-hidden size={15} weight="bold" />
-        </Link>
-      </section>
 
       <CourtPlaceDialog
         error={courtSearchError}
@@ -578,13 +541,11 @@ function CourtPlaceDialog({ error, form, isLoading, isManualEntry, isOpen, onAdd
   );
 }
 
-function StepTwo({ form, onRecruitChange, onTogglePurpose, set }: { form: MatchCreateForm; onRecruitChange: (change: number) => void; onTogglePurpose: (value: string) => void; set: FormSetter }) {
+function RecruitDetailsSection({ form, onRecruitChange, onTogglePurpose, set }: { form: MatchCreateForm; onRecruitChange: (change: number) => void; onTogglePurpose: (value: string) => void; set: FormSetter }) {
   const expectedPeople = form.recruitCount + 1;
 
   return (
     <div>
-      <StepIntro eyebrow="모집 정보" title="어떤 테니스를 함께할까요?" description="플레이 방식과 모집 인원을 알려 주면, 신청할 분이 더 편하게 판단할 수 있어요." />
-
       <FormPanel description="짧고 자연스러운 제목이 좋아요." icon={<TennisBall aria-hidden size={23} weight="fill" />} title="매칭 제목">
         <FormField>
           <FormLabel required>제목</FormLabel>
@@ -624,11 +585,9 @@ function StepTwo({ form, onRecruitChange, onTogglePurpose, set }: { form: MatchC
   );
 }
 
-function StepThree({ expectedPeople, fee, form, set }: { expectedPeople: number; fee: number; form: MatchCreateForm; set: FormSetter }) {
+function CostAndNoticeSection({ expectedPeople, fee, form, set }: { expectedPeople: number; fee: number; form: MatchCreateForm; set: FormSetter }) {
   return (
     <div>
-      <StepIntro eyebrow="비용과 안내" title="참가자가 궁금할 내용을 알려주세요" description="비용은 예상 금액으로 안내돼요. Rally On에서 결제하거나 나누어 받지는 않아요." />
-
       <FormPanel description="예약할 때 확인한 전체 코트 이용료를 입력해 주세요." icon={<CurrencyKrw aria-hidden size={23} weight="bold" />} title="코트 비용">
         <FormField>
           <FormLabel required>전체 코트 비용</FormLabel>
@@ -685,41 +644,6 @@ function StepThree({ expectedPeople, fee, form, set }: { expectedPeople: number;
   );
 }
 
-function StepFour({ expectedPeople, fee, form }: { expectedPeople: number; fee: number; form: MatchCreateForm }) {
-  const regionText = [form.courtName, form.address].filter(Boolean).join(" · ");
-
-  return (
-    <div>
-      <StepIntro eyebrow="공개 전 확인" title="이렇게 모집할까요?" description="공개하면 매칭 목록에 보여지고, 원할 때 참가 신청을 받을 수 있어요." />
-
-      <article className="mt-6 overflow-hidden rounded-3xl border border-[var(--tm-border-default)] bg-white shadow-[0_12px_30px_rgba(29,50,84,0.08)]">
-        <div className="p-5">
-          <p className="inline-flex rounded-full bg-[var(--tm-bg-subtle)] px-3 py-1.5 text-xs font-bold text-[var(--tm-action-primary)]">모집자가 코트를 예약했어요</p>
-          <h2 className="mt-3 text-xl font-bold leading-7">{form.title}</h2>
-          <dl className="mt-5 grid gap-4">
-            <PreviewItem icon={<CalendarBlank aria-hidden size={19} weight="fill" />} label="일시" value={formatSchedule(form.date, form.startTime, form.endTime)} />
-            <PreviewItem icon={<MapPin aria-hidden size={19} weight="fill" />} label="코트" value={regionText || "코트 정보를 입력해 주세요"} />
-            <PreviewItem icon={<UsersThree aria-hidden size={19} weight="fill" />} label="모집" value={`추가 ${form.recruitCount}명 · 총 ${expectedPeople}명 예정`} />
-            <PreviewItem icon={<CurrencyKrw aria-hidden size={19} weight="bold" />} label="예상 1인 비용" value={`약 ${fee.toLocaleString("ko-KR")}원`} />
-          </dl>
-          <div className="mt-5 border-t border-[var(--tm-border-subtle)] pt-4">
-            <p className="text-sm font-bold">함께하고 싶은 플레이</p>
-            <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{form.playPurposes.map((purpose) => getLabel(purposes, purpose)).join(" · ")}<br />{getLabel(preferences, form.partnerPreference)}</p>
-            {form.partnerPreference === "COMPLETE_BEGINNER_WELCOME" ? <p className="mt-3 inline-flex rounded-full bg-[var(--tm-bg-subtle)] px-3 py-1.5 text-xs font-bold text-[var(--tm-action-primary)]">초보자 환영</p> : null}
-            {form.additionalCostNote ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-3 py-2 text-xs leading-5 text-[var(--tm-text-secondary)]">추가 안내: {form.additionalCostNote}</p> : null}
-            {form.introduction ? <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{form.introduction}</p> : null}
-          </div>
-          <p className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">코트 비용은 앱에서 결제되지 않으며, 참가자끼리 별도로 정산해요.</p>
-        </div>
-      </article>
-    </div>
-  );
-}
-
-function StepIntro({ description, eyebrow, title }: { description: string; eyebrow: string; title: ReactNode }) {
-  return <header><p className="text-sm font-bold text-[var(--tm-action-primary)]">{eyebrow}</p><h1 className="mt-2 text-[28px] font-bold leading-[1.32] tracking-[-0.04em]">{title}</h1><p className="mt-3 max-w-[420px] text-sm leading-6 text-[var(--tm-text-secondary)]">{description}</p></header>;
-}
-
 function FormPanel({ children, description, icon, title }: { children: ReactNode; description: string; icon?: ReactNode; title: ReactNode }) {
   return <section className="mt-6 rounded-3xl bg-white p-5 shadow-[0_10px_30px_rgba(29,50,84,0.06)]"><div className="flex gap-3">{icon ? <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]">{icon}</span> : null}<div><h2 className="text-lg font-bold">{title}</h2><p className="mt-1 text-sm leading-6 text-[var(--tm-text-secondary)]">{description}</p></div></div><div className="mt-5">{children}</div></section>;
 }
@@ -732,13 +656,6 @@ function ChoiceCard({ children, description, onClick, selected }: { children: Re
   return <button aria-pressed={selected} className={`relative min-h-[78px] rounded-2xl border p-4 pr-11 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)] ${selected ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white text-[var(--tm-text-primary)] hover:border-[var(--tm-action-primary)]"}`} onClick={onClick} type="button"><strong className="text-sm">{children}</strong><span className="mt-1 block text-xs font-normal leading-5 text-[var(--tm-text-secondary)]">{description}</span>{selected ? <CheckCircle aria-label="선택됨" className="absolute right-4 top-4" size={20} weight="fill" /> : null}</button>;
 }
 
-function PreviewItem({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
-  return <div className="flex gap-3"><span className="mt-0.5 text-[var(--tm-action-primary)]">{icon}</span><div><dt className="text-xs font-bold text-[var(--tm-text-secondary)]">{label}</dt><dd className="mt-1 text-sm leading-5 text-[var(--tm-text-primary)]">{value}</dd></div></div>;
-}
-
-function ActionFooter({ action, disabled, onBack, onNext, saving }: { action: string; disabled: boolean; onBack?: () => void; onNext: () => void; saving: boolean }) {
-  const label = saving ? "등록 중…" : action;
-  const trailingIcon = !saving && action !== "매칭 공개하기" ? <ArrowRight aria-hidden size={18} weight="bold" /> : null;
-
-  return <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--tm-border-subtle)] bg-white/95 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur"><div className="mx-auto flex max-w-[560px] gap-3">{onBack ? <Button onClick={onBack} size="large" variant="neutral">이전</Button> : null}<Button className="flex-1" disabled={disabled} onClick={onNext} size="large" trailingContent={trailingIcon}>{label}</Button></div></footer>;
+function ActionFooter({ disabled, onSubmit, saving }: { disabled: boolean; onSubmit: () => void; saving: boolean }) {
+  return <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--tm-border-subtle)] bg-white/95 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur"><div className="mx-auto max-w-[560px]"><Button className="w-full" disabled={disabled} onClick={onSubmit} size="large">{saving ? "등록 중…" : "매칭 공개하기"}</Button></div></footer>;
 }

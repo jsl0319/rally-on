@@ -471,6 +471,32 @@ describe("match service operation safeguards", () => {
     expect(result.items[0]).toMatchObject({ isHost: true });
   });
 
+  it("narrows the discovery query to the selected KST calendar date", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const prisma = { match: { findMany } } as unknown as Parameters<typeof getMatches>[0];
+
+    await getMatches(prisma, viewer, { startsFrom: new Date("2029-01-01T00:00:00.000Z"), limit: 20, date: "2029-03-05" });
+
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        startsAt: { gt: new Date("2029-01-01T00:00:00.000Z"), lt: new Date("2029-03-05T15:00:00.000Z") },
+      }),
+    }));
+  });
+
+  it("ignores a malformed date filter instead of throwing", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const prisma = { match: { findMany } } as unknown as Parameters<typeof getMatches>[0];
+
+    await getMatches(prisma, viewer, { startsFrom: new Date("2029-01-01T00:00:00.000Z"), limit: 20, date: "not-a-date" });
+
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        startsAt: { gt: new Date("2029-01-01T00:00:00.000Z") },
+      }),
+    }));
+  });
+
   it("does not recommend a historical court-undecided match", async () => {
     const legacyMatch = makeMatch({
       hostUserId: "other-user-id",

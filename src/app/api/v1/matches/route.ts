@@ -18,6 +18,7 @@ const playPurposeSchema = z.enum([
 ]);
 
 const matchSortSchema = z.enum(["recommended", "soonest", "newest"]);
+const matchDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 function parseSearchParams(request: Request) {
   const params = new URL(request.url).searchParams;
@@ -45,12 +46,19 @@ function parseSearchParams(request: Request) {
     throw new DomainError("INVALID_REQUEST", 400, "정렬 방식을 다시 선택해 주세요.");
   }
 
+  const dateValue = params.get("date");
+  const date = dateValue ? matchDateSchema.safeParse(dateValue) : null;
+  if (date && !date.success) {
+    throw new DomainError("INVALID_REQUEST", 400, "날짜 형식을 확인해 주세요.");
+  }
+
   return {
     playPurpose: playPurpose?.data,
     startsFrom,
     cursor: params.get("cursor") ? parseCursor(params.get("cursor")!) : undefined,
     limit,
     sort: sort?.data,
+    date: date?.data,
   };
 }
 

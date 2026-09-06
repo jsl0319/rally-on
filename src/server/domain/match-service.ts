@@ -315,15 +315,29 @@ export async function getRecommendedMatches(prisma: PrismaClient, viewer: Viewer
 
 export type MatchSort = "recommended" | "soonest" | "newest";
 
+// `input.date` is a "YYYY-MM-DD" calendar date picked from the discovery list's date
+// filter, always meant in Korea Standard Time (the only timezone this product serves).
+// This turns it into the UTC instant one KST day later, used as an exclusive upper bound
+// on `startsAt` so the query still relies on the existing `startsFrom` lower bound (which
+// already excludes matches that already started) rather than duplicating that logic here.
+function getKstDateFilterEnd(date: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const start = new Date(`${date}T00:00:00+09:00`);
+  if (Number.isNaN(start.getTime())) return null;
+
+  return new Date(start.getTime() + 24 * 60 * 60 * 1000);
+}
+
 export async function getMatches(
   prisma: PrismaClient,
   viewer: Viewer,
-  input: { playPurpose?: PlayPurpose; startsFrom: Date; cursor?: { startsAt: string; id: string }; limit: number; sort?: MatchSort },
+  input: { playPurpose?: PlayPurpose; startsFrom: Date; cursor?: { startsAt: string; id: string }; limit: number; sort?: MatchSort; date?: string },
 ) {
   const sort = input.sort ?? "recommended";
+  const dateFilterEnd = input.date ? getKstDateFilterEnd(input.date) : null;
   const baseWhere = {
     status: "OPEN",
-    startsAt: { gt: input.startsFrom },
+    startsAt: { gt: input.startsFrom, ...(dateFilterEnd ? { lt: dateFilterEnd } : {}) },
     courtSource: { not: "COURT_TBD" },
     NOT: [
       { applications: { some: { applicantUserId: viewer.id } } },

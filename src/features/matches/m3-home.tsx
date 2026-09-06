@@ -1,7 +1,7 @@
 "use client";
 
-import { CaretDown, CheckCircle, Funnel } from "@phosphor-icons/react";
-import { FilterButton, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalNavigation } from "@wanteddev/wds";
+import { CalendarBlank, CaretDown, CheckCircle, Funnel } from "@phosphor-icons/react";
+import { DateCalendar, FilterButton, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalNavigation } from "@wanteddev/wds";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -48,6 +48,29 @@ function sortLabel(value: MatchSort) {
   return SORT_OPTIONS.find((option) => option.value === value)?.label ?? "정렬";
 }
 
+function dateLabel(value: string | null) {
+  if (!value) return "날짜";
+  const [, month, day] = value.split("-").map(Number);
+  return `${month}월 ${day}일`;
+}
+
+function getTodayKstDate() {
+  const values = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes) => values.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function toCalendarDate(value: string | null): Date | undefined {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return undefined;
+  return new Date(year, month - 1, day);
+}
+
+function fromCalendarDate(value: Date): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
 function getErrorMessage(body: unknown) {
   if (typeof body === "object" && body !== null && "error" in body) {
     const error = body.error;
@@ -74,8 +97,10 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   const [listError, setListError] = useState("");
   const [purpose, setPurpose] = useState<PlayPurpose | null>(null);
   const [sort, setSort] = useState<MatchSort>("recommended");
+  const [date, setDate] = useState<string | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
+  const [isDateOpen, setIsDateOpen] = useState(false);
 
   const loadMe = useCallback(async () => {
     try {
@@ -109,6 +134,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
     try {
       const params = new URLSearchParams({ limit: "30", sort });
       if (purpose) params.set("playPurpose", purpose);
+      if (date) params.set("date", date);
       const response = await requestJson<MatchListResponse>(`/api/v1/matches?${params.toString()}`);
       setMatches(response.items);
       setListStatus("ready");
@@ -116,7 +142,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
       setListError(caught instanceof Error ? caught.message : "매칭을 불러오지 못했어요.");
       setListStatus("error");
     }
-  }, [purpose, sort]);
+  }, [purpose, sort, date]);
 
   useEffect(() => {
     if (screen !== "home") return;
@@ -129,7 +155,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   if (screen === "onboarding") return <M2OnboardingFlow returnTo={safeReturnTo} />;
   if (screen === "error") return <HomeStateFrame><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">{error}</p><Button className="mt-6" onClick={() => void loadMe()}>다시 불러오기</Button></div></HomeStateFrame>;
 
-  const hasFilter = purpose !== null;
+  const hasFilter = purpose !== null || date !== null;
 
   return (
     <main className="min-h-svh bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
@@ -146,7 +172,10 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
         <Link className="mt-4 flex min-h-12 items-center justify-between rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 text-sm font-semibold text-[var(--tm-action-primary)]" href="/partner-sessions"><span>코트 걱정 없이 함께 테니스해요</span><span aria-hidden>→</span></Link>
 
         <div className="mt-5 flex items-center gap-2">
-          <FilterButton active={hasFilter} activeLabel={purposeLabel(purpose)} onClick={() => setIsFilterOpen(true)}>
+          <FilterButton active={date !== null} activeLabel={dateLabel(date)} onClick={() => setIsDateOpen(true)}>
+            <span className="inline-flex items-center gap-1.5"><CalendarBlank aria-hidden size={16} weight="bold" />날짜</span>
+          </FilterButton>
+          <FilterButton active={purpose !== null} activeLabel={purposeLabel(purpose)} onClick={() => setIsFilterOpen(true)}>
             <span className="inline-flex items-center gap-1.5"><Funnel aria-hidden size={16} weight="bold" />게임 유형</span>
           </FilterButton>
           <FilterButton active={false} onClick={() => setIsSortOpen(true)}>
@@ -161,7 +190,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
         ) : matches.length > 0 ? (
           <div className="mt-4 grid gap-4">{matches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
         ) : hasFilter ? (
-          <EmptyFilteredState onReset={() => setPurpose(null)} />
+          <EmptyFilteredState onReset={() => { setPurpose(null); setDate(null); }} />
         ) : (
           <EmptyMatchState />
         )}
@@ -184,6 +213,12 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
         onSelect={(value) => { setSort(value); setIsSortOpen(false); }}
         open={isSortOpen}
         value={sort}
+      />
+      <DateSheet
+        onClose={() => setIsDateOpen(false)}
+        onSelect={(value) => { setDate(value); setIsDateOpen(false); }}
+        open={isDateOpen}
+        value={date}
       />
     </main>
   );
@@ -220,6 +255,31 @@ function SortSheet({ onClose, onSelect, open, value }: { onClose: () => void; on
           <ModalContentItem>
             <div className="grid gap-1">
               {SORT_OPTIONS.map((option) => <SheetOptionRow key={option.value} label={option.label} onClick={() => onSelect(option.value)} selected={value === option.value} />)}
+            </div>
+          </ModalContentItem>
+        </ModalContent>
+      </ModalContainer>
+    </Modal>
+  );
+}
+
+function DateSheet({ onClose, onSelect, open, value }: { onClose: () => void; onSelect: (value: string | null) => void; open: boolean; value: string | null }) {
+  if (!open) return null;
+
+  return (
+    <Modal open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <ModalContainer size="large" variant="bottom">
+        <ModalNavigation trailingContent={<ModalClose aria-label="날짜 필터 닫기" />}>날짜</ModalNavigation>
+        <ModalContent>
+          <ModalContentItem>
+            <SheetOptionRow label="전체 날짜" onClick={() => onSelect(null)} selected={value === null} />
+            <div className="mt-3 flex justify-center">
+              <DateCalendar
+                min={toCalendarDate(getTodayKstDate())}
+                onChange={(next) => { if (next instanceof Date) onSelect(fromCalendarDate(next)); }}
+                value={toCalendarDate(value)}
+                views={["day"]}
+              />
             </div>
           </ModalContentItem>
         </ModalContent>
