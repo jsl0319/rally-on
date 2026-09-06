@@ -3,9 +3,11 @@
 import {
   ArrowLeft,
   ArrowRight,
+  CalendarBlank,
   CheckCircle,
   CurrencyKrw,
   MagnifyingGlass,
+  MapPin,
   Minus,
   PencilSimple,
   Plus,
@@ -131,6 +133,17 @@ const MaskedTimeField = forwardRef<HTMLDivElement, TimePickerFieldProps>(({ inpu
 ));
 MaskedTimeField.displayName = "MaskedTimeField";
 
+function formatSchedule(date: string, startTime: string, endTime: string) {
+  if (!date || !startTime || !endTime) return "일시를 선택해 주세요";
+  const [year, month, day] = date.split("-");
+
+  return `${year}년 ${Number(month)}월 ${Number(day)}일 · ${startTime}~${endTime}`;
+}
+
+function getLabel<Value extends string>(items: readonly (readonly [Value, string, string])[], value: string) {
+  return items.find(([item]) => item === value)?.[1] ?? value;
+}
+
 function getDescription<Value extends string>(items: readonly (readonly [Value, string, string])[], value: string) {
   return items.find(([item]) => item === value)?.[2] ?? "";
 }
@@ -159,7 +172,9 @@ function isCourtPlaceSearchItem(value: unknown): value is CourtPlaceSearchItem {
 export function M4MatchCreate() {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [courtSearchQuery, setCourtSearchQuery] = useState("");
   const [courtSearchResults, setCourtSearchResults] = useState<CourtPlaceSearchItem[]>([]);
   const [courtSearchError, setCourtSearchError] = useState("");
@@ -286,7 +301,7 @@ export function M4MatchCreate() {
 
   const submit = async () => {
     setSaving(true);
-    setError("");
+    setSubmitError("");
     try {
       const startsAt = new Date(`${form.date}T${form.startTime}`).toISOString();
       const endsAt = new Date(`${form.date}T${form.endTime}`).toISOString();
@@ -319,19 +334,23 @@ export function M4MatchCreate() {
 
       router.push(`/matches/${matchId}`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "등록하지 못했어요.");
+      setSubmitError(caught instanceof Error ? caught.message : "등록하지 못했어요.");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleSubmit = () => {
+  // "미리보기" only checks the form and opens the preview sheet; the sheet's own
+  // "매칭 공개하기" button is what actually calls `submit`.
+  const openPreview = () => {
     const message = validateForm();
     if (message) {
       setError(message);
       return;
     }
-    void submit();
+    setError("");
+    setSubmitError("");
+    setIsPreviewOpen(true);
   };
 
   return (
@@ -381,7 +400,17 @@ export function M4MatchCreate() {
           ) : null}
         </div>
 
-        <ActionFooter disabled={saving} onSubmit={handleSubmit} saving={saving} />
+        <ActionFooter onPreview={openPreview} />
+        <MatchPreviewSheet
+          error={submitError}
+          expectedPeople={expectedPeople}
+          fee={fee}
+          form={form}
+          onClose={() => setIsPreviewOpen(false)}
+          onSubmit={() => void submit()}
+          open={isPreviewOpen}
+          saving={saving}
+        />
       </section>
     </main>
   );
@@ -656,7 +685,7 @@ function ChoiceCard({ children, description, onClick, selected }: { children: Re
   return <button aria-pressed={selected} className={`relative min-h-[78px] rounded-2xl border p-4 pr-11 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)] ${selected ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white text-[var(--tm-text-primary)] hover:border-[var(--tm-action-primary)]"}`} onClick={onClick} type="button"><strong className="text-sm">{children}</strong><span className="mt-1 block text-xs font-normal leading-5 text-[var(--tm-text-secondary)]">{description}</span>{selected ? <CheckCircle aria-label="선택됨" className="absolute right-4 top-4" size={20} weight="fill" /> : null}</button>;
 }
 
-function ActionFooter({ disabled, onSubmit, saving }: { disabled: boolean; onSubmit: () => void; saving: boolean }) {
+function ActionFooter({ onPreview }: { onPreview: () => void }) {
   // WDS's underlying `Button` bakes `height: fit-content` into its own generated style, so a
   // plain (non-`!important`) Tailwind height utility only ties on specificity with it and can
   // lose depending on style-injection order — which is why the earlier `min-h-[52px]` attempt
@@ -665,10 +694,95 @@ function ActionFooter({ disabled, onSubmit, saving }: { disabled: boolean; onSub
   return (
     <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--tm-border-subtle)] bg-white/95 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
       <div className="mx-auto max-w-[560px]">
-        <Button className="!h-14" disabled={disabled} fullWidth onClick={onSubmit} size="large">
-          {saving ? "등록 중…" : "매칭 공개하기"}
+        <Button className="!h-14" fullWidth onClick={onPreview} size="large">
+          미리보기
         </Button>
       </div>
     </footer>
+  );
+}
+
+// Shows the match roughly as it'll appear once published, so the host can double-check
+// everything before it goes live — publishing itself happens from this sheet's own CTA,
+// not from the page's fixed footer.
+function MatchPreviewSheet({
+  error,
+  expectedPeople,
+  fee,
+  form,
+  onClose,
+  onSubmit,
+  open,
+  saving,
+}: {
+  error: string;
+  expectedPeople: number;
+  fee: number;
+  form: MatchCreateForm;
+  onClose: () => void;
+  onSubmit: () => void;
+  open: boolean;
+  saving: boolean;
+}) {
+  const regionText = [form.courtName, form.address].filter(Boolean).join(" · ");
+
+  if (!open) return null;
+
+  return (
+    <Modal open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <ModalContainer size="large" variant="bottom">
+        <ModalNavigation trailingContent={<ModalClose aria-label="미리보기 닫기" />}>미리보기</ModalNavigation>
+        <ModalContent>
+          <ModalContentItem>
+            <ModalDescription>공개하면 매칭 목록에 보여지고, 원할 때 참가 신청을 받을 수 있어요.</ModalDescription>
+            <article className="mt-4 overflow-hidden rounded-3xl border border-[var(--tm-border-default)] bg-white shadow-[0_12px_30px_rgba(29,50,84,0.08)]">
+              <div className="p-5">
+                <p className="inline-flex rounded-full bg-[var(--tm-bg-subtle)] px-3 py-1.5 text-xs font-bold text-[var(--tm-action-primary)]">모집자가 코트를 예약했어요</p>
+                <h2 className="mt-3 text-xl font-bold leading-7">{form.title}</h2>
+                <dl className="mt-5 grid gap-4">
+                  <PreviewItem icon={<CalendarBlank aria-hidden size={19} weight="fill" />} label="일시" value={formatSchedule(form.date, form.startTime, form.endTime)} />
+                  <PreviewItem icon={<MapPin aria-hidden size={19} weight="fill" />} label="코트" value={regionText || "코트 정보를 입력해 주세요"} />
+                  <PreviewItem icon={<UsersThree aria-hidden size={19} weight="fill" />} label="모집" value={`추가 ${form.recruitCount}명 · 총 ${expectedPeople}명 예정`} />
+                  <PreviewItem icon={<CurrencyKrw aria-hidden size={19} weight="bold" />} label="예상 1인 비용" value={`약 ${fee.toLocaleString("ko-KR")}원`} />
+                </dl>
+                <div className="mt-5 border-t border-[var(--tm-border-subtle)] pt-4">
+                  <p className="text-sm font-bold">함께하고 싶은 플레이</p>
+                  <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">
+                    {form.playPurposes.map((purpose) => getLabel(purposes, purpose)).join(" · ")}
+                    <br />
+                    {getLabel(preferences, form.partnerPreference)}
+                  </p>
+                  {form.partnerPreference === "COMPLETE_BEGINNER_WELCOME" ? <p className="mt-3 inline-flex rounded-full bg-[var(--tm-bg-subtle)] px-3 py-1.5 text-xs font-bold text-[var(--tm-action-primary)]">초보자 환영</p> : null}
+                  {form.additionalCostNote ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-3 py-2 text-xs leading-5 text-[var(--tm-text-secondary)]">추가 안내: {form.additionalCostNote}</p> : null}
+                  {form.introduction ? <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{form.introduction}</p> : null}
+                </div>
+                <p className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">코트 비용은 앱에서 결제되지 않으며, 참가자끼리 별도로 정산해요.</p>
+              </div>
+            </article>
+            {error ? (
+              <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]" role="alert">
+                {error}
+              </p>
+            ) : null}
+          </ModalContentItem>
+        </ModalContent>
+
+        <ActionArea variant="strong">
+          <ActionAreaButton disabled={saving} onClick={onSubmit} variant="main">{saving ? "등록 중…" : "매칭 공개하기"}</ActionAreaButton>
+        </ActionArea>
+      </ModalContainer>
+    </Modal>
+  );
+}
+
+function PreviewItem({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex gap-3">
+      <span className="mt-0.5 text-[var(--tm-action-primary)]">{icon}</span>
+      <div>
+        <dt className="text-xs font-bold text-[var(--tm-text-secondary)]">{label}</dt>
+        <dd className="mt-1 text-sm leading-5 text-[var(--tm-text-primary)]">{value}</dd>
+      </div>
+    </div>
   );
 }

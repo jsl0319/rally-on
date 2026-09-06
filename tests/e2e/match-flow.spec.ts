@@ -66,7 +66,9 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   await hostPage.getByLabel("종료 시간").fill("13:30");
   await hostPage.getByLabel("매칭 제목").fill(fixture.matchTitle);
   await hostPage.getByLabel("전체 코트 비용").fill("24000");
-  await hostPage.getByRole("button", { name: "매칭 공개하기" }).click();
+  await hostPage.getByRole("button", { name: "미리보기" }).click();
+  const previewDialog = hostPage.getByRole("dialog", { name: "미리보기" });
+  await previewDialog.getByRole("button", { name: "매칭 공개하기" }).click();
   await expect(hostPage).toHaveURL(/\/matches\/[0-9a-f-]{36}$/);
   await expect(hostPage.getByText("모집자가 코트를 예약했어요")).toBeVisible();
   const matchId = new URL(hostPage.url()).pathname.split("/").at(-1);
