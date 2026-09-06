@@ -657,5 +657,18 @@ function ChoiceCard({ children, description, onClick, selected }: { children: Re
 }
 
 function ActionFooter({ disabled, onSubmit, saving }: { disabled: boolean; onSubmit: () => void; saving: boolean }) {
-  return <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--tm-border-subtle)] bg-white/95 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur"><div className="mx-auto max-w-[560px]"><Button className="min-h-[52px] w-full" disabled={disabled} onClick={onSubmit} size="large">{saving ? "등록 중…" : "매칭 공개하기"}</Button></div></footer>;
+  // WDS's underlying `Button` bakes `height: fit-content` into its own generated style, so a
+  // plain (non-`!important`) Tailwind height utility only ties on specificity with it and can
+  // lose depending on style-injection order — which is why the earlier `min-h-[52px]` attempt
+  // didn't visibly grow the button. `!` forces `!important`, which always wins regardless of
+  // order, so the footer's CTA reliably renders at its intended height.
+  return (
+    <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--tm-border-subtle)] bg-white/95 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+      <div className="mx-auto max-w-[560px]">
+        <Button className="!h-14" disabled={disabled} fullWidth onClick={onSubmit} size="large">
+          {saving ? "등록 중…" : "매칭 공개하기"}
+        </Button>
+      </div>
+    </footer>
+  );
 }
