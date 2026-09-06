@@ -657,5 +657,5 @@ function ChoiceCard({ children, description, onClick, selected }: { children: Re
 }
 
 function ActionFooter({ disabled, onSubmit, saving }: { disabled: boolean; onSubmit: () => void; saving: boolean }) {
-  return <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--tm-border-subtle)] bg-white/95 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur"><div className="mx-auto max-w-[560px]"><Button className="w-full" disabled={disabled} onClick={onSubmit} size="large">{saving ? "등록 중…" : "매칭 공개하기"}</Button></div></footer>;
+  return <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--tm-border-subtle)] bg-white/95 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur"><div className="mx-auto max-w-[560px]"><Button className="min-h-[52px] w-full" disabled={disabled} onClick={onSubmit} size="large">{saving ? "등록 중…" : "매칭 공개하기"}</Button></div></footer>;
 }

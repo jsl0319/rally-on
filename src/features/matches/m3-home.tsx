@@ -1,8 +1,8 @@
 "use client";
 
 import { CalendarBlank, CaretDown, CheckCircle, Funnel } from "@phosphor-icons/react";
-import { DateCalendar, FilterButton, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalNavigation } from "@wanteddev/wds";
-import { useCallback, useEffect, useState } from "react";
+import { DateCalendar, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalNavigation } from "@wanteddev/wds";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
@@ -172,15 +172,9 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
         <Link className="mt-4 flex min-h-12 items-center justify-between rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 text-sm font-semibold text-[var(--tm-action-primary)]" href="/partner-sessions"><span>코트 걱정 없이 함께 테니스해요</span><span aria-hidden>→</span></Link>
 
         <div className="mt-5 flex items-center gap-2">
-          <FilterButton active={date !== null} activeLabel={dateLabel(date)} onClick={() => setIsDateOpen(true)}>
-            <span className="inline-flex items-center gap-1.5"><CalendarBlank aria-hidden size={16} weight="bold" />날짜</span>
-          </FilterButton>
-          <FilterButton active={purpose !== null} activeLabel={purposeLabel(purpose)} onClick={() => setIsFilterOpen(true)}>
-            <span className="inline-flex items-center gap-1.5"><Funnel aria-hidden size={16} weight="bold" />게임 유형</span>
-          </FilterButton>
-          <FilterButton active={false} onClick={() => setIsSortOpen(true)}>
-            <span className="inline-flex items-center gap-1.5">{sortLabel(sort)}<CaretDown aria-hidden size={14} weight="bold" /></span>
-          </FilterButton>
+          <FilterChip active={date !== null} icon={<CalendarBlank aria-hidden size={15} weight="bold" />} label={dateLabel(date)} onClick={() => setIsDateOpen(true)} />
+          <FilterChip active={purpose !== null} icon={<Funnel aria-hidden size={15} weight="bold" />} label={purposeLabel(purpose)} onClick={() => setIsFilterOpen(true)} />
+          <FilterChip active={sort !== "recommended"} label={sortLabel(sort)} onClick={() => setIsSortOpen(true)} />
         </div>
 
         {listStatus === "loading" ? (
@@ -260,6 +254,21 @@ function SortSheet({ onClose, onSelect, open, value }: { onClose: () => void; on
         </ModalContent>
       </ModalContainer>
     </Modal>
+  );
+}
+
+function FilterChip({ active, icon, label, onClick }: { active: boolean; icon?: ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      aria-pressed={active}
+      className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold transition-colors ${active ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white text-[var(--tm-text-primary)]"}`}
+      onClick={onClick}
+      type="button"
+    >
+      {icon}
+      {label}
+      <CaretDown aria-hidden size={13} weight="bold" />
+    </button>
   );
 }
 
