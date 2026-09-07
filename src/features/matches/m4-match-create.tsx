@@ -352,7 +352,7 @@ export function M4MatchCreate() {
             set={set}
           />
           <RecruitDetailsSection form={form} onRecruitChange={updateRecruitCount} onTogglePurpose={togglePurpose} set={set} />
-          <CostAndNoticeSection expectedPeople={expectedPeople} fee={fee} form={form} set={set} />
+          <CostAndNoticeSection form={form} set={set} />
 
           {error ? (
             <p className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]" role="alert">
@@ -429,19 +429,15 @@ function CourtScheduleSection({
         </FormField>
         <div className="mt-6">
           <FieldTitle required>매칭 시간</FieldTitle>
-          <div className="mt-2 grid gap-4 [&>div]:grid [&>div]:grid-cols-[80px_1fr] [&>div]:items-center">
-            <FormField>
-              <FormLabel>시작 시간</FormLabel>
-              <FormControl>
-                <MatchSchedulePicker kind="time" label="시작 시간" onChange={(value) => set("startTime", value)} value={form.startTime} />
-              </FormControl>
-            </FormField>
-            <FormField>
-              <FormLabel>종료 시간</FormLabel>
-              <FormControl>
-                <MatchSchedulePicker kind="time" label="종료 시간" onChange={(value) => set("endTime", value)} value={form.endTime} />
-              </FormControl>
-            </FormField>
+          <div className="mt-2 grid gap-3">
+            <div className="flex items-center gap-3">
+              <span className="w-16 shrink-0 text-sm font-semibold text-[var(--tm-text-primary)]">시작 시간</span>
+              <div className="min-w-0 flex-1"><MatchSchedulePicker kind="time" label="시작 시간" onChange={(value) => set("startTime", value)} value={form.startTime} /></div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="w-16 shrink-0 text-sm font-semibold text-[var(--tm-text-primary)]">종료 시간</span>
+              <div className="min-w-0 flex-1"><MatchSchedulePicker kind="time" label="종료 시간" onChange={(value) => set("endTime", value)} value={form.endTime} /></div>
+            </div>
           </div>
           <p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">2시간을 넘는 일정도 등록할 수 있어요. 자정을 넘는 일정은 현재 등록할 수 없어요.</p>
         </div>
@@ -541,36 +537,36 @@ function RecruitDetailsSection({ form, onRecruitChange, onTogglePurpose, set }: 
     set("femaleRecruitCount", value === "WOMENS_DOUBLES" ? form.recruitCount : 0);
   };
   const changeGenderCount = (gender: "maleRecruitCount" | "femaleRecruitCount", count: number) => {
-    const next = Math.max(0, Math.min(100, count));
+    const next = Math.max(0, Math.min(10, count));
     set(gender, next);
     set("recruitCount", next + (gender === "maleRecruitCount" ? form.femaleRecruitCount : form.maleRecruitCount));
   };
 
   return (
     <div>
-      <FormPanel description="어떤 스타일로 플레이할까요?" icon={<TennisBall aria-hidden size={23} weight="fill" />} title="게임 설정">
+      <FormPanel description="어떤 스타일로, 몇 명과 함께할까요?" icon={<TennisBall aria-hidden size={23} weight="fill" />} title="게임 설정">
         <fieldset><legend className="mb-3 text-sm font-semibold">게임 유형 <span className="text-[var(--tm-status-error-text)]">*</span></legend>
           <div className="grid grid-cols-3 gap-2">{gameTypes.map((value) => <button aria-pressed={form.gameType === value} className={`min-h-12 rounded-xl border text-sm font-semibold ${form.gameType === value ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)]"}`} key={value} onClick={() => selectGameType(value)} type="button">{gameTypeLabels[value]}</button>)}</div>
           <p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">혼복은 혼합 복식, 남복은 남자 복식, 여복은 여자 복식이에요. 프로필의 성별을 기준으로 신청하고, 남녀별 정원 안에서 수락해요.</p>
         </fieldset>
-      </FormPanel>
 
-      <FormPanel description="모집자를 제외하고 함께 칠 인원을 정해 주세요." icon={<UsersThree aria-hidden size={23} weight="fill" />} title="몇 명과 함께할까요?">
-        {!needsGenderQuota(form.gameType) ? <div className="mb-4 flex gap-2">{[false, true].map((split) => <button aria-pressed={form.splitRecruitment === split} className="min-h-11 rounded-xl border border-[var(--tm-border-default)] px-3 text-sm aria-pressed:border-[var(--tm-action-primary)] aria-pressed:text-[var(--tm-action-primary)]" key={String(split)} onClick={() => { set("splitRecruitment", split); set("maleRecruitCount", form.recruitCount); set("femaleRecruitCount", 0); }} type="button">{split ? "남녀 구분" : "성별 무관"}</button>)}</div> : null}
-        {form.splitRecruitment ? <div><div className="grid grid-cols-2 gap-3">{([["maleRecruitCount", "남자 모집 인원"], ["femaleRecruitCount", "여자 모집 인원"]] as const).map(([key, label]) => <label className="text-sm font-semibold" key={key}>{label}<select className="mt-2 min-h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white px-3 disabled:bg-neutral-100" disabled={key === "maleRecruitCount" ? form.gameType === "WOMENS_DOUBLES" : form.gameType === "MENS_DOUBLES"} onChange={(event) => changeGenderCount(key, Number(event.target.value))} value={form[key]}>{Array.from({ length: 101 }, (_, count) => <option key={count} value={count}>{count}명</option>)}</select></label>)}</div><p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">모집자를 제외한 남자 {form.maleRecruitCount}명 · 여자 {form.femaleRecruitCount}명, 나를 포함해 총 {expectedPeople}명이 함께해요.</p></div> : <>
-        <div className="flex items-center justify-between rounded-2xl border border-[var(--tm-border-default)] bg-white p-3">
-          <div>
-            <p className="text-sm font-bold">추가 모집 인원</p>
-            <p className="mt-1 text-xs text-[var(--tm-text-secondary)]">나를 포함해 총 {expectedPeople}명이 함께해요</p>
+        <div className="mt-6 border-t border-[var(--tm-border-subtle)] pt-5">
+          <p className="mb-3 text-sm font-semibold">모집 인원</p>
+          {!needsGenderQuota(form.gameType) ? <div className="mb-4 flex gap-2">{[false, true].map((split) => <button aria-pressed={form.splitRecruitment === split} className="min-h-11 rounded-xl border border-[var(--tm-border-default)] px-3 text-sm aria-pressed:border-[var(--tm-action-primary)] aria-pressed:text-[var(--tm-action-primary)]" key={String(split)} onClick={() => { set("splitRecruitment", split); set("maleRecruitCount", form.recruitCount); set("femaleRecruitCount", 0); }} type="button">{split ? "남녀 구분" : "성별 무관"}</button>)}</div> : null}
+          {form.splitRecruitment ? <div><div className="grid grid-cols-2 gap-3">{([["maleRecruitCount", "남자 모집 인원"], ["femaleRecruitCount", "여자 모집 인원"]] as const).map(([key, label]) => <label className="text-sm font-semibold" key={key}>{label}<select className="mt-2 min-h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white px-3 disabled:bg-neutral-100" disabled={key === "maleRecruitCount" ? form.gameType === "WOMENS_DOUBLES" : form.gameType === "MENS_DOUBLES"} onChange={(event) => changeGenderCount(key, Number(event.target.value))} value={form[key]}>{Array.from({ length: 11 }, (_, count) => <option key={count} value={count}>{count}명</option>)}</select></label>)}</div><p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">모집자를 제외한 남자 {form.maleRecruitCount}명 · 여자 {form.femaleRecruitCount}명, 나를 포함해 총 {expectedPeople}명이 함께해요.</p></div> : <>
+          <div className="flex items-center justify-between rounded-2xl border border-[var(--tm-border-default)] bg-white p-3">
+            <div>
+              <p className="text-sm font-bold">추가 모집 인원</p>
+              <p className="mt-1 text-xs text-[var(--tm-text-secondary)]">나를 포함해 총 {expectedPeople}명이 함께해요</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button aria-label="모집 인원 줄이기" className="grid size-10 place-items-center rounded-xl border border-[var(--tm-border-default)] disabled:opacity-40" disabled={form.recruitCount <= 1} onClick={() => onRecruitChange(-1)} type="button"><Minus aria-hidden size={17} weight="bold" /></button>
+              <output aria-label={`추가 모집 인원 ${form.recruitCount}명`} className="min-w-7 text-center text-lg font-bold">{form.recruitCount}</output>
+              <button aria-label="모집 인원 늘리기" className="grid size-10 place-items-center rounded-xl bg-[var(--tm-action-primary)] text-white" onClick={() => onRecruitChange(1)} type="button"><Plus aria-hidden size={17} weight="bold" /></button>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button aria-label="모집 인원 줄이기" className="grid size-10 place-items-center rounded-xl border border-[var(--tm-border-default)] disabled:opacity-40" disabled={form.recruitCount <= 1} onClick={() => onRecruitChange(-1)} type="button"><Minus aria-hidden size={17} weight="bold" /></button>
-            <output aria-label={`추가 모집 인원 ${form.recruitCount}명`} className="min-w-7 text-center text-lg font-bold">{form.recruitCount}</output>
-            <button aria-label="모집 인원 늘리기" className="grid size-10 place-items-center rounded-xl bg-[var(--tm-action-primary)] text-white" onClick={() => onRecruitChange(1)} type="button"><Plus aria-hidden size={17} weight="bold" /></button>
-          </div>
+          </>}
         </div>
-        </>}
-
       </FormPanel>
 
       <FormPanel description="최대 두 가지를 골라 주세요." icon={<TennisBall aria-hidden size={23} weight="fill" />} title="원하는 플레이">
@@ -588,7 +584,7 @@ function RecruitDetailsSection({ form, onRecruitChange, onTogglePurpose, set }: 
   );
 }
 
-function CostAndNoticeSection({ expectedPeople, fee, form, set }: { expectedPeople: number; fee: number; form: MatchCreateForm; set: FormSetter }) {
+function CostAndNoticeSection({ form, set }: { form: MatchCreateForm; set: FormSetter }) {
   return (
     <div>
       <FormPanel description="게스트 한 명이 낼 참가비를 입력해 주세요." icon={<CurrencyKrw aria-hidden size={23} weight="bold" />} title="참가 비용">
@@ -610,13 +606,8 @@ function CostAndNoticeSection({ expectedPeople, fee, form, set }: { expectedPeop
               value={form.totalCourtFeeKrw}
             />
           </FormControl>
-          <p className="mt-2 text-xs text-[var(--tm-text-secondary)]">최대 {MAX_COURT_FEE_KRW.toLocaleString("ko-KR")}원까지 입력할 수 있어요.</p>
+          <p className="mt-2 text-xs text-[var(--tm-text-secondary)]">최대 {MAX_COURT_FEE_KRW.toLocaleString("ko-KR")}원까지 입력할 수 있어요. 게스트 한 명당 내는 참가비예요.</p>
         </FormField>
-        <div className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] p-4">
-          <p className="text-sm text-[var(--tm-text-secondary)]">게스트 참가비용</p>
-          <p className="mt-1 text-xl font-bold text-[var(--tm-action-primary)]">{fee.toLocaleString("ko-KR")}원</p>
-          <p className="mt-2 text-xs leading-5 text-[var(--tm-text-secondary)]">게스트로 참가하는 {expectedPeople - 1}명이 각자 이 금액을 내요.</p>
-        </div>
         <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">Rally On은 참가비를 결제하거나 정산하지 않아요. 참가비는 참가자와 직접 정산해요.</p>
       </FormPanel>
 
