@@ -28,6 +28,7 @@ const externalReservedInput = {
   playPurposes: ["RALLY_PRACTICE"],
   partnerPreference: "COMPLETE_BEGINNER_WELCOME",
   totalCourtFeeKrw: 40_000,
+  introduction: "천천히 랠리하면서 즐겁게 연습해요.",
 };
 
 describe("POST /api/v1/matches", () => {

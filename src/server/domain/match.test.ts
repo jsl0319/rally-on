@@ -50,6 +50,7 @@ describe("M4 match creation input", () => {
     startsAt: "2030-01-02T01:00:00.000Z", endsAt: "2030-01-02T03:00:00.000Z",
     courtSource: "EXTERNAL_RESERVED", externalCourt: { name: "마포 테니스장", address: "서울 마포구" }, recruitCount: 2,
     playPurposes: ["RALLY_PRACTICE"], partnerPreference: "COMPLETE_BEGINNER_WELCOME", totalCourtFeeKrw: 40_000,
+    introduction: "천천히 랠리하면서 즐겁게 연습해요.",
   } as const;
 
   it("accepts an external reserved court and a free court", () => {
@@ -85,6 +86,22 @@ describe("M4 match creation input", () => {
     expect(partner.courtSource).toBe("PARTNER_COURT");
     expect(() => matchCreateInputSchema.parse({ ...partner, startsAt: validInput.startsAt })).toThrow();
     expect(() => matchCreateInputSchema.parse({ ...partner, totalCourtFeeKrw: 40_000 })).toThrow();
+  });
+
+  it("requires an introduction for a directly reserved match, but not for a partner court session", () => {
+    expect(() => matchCreateInputSchema.parse({ ...validInput, introduction: "" })).toThrow();
+    expect(() => matchCreateInputSchema.parse({ ...validInput, introduction: undefined })).toThrow();
+
+    const partnerWithoutIntroduction = matchCreateInputSchema.parse({
+      clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07d0",
+      courtSource: "PARTNER_COURT",
+      courtSlotId: "e3e70682-c209-4cac-a29f-6fbed82c07ce",
+      title: "제휴 코트에서 랠리해요",
+      recruitCount: 2,
+      playPurposes: ["RALLY_PRACTICE"],
+      partnerPreference: "SIMILAR_LEVEL",
+    });
+    expect(partnerWithoutIntroduction.introduction).toBeUndefined();
   });
 
   it("keeps the null fee calculation for historical court-undecided records", () => {

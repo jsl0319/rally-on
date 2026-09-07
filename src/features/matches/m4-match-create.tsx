@@ -254,6 +254,7 @@ export function M4MatchCreate() {
     if (form.totalCourtFeeKrw === "" || !Number.isInteger(totalCourtFee) || totalCourtFee < 0 || totalCourtFee > MAX_COURT_FEE_KRW) {
       return `게스트 참가비용을 0원 이상 ${MAX_COURT_FEE_KRW.toLocaleString("ko-KR")}원 이하의 정수로 입력해 주세요.`;
     }
+    if (!form.introduction.trim()) return "매칭 소개글을 입력해 주세요.";
 
     return null;
   };
@@ -285,7 +286,7 @@ export function M4MatchCreate() {
           playPurposes: form.playPurposes,
           partnerPreference: form.partnerPreference,
           totalCourtFeeKrw: totalCourtFee,
-          introduction: form.introduction || null,
+          introduction: form.introduction.trim(),
         }),
       });
       const body: unknown = await response.json();
@@ -611,6 +612,17 @@ function CostAndNoticeSection({ form, set }: { form: MatchCreateForm; set: FormS
         <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">Rally On은 참가비를 결제하거나 정산하지 않아요. 참가비는 참가자와 직접 정산해요.</p>
       </FormPanel>
 
+      <FormPanel description="처음 신청하는 분도 편하게 알 수 있도록 적어 주세요." title="매칭 소개글">
+        <FormField>
+          <FormLabel required>매칭 소개글</FormLabel>
+          <FormControl>
+            <TextArea autoComplete="off" width="100%" minRows={6} maxLength={300} onChange={(event) => set("introduction", event.target.value)} placeholder="예: 천천히 랠리하면서 즐겁게 연습할 분을 찾아요. 처음 게임을 해봐도 괜찮아요!" value={form.introduction} />
+          </FormControl>
+          <p className="text-right text-xs text-[var(--tm-text-secondary)]">{form.introduction.length} / 300</p>
+        </FormField>
+        <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">수락된 참가자와 서비스 내 채팅에서 당일 준비를 조율해요.</p>
+      </FormPanel>
+
       <FormPanel description="모집자와 수락된 참가자에게만 보여요. 입력할 경우 세 항목을 모두 채워 주세요." title="정산 정보 (선택)">
         <div className="grid gap-4">
           <FormField>
@@ -626,17 +638,6 @@ function CostAndNoticeSection({ form, set }: { form: MatchCreateForm; set: FormS
           <FormField><FormLabel>예금주</FormLabel><FormControl><TextField autoComplete="off" maxLength={50} onChange={(event) => set("settlementAccountHolder", event.target.value)} placeholder="예금주 이름" value={form.settlementAccountHolder} /></FormControl></FormField>
         </div>
         <p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">참가자 간 송금을 위한 안내예요. Rally On은 계좌를 검증하거나 송금·입금 확인을 하지 않아요.</p>
-      </FormPanel>
-
-      <FormPanel description="처음 신청하는 분도 편하게 알 수 있도록 적어 주세요." title={<>매칭 소개글 <span className="text-base font-normal text-[var(--tm-text-secondary)]">(선택)</span></>}>
-        <FormField>
-          <FormLabel>매칭 소개글</FormLabel>
-          <FormControl>
-            <TextArea autoComplete="off" width="100%" minRows={6} maxLength={300} onChange={(event) => set("introduction", event.target.value)} placeholder="예: 천천히 랠리하면서 즐겁게 연습할 분을 찾아요. 처음 게임을 해봐도 괜찮아요!" value={form.introduction} />
-          </FormControl>
-          <p className="text-right text-xs text-[var(--tm-text-secondary)]">{form.introduction.length} / 300</p>
-        </FormField>
-        <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">수락된 참가자와 서비스 내 채팅에서 당일 준비를 조율해요.</p>
       </FormPanel>
     </div>
   );

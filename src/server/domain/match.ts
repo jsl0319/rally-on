@@ -54,6 +54,9 @@ const externalReservedMatchSchema = matchCreateCommonSchema.extend({
   }),
   totalCourtFeeKrw: z.number().int().min(0, "게스트 참가비용은 0원 이상이어야 해요.").max(1_000_000, "게스트 참가비용은 100만원 이하로 입력해 주세요."),
   additionalCostNote: z.string().trim().max(200).nullable().optional(),
+  // 직접 예약한 매칭은 소개글을 필수로 받는다. 제휴 코트 세션(매칭 공통 스키마 쪽의
+  // 기본 introduction)은 그대로 선택 입력으로 남겨 둔다.
+  introduction: z.string().trim().min(1, "매칭 소개글을 입력해 주세요.").max(300, "소개글은 300자 이하로 입력해 주세요."),
 });
 
 const partnerCourtMatchSchema = matchCreateCommonSchema.extend({
