@@ -1,5 +1,7 @@
 import type { ApplicationStatus, GameExperience, MatchStatus, PlayPurpose, RallyLevel } from "@/generated/prisma/client";
 import { z } from "zod";
+import { needsGenderQuota } from "@/matches/recruitment";
+import { gameTypes } from "@/matches/game-type";
 
 import { gameLabels, purposeLabels, rallyLabels } from "./profile";
 
@@ -17,12 +19,22 @@ export type RecommendationReason = {
 
 const playPurposeValues = ["CASUAL_HIT", "RALLY_PRACTICE", "STROKE_PRACTICE", "GAME_INTRO", "GAME"] as const;
 
+export const settlementAccountSchema = z.object({
+  bank: z.string().trim().min(1, "은행을 입력해 주세요.").max(50),
+  accountNumber: z.string().trim().regex(/^[0-9-]{5,40}$/, "계좌번호는 숫자와 하이픈으로 5~40자 입력해 주세요.").refine((value) => /[0-9]/.test(value), "계좌번호를 확인해 주세요."),
+  accountHolder: z.string().trim().min(1, "예금주를 입력해 주세요.").max(50),
+});
+
 const matchCreateCommonSchema = z.object({
   clientRequestId: z.string().uuid("요청 식별자를 다시 만들어 주세요."),
-  title: z.string().trim().min(1, "매칭 제목을 입력해 주세요.").max(80, "제목은 80자 이하여야 해요."),
+  title: z.string().trim().min(1).max(80).optional(),
   recruitCount: z.number().int().min(1, "추가 모집 인원은 1명 이상이어야 해요."),
   playPurposes: z.array(z.enum(playPurposeValues)).min(1, "원하는 플레이를 선택해 주세요.").max(2).refine((items) => new Set(items).size === items.length, "같은 플레이를 중복 선택할 수 없어요."),
   partnerPreference: z.enum(["COMPLETE_BEGINNER_WELCOME", "SIMILAR_LEVEL", "GAME_CAPABLE"]),
+  maleRecruitCount: z.number().int().min(0).max(100).nullable().optional(),
+  femaleRecruitCount: z.number().int().min(0).max(100).nullable().optional(),
+  gameType: z.enum(gameTypes).nullable().optional(),
+  settlementAccount: settlementAccountSchema.nullable().optional(),
   introduction: z.string().trim().max(300).nullable().optional(),
 });
 
@@ -40,7 +52,7 @@ const externalReservedMatchSchema = matchCreateCommonSchema.extend({
     courtNumber: z.string().trim().max(50).nullable().optional(),
     imageUploadId: z.string().uuid("코트 사진을 다시 올려 주세요.").nullable().optional(),
   }),
-  totalCourtFeeKrw: z.number().int().min(0, "코트 비용은 0원 이상이어야 해요.").max(1_000_000, "코트 비용은 100만원 이하로 입력해 주세요."),
+  totalCourtFeeKrw: z.number().int().min(0, "게스트 참가비용은 0원 이상이어야 해요.").max(1_000_000, "게스트 참가비용은 100만원 이하로 입력해 주세요."),
   additionalCostNote: z.string().trim().max(200).nullable().optional(),
 });
 
@@ -50,9 +62,19 @@ const partnerCourtMatchSchema = matchCreateCommonSchema.extend({
 }).strict();
 
 export const matchCreateInputSchema = z.discriminatedUnion("courtSource", [externalReservedMatchSchema, partnerCourtMatchSchema]).superRefine((input, context) => {
+  const male = input.maleRecruitCount;
+  const female = input.femaleRecruitCount;
+  if (male != null || female != null || needsGenderQuota(input.gameType)) {
+    if (male == null || female == null || male + female !== input.recruitCount) context.addIssue({ code: "custom", path: ["recruitCount"], message: "남자·여자 모집 인원의 합계가 추가 모집 인원과 같아야 해요." });
+    if (input.gameType === "MENS_DOUBLES" && female !== 0) context.addIssue({ code: "custom", path: ["femaleRecruitCount"], message: "남복은 남자 자리만 모집할 수 있어요." });
+    if (input.gameType === "WOMENS_DOUBLES" && male !== 0) context.addIssue({ code: "custom", path: ["maleRecruitCount"], message: "여복은 여자 자리만 모집할 수 있어요." });
+  }
   if (input.courtSource !== "PARTNER_COURT") {
     const startsAt = new Date(input.startsAt);
     const endsAt = new Date(input.endsAt);
+    for (const [field, date] of [["startsAt", startsAt], ["endsAt", endsAt]] as const) {
+      if (![0, 30].includes(date.getUTCMinutes()) || date.getUTCSeconds() !== 0 || date.getUTCMilliseconds() !== 0) context.addIssue({ code: "custom", path: [field], message: "시간은 00분 또는 30분으로 선택해 주세요." });
+    }
     if (startsAt <= new Date()) context.addIssue({ code: "custom", path: ["startsAt"], message: "시작 시간은 현재보다 미래여야 해요." });
     if (startsAt >= endsAt) context.addIssue({ code: "custom", path: ["endsAt"], message: "종료 시간은 시작 시간보다 늦어야 해요." });
   }
@@ -177,9 +199,13 @@ export function getRecommendation(
   return { score, reasons };
 }
 
-export function getEstimatedFeePerPerson(totalCourtFeeKrw: number | null, recruitCount: number) {
+// EXTERNAL_RESERVED 매칭은 모집자가 입력하는 금액 자체가 게스트 1인이 내는
+// 참가비라, 나누지 않고 그대로 돌려준다. PARTNER_COURT 매칭만 예약된 코트
+// 전체 비용을 인원 수(모집자 포함)로 나눠 1인 예상 비용을 계산한다.
+export function getEstimatedFeePerPerson(totalCourtFeeKrw: number | null, recruitCount: number, courtSource: "EXTERNAL_RESERVED" | "PARTNER_COURT" | "COURT_TBD") {
   if (totalCourtFeeKrw === null) return null;
-  return Math.ceil(totalCourtFeeKrw / (recruitCount + 1));
+  if (courtSource === "PARTNER_COURT") return Math.ceil(totalCourtFeeKrw / (recruitCount + 1));
+  return totalCourtFeeKrw;
 }
 
 export function getAcceptedCount(applications: Array<{ status: ApplicationStatus }>) {

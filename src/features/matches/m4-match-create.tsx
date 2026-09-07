@@ -11,14 +11,22 @@ import {
   Minus,
   PencilSimple,
   Plus,
-  Sparkle,
   TennisBall,
   UsersThree,
 } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
-import { forwardRef, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
-import { ActionArea, ActionAreaButton, DatePicker, type DatePickerFieldProps, type DateType, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, SearchField, TextArea, TextButton, TextField, TextFieldContent, TimePicker, type TimePickerFieldProps } from "@wanteddev/wds";
+import { ActionArea, ActionAreaButton, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, SearchField, TextArea, TextField, TextFieldContent } from "@wanteddev/wds";
+
+import { MatchSchedulePicker } from "./match-schedule-picker";
+import { formatMatchDate, isHalfHourTime } from "@/matches/schedule";
+
+import { needsGenderQuota } from "@/matches/recruitment";
+
+import { gameTypes, gameTypeLabels, type GameType } from "@/matches/game-type";
+
+import { bankNames } from "@/matches/bank-list";
 
 import { Button } from "@/components/ui/button";
 
@@ -32,12 +40,17 @@ type MatchCreateForm = {
   courtName: string;
   address: string;
   courtNumber: string;
-  title: string;
+  gameType: GameType | "";
+  settlementBank: string;
+  settlementAccountNumber: string;
+  settlementAccountHolder: string;
+  maleRecruitCount: number;
+  femaleRecruitCount: number;
+  splitRecruitment: boolean;
   recruitCount: number;
   playPurposes: string[];
   partnerPreference: string;
   totalCourtFeeKrw: string;
-  additionalCostNote: string;
   introduction: string;
 };
 
@@ -85,82 +98,16 @@ function getTodayDate() {
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
-function dateInputToValue(date: string): Date | undefined {
-  if (!date) return undefined;
-  const [year, month, day] = date.split("-").map(Number);
-  if (!year || !month || !day) return undefined;
-
-  return new Date(year, month - 1, day);
-}
-
-function valueToDateInput(value: DateType): string {
-  const date = value instanceof Date ? value : typeof value === "string" && value ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime())) return "";
-
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function timeInputToValue(time: string): Date | undefined {
-  if (!time) return undefined;
-  const [hour, minute] = time.split(":").map(Number);
-  if (Number.isNaN(hour) || Number.isNaN(minute)) return undefined;
-  const date = new Date();
-  date.setHours(hour, minute, 0, 0);
-
-  return date;
-}
-
-function valueToTimeInput(value: DateType): string {
-  const date = value instanceof Date ? value : typeof value === "string" && value ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime())) return "";
-
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
-const DATE_PICKER_FORMAT = "YYYY.MM.DD";
-const TIME_PICKER_FORMAT = "a hh:mm";
-
-// WDS의 DatePicker/TimePicker는 값이 비어 있을 때 포맷 문자열 자체를(예: "YYYY.MM.DD")
-// 입력값으로 채워 넣는데, 이 화면에서는 달력/휠 선택만 쓰기 때문에 아직 아무것도
-// 고르지 않은 상태에서는 그 포맷 문자열 대신 안내 placeholder만 보이도록 감춘다.
-const MaskedDateField = forwardRef<HTMLDivElement, DatePickerFieldProps>(({ inputRef, value, ...props }, ref) => (
-  <TextField {...props} ref={inputRef} value={value === DATE_PICKER_FORMAT ? "" : value} wrapperRef={ref} />
-));
-MaskedDateField.displayName = "MaskedDateField";
-
-const MaskedTimeField = forwardRef<HTMLDivElement, TimePickerFieldProps>(({ inputRef, value, ...props }, ref) => (
-  <TextField {...props} ref={inputRef} value={value === TIME_PICKER_FORMAT ? "" : value} wrapperRef={ref} />
-));
-MaskedTimeField.displayName = "MaskedTimeField";
-
 function formatSchedule(date: string, startTime: string, endTime: string) {
   if (!date || !startTime || !endTime) return "일시를 선택해 주세요";
-  const [year, month, day] = date.split("-");
-
-  return `${year}년 ${Number(month)}월 ${Number(day)}일 · ${startTime}~${endTime}`;
+  return `${formatMatchDate(date)} · ${startTime}~${endTime}`;
 }
 
 function getLabel<Value extends string>(items: readonly (readonly [Value, string, string])[], value: string) {
   return items.find(([item]) => item === value)?.[1] ?? value;
 }
 
-function getDescription<Value extends string>(items: readonly (readonly [Value, string, string])[], value: string) {
-  return items.find(([item]) => item === value)?.[2] ?? "";
-}
-
 const MAX_COURT_FEE_KRW = 1_000_000;
-
-// 이미 앞 단계에서 고른 플레이 목적·상대 선호를 자연스러운 한 두 문장으로 엮어
-// 초보자도 부담 없이 "소개" 칸을 채울 수 있도록 초안을 만들어 준다. 외부 AI 호출 없이
-// 화면에 이미 쓰인 안내 문구(질문 카드의 설명 문구)를 그대로 재활용한다.
-function suggestIntroduction(form: Pick<MatchCreateForm, "playPurposes" | "partnerPreference">) {
-  const purposeSentences = form.playPurposes.map((purpose) => getDescription(purposes, purpose)).filter(Boolean);
-  const preferenceSentence = getDescription(preferences, form.partnerPreference);
-  const sentences = [...purposeSentences, preferenceSentence].filter(Boolean);
-  if (sentences.length === 0) return "";
-
-  return `${sentences.join(". ")}. 함께 즐거운 시간 보내요!`;
-}
 
 function isCourtPlaceSearchItem(value: unknown): value is CourtPlaceSearchItem {
   return typeof value === "object" && value !== null &&
@@ -189,12 +136,17 @@ export function M4MatchCreate() {
     courtName: "",
     address: "",
     courtNumber: "",
-    title: "",
+    gameType: "",
+    settlementBank: "",
+    settlementAccountNumber: "",
+    settlementAccountHolder: "",
+    maleRecruitCount: 1,
+    femaleRecruitCount: 0,
+    splitRecruitment: false,
     recruitCount: 1,
     playPurposes: ["RALLY_PRACTICE"],
     partnerPreference: "COMPLETE_BEGINNER_WELCOME",
     totalCourtFeeKrw: "",
-    additionalCostNote: "",
     introduction: "",
   }));
 
@@ -234,8 +186,9 @@ export function M4MatchCreate() {
 
   const set: FormSetter = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const expectedPeople = form.recruitCount + 1;
+  // "게스트 참가비용"은 총 코트비를 나누는 값이 아니라 게스트 한 명이 내는 금액 그 자체다.
   const totalCourtFee = Number(form.totalCourtFeeKrw);
-  const fee = form.totalCourtFeeKrw === "" || !Number.isFinite(totalCourtFee) ? 0 : Math.ceil(totalCourtFee / expectedPeople);
+  const fee = form.totalCourtFeeKrw === "" || !Number.isFinite(totalCourtFee) ? 0 : totalCourtFee;
 
   const togglePurpose = (purpose: string) => {
     setForm((current) => {
@@ -291,9 +244,15 @@ export function M4MatchCreate() {
     if (!form.date || !form.startTime || !form.endTime) return "날짜, 시작 시간, 종료 시간을 모두 선택해 주세요.";
     if (form.endTime <= form.startTime) return "종료 시간은 시작 시간보다 늦어야 해요.";
     if (!form.courtName.trim() || !form.address.trim()) return "예약한 코트의 이름과 주소를 입력해 주세요.";
-    if (!form.title.trim() || form.playPurposes.length === 0 || form.recruitCount < 1) return "매칭 제목, 모집 인원, 원하는 플레이를 확인해 주세요.";
+    if (!isHalfHourTime(form.startTime) || !isHalfHourTime(form.endTime)) return "시간은 00분 또는 30분으로 선택해 주세요.";
+    if (!form.gameType) return "게임 유형을 선택해 주세요.";
+    if (form.splitRecruitment && form.maleRecruitCount + form.femaleRecruitCount !== form.recruitCount) return "남녀별 모집 인원의 합계를 확인해 주세요.";
+    const accountFields = [form.settlementBank.trim(), form.settlementAccountNumber.trim(), form.settlementAccountHolder.trim()];
+    if (accountFields.some(Boolean) && !accountFields.every(Boolean)) return "정산 정보를 입력하려면 은행, 계좌번호, 예금주를 모두 입력해 주세요.";
+    if (form.settlementAccountNumber.trim() && !/^(?=.*[0-9])[0-9-]{5,40}$/.test(form.settlementAccountNumber.trim())) return "계좌번호는 숫자와 하이픈으로 5~40자 입력해 주세요.";
+    if (form.playPurposes.length === 0 || form.recruitCount < 1) return "모집 인원과 원하는 플레이를 확인해 주세요.";
     if (form.totalCourtFeeKrw === "" || !Number.isInteger(totalCourtFee) || totalCourtFee < 0 || totalCourtFee > MAX_COURT_FEE_KRW) {
-      return `전체 코트 비용을 0원 이상 ${MAX_COURT_FEE_KRW.toLocaleString("ko-KR")}원 이하의 정수로 입력해 주세요.`;
+      return `게스트 참가비용을 0원 이상 ${MAX_COURT_FEE_KRW.toLocaleString("ko-KR")}원 이하의 정수로 입력해 주세요.`;
     }
 
     return null;
@@ -310,7 +269,10 @@ export function M4MatchCreate() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientRequestId: form.clientRequestId,
-          title: form.title,
+          gameType: form.gameType,
+          maleRecruitCount: form.splitRecruitment ? form.maleRecruitCount : null,
+          femaleRecruitCount: form.splitRecruitment ? form.femaleRecruitCount : null,
+          settlementAccount: form.settlementBank.trim() ? { bank: form.settlementBank.trim(), accountNumber: form.settlementAccountNumber.trim(), accountHolder: form.settlementAccountHolder.trim() } : null,
           startsAt,
           endsAt,
           courtSource: "EXTERNAL_RESERVED",
@@ -323,7 +285,6 @@ export function M4MatchCreate() {
           playPurposes: form.playPurposes,
           partnerPreference: form.partnerPreference,
           totalCourtFeeKrw: totalCourtFee,
-          additionalCostNote: form.additionalCostNote || null,
           introduction: form.introduction || null,
         }),
       });
@@ -463,22 +424,22 @@ function CourtScheduleSection({
         <FormField className="mt-6">
           <FormLabel required>매칭 날짜</FormLabel>
           <FormControl>
-            <DatePicker format={DATE_PICKER_FORMAT} input={MaskedDateField} min={dateInputToValue(getTodayDate())} onChange={(value) => set("date", valueToDateInput(value))} placeholder="연도.월.일" value={dateInputToValue(form.date)} />
+            <MatchSchedulePicker kind="date" label="매칭 날짜" minDate={getTodayDate()} onChange={(value) => set("date", value)} value={form.date} />
           </FormControl>
         </FormField>
         <div className="mt-6">
           <FieldTitle required>매칭 시간</FieldTitle>
-          <div className="mt-2 grid grid-cols-2 gap-3">
+          <div className="mt-2 grid gap-4 [&>div]:grid [&>div]:grid-cols-[80px_1fr] [&>div]:items-center">
             <FormField>
               <FormLabel>시작 시간</FormLabel>
               <FormControl>
-                <TimePicker format={TIME_PICKER_FORMAT} input={MaskedTimeField} onChange={(value) => set("startTime", valueToTimeInput(value))} placeholder="시작 시간" value={timeInputToValue(form.startTime)} />
+                <MatchSchedulePicker kind="time" label="시작 시간" onChange={(value) => set("startTime", value)} value={form.startTime} />
               </FormControl>
             </FormField>
             <FormField>
               <FormLabel>종료 시간</FormLabel>
               <FormControl>
-                <TimePicker format={TIME_PICKER_FORMAT} input={MaskedTimeField} minTime={timeInputToValue(form.startTime)} onChange={(value) => set("endTime", valueToTimeInput(value))} placeholder="종료 시간" value={timeInputToValue(form.endTime)} />
+                <MatchSchedulePicker kind="time" label="종료 시간" onChange={(value) => set("endTime", value)} value={form.endTime} />
               </FormControl>
             </FormField>
           </div>
@@ -572,20 +533,31 @@ function CourtPlaceDialog({ error, form, isLoading, isManualEntry, isOpen, onAdd
 
 function RecruitDetailsSection({ form, onRecruitChange, onTogglePurpose, set }: { form: MatchCreateForm; onRecruitChange: (change: number) => void; onTogglePurpose: (value: string) => void; set: FormSetter }) {
   const expectedPeople = form.recruitCount + 1;
+  const selectGameType = (value: GameType) => {
+    set("gameType", value);
+    const split = needsGenderQuota(value);
+    set("splitRecruitment", split);
+    set("maleRecruitCount", value === "WOMENS_DOUBLES" ? 0 : form.recruitCount);
+    set("femaleRecruitCount", value === "WOMENS_DOUBLES" ? form.recruitCount : 0);
+  };
+  const changeGenderCount = (gender: "maleRecruitCount" | "femaleRecruitCount", count: number) => {
+    const next = Math.max(0, Math.min(100, count));
+    set(gender, next);
+    set("recruitCount", next + (gender === "maleRecruitCount" ? form.femaleRecruitCount : form.maleRecruitCount));
+  };
 
   return (
     <div>
-      <FormPanel description="짧고 자연스러운 제목이 좋아요." icon={<TennisBall aria-hidden size={23} weight="fill" />} title="매칭 제목">
-        <FormField>
-          <FormLabel required>제목</FormLabel>
-          <FormControl>
-            <TextField maxLength={80} onChange={(event) => set("title", event.target.value)} placeholder="예: 주말에 편하게 공 주고받아요" value={form.title} />
-          </FormControl>
-          <p className="text-right text-xs text-[var(--tm-text-secondary)]">{form.title.length} / 80</p>
-        </FormField>
+      <FormPanel description="어떤 스타일로 플레이할까요?" icon={<TennisBall aria-hidden size={23} weight="fill" />} title="게임 설정">
+        <fieldset><legend className="mb-3 text-sm font-semibold">게임 유형 <span className="text-[var(--tm-status-error-text)]">*</span></legend>
+          <div className="grid grid-cols-3 gap-2">{gameTypes.map((value) => <button aria-pressed={form.gameType === value} className={`min-h-12 rounded-xl border text-sm font-semibold ${form.gameType === value ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)]"}`} key={value} onClick={() => selectGameType(value)} type="button">{gameTypeLabels[value]}</button>)}</div>
+          <p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">혼복은 혼합 복식, 남복은 남자 복식, 여복은 여자 복식이에요. 프로필의 성별을 기준으로 신청하고, 남녀별 정원 안에서 수락해요.</p>
+        </fieldset>
       </FormPanel>
 
       <FormPanel description="모집자를 제외하고 함께 칠 인원을 정해 주세요." icon={<UsersThree aria-hidden size={23} weight="fill" />} title="몇 명과 함께할까요?">
+        {!needsGenderQuota(form.gameType) ? <div className="mb-4 flex gap-2">{[false, true].map((split) => <button aria-pressed={form.splitRecruitment === split} className="min-h-11 rounded-xl border border-[var(--tm-border-default)] px-3 text-sm aria-pressed:border-[var(--tm-action-primary)] aria-pressed:text-[var(--tm-action-primary)]" key={String(split)} onClick={() => { set("splitRecruitment", split); set("maleRecruitCount", form.recruitCount); set("femaleRecruitCount", 0); }} type="button">{split ? "남녀 구분" : "성별 무관"}</button>)}</div> : null}
+        {form.splitRecruitment ? <div><div className="grid grid-cols-2 gap-3">{([["maleRecruitCount", "남자 모집 인원"], ["femaleRecruitCount", "여자 모집 인원"]] as const).map(([key, label]) => <label className="text-sm font-semibold" key={key}>{label}<select className="mt-2 min-h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white px-3 disabled:bg-neutral-100" disabled={key === "maleRecruitCount" ? form.gameType === "WOMENS_DOUBLES" : form.gameType === "MENS_DOUBLES"} onChange={(event) => changeGenderCount(key, Number(event.target.value))} value={form[key]}>{Array.from({ length: 101 }, (_, count) => <option key={count} value={count}>{count}명</option>)}</select></label>)}</div><p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">모집자를 제외한 남자 {form.maleRecruitCount}명 · 여자 {form.femaleRecruitCount}명, 나를 포함해 총 {expectedPeople}명이 함께해요.</p></div> : <>
         <div className="flex items-center justify-between rounded-2xl border border-[var(--tm-border-default)] bg-white p-3">
           <div>
             <p className="text-sm font-bold">추가 모집 인원</p>
@@ -597,6 +569,8 @@ function RecruitDetailsSection({ form, onRecruitChange, onTogglePurpose, set }: 
             <button aria-label="모집 인원 늘리기" className="grid size-10 place-items-center rounded-xl bg-[var(--tm-action-primary)] text-white" onClick={() => onRecruitChange(1)} type="button"><Plus aria-hidden size={17} weight="bold" /></button>
           </div>
         </div>
+        </>}
+
       </FormPanel>
 
       <FormPanel description="최대 두 가지를 골라 주세요." icon={<TennisBall aria-hidden size={23} weight="fill" />} title="원하는 플레이">
@@ -617,9 +591,9 @@ function RecruitDetailsSection({ form, onRecruitChange, onTogglePurpose, set }: 
 function CostAndNoticeSection({ expectedPeople, fee, form, set }: { expectedPeople: number; fee: number; form: MatchCreateForm; set: FormSetter }) {
   return (
     <div>
-      <FormPanel description="예약할 때 확인한 전체 코트 이용료를 입력해 주세요." icon={<CurrencyKrw aria-hidden size={23} weight="bold" />} title="코트 비용">
+      <FormPanel description="게스트 한 명이 낼 참가비를 입력해 주세요." icon={<CurrencyKrw aria-hidden size={23} weight="bold" />} title="참가 비용">
         <FormField>
-          <FormLabel required>전체 코트 비용</FormLabel>
+          <FormLabel required>게스트 참가비용</FormLabel>
           <FormControl>
             <TextField
               inputMode="numeric"
@@ -639,31 +613,35 @@ function CostAndNoticeSection({ expectedPeople, fee, form, set }: { expectedPeop
           <p className="mt-2 text-xs text-[var(--tm-text-secondary)]">최대 {MAX_COURT_FEE_KRW.toLocaleString("ko-KR")}원까지 입력할 수 있어요.</p>
         </FormField>
         <div className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] p-4">
-          <p className="text-sm text-[var(--tm-text-secondary)]">예상 1인 비용</p>
-          <p className="mt-1 text-xl font-bold text-[var(--tm-action-primary)]">약 {fee.toLocaleString("ko-KR")}원</p>
-          <p className="mt-2 text-xs leading-5 text-[var(--tm-text-secondary)]">전체 비용 ÷ 예상 총 {expectedPeople}명, 1원 단위 올림으로 계산해요.</p>
+          <p className="text-sm text-[var(--tm-text-secondary)]">게스트 참가비용</p>
+          <p className="mt-1 text-xl font-bold text-[var(--tm-action-primary)]">{fee.toLocaleString("ko-KR")}원</p>
+          <p className="mt-2 text-xs leading-5 text-[var(--tm-text-secondary)]">게스트로 참가하는 {expectedPeople - 1}명이 각자 이 금액을 내요.</p>
         </div>
-        <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">Rally On은 코트 비용을 결제하거나 정산하지 않아요. 비용 분담은 참가자끼리 따로 정해요.</p>
+        <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">Rally On은 참가비를 결제하거나 정산하지 않아요. 참가비는 참가자와 직접 정산해요.</p>
       </FormPanel>
 
-      <FormPanel description="준비물이나 별도 비용이 있다면 짧게 알려 주세요." title={<>추가 비용 안내 <span className="text-base font-normal text-[var(--tm-text-secondary)]">(선택)</span></>}>
-        <FormField>
-          <FormLabel>안내</FormLabel>
-          <FormControl>
-            <TextField maxLength={200} onChange={(event) => set("additionalCostNote", event.target.value)} placeholder="예: 테니스공은 각자 준비해요" value={form.additionalCostNote} />
-          </FormControl>
-          <p className="text-right text-xs text-[var(--tm-text-secondary)]">{form.additionalCostNote.length} / 200</p>
-        </FormField>
+      <FormPanel description="모집자와 수락된 참가자에게만 보여요. 입력할 경우 세 항목을 모두 채워 주세요." title="정산 정보 (선택)">
+        <div className="grid gap-4">
+          <FormField>
+            <FormLabel>은행</FormLabel>
+            <FormControl>
+              <select className="min-h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white px-3 text-sm" onChange={(event) => set("settlementBank", event.target.value)} value={form.settlementBank}>
+                <option value="">은행을 선택해 주세요</option>
+                {bankNames.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+            </FormControl>
+          </FormField>
+          <FormField><FormLabel>계좌번호</FormLabel><FormControl><TextField autoComplete="off" inputMode="numeric" maxLength={40} onChange={(event) => set("settlementAccountNumber", event.target.value)} placeholder="숫자와 하이픈만 입력해 주세요" value={form.settlementAccountNumber} /></FormControl></FormField>
+          <FormField><FormLabel>예금주</FormLabel><FormControl><TextField autoComplete="off" maxLength={50} onChange={(event) => set("settlementAccountHolder", event.target.value)} placeholder="예금주 이름" value={form.settlementAccountHolder} /></FormControl></FormField>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">참가자 간 송금을 위한 안내예요. Rally On은 계좌를 검증하거나 송금·입금 확인을 하지 않아요.</p>
       </FormPanel>
 
-      <FormPanel description="처음 신청하는 분도 편하게 알 수 있도록 적어 주세요." title={<>소개 <span className="text-base font-normal text-[var(--tm-text-secondary)]">(선택)</span></>}>
+      <FormPanel description="처음 신청하는 분도 편하게 알 수 있도록 적어 주세요." title={<>매칭 소개글 <span className="text-base font-normal text-[var(--tm-text-secondary)]">(선택)</span></>}>
         <FormField>
-          <div className="flex items-center justify-between gap-3">
-            <FormLabel>소개</FormLabel>
-            <TextButton color="primary" leadingContent={<Sparkle aria-hidden size={16} weight="fill" />} onClick={() => set("introduction", suggestIntroduction(form))} size="small">자동으로 소개 만들기</TextButton>
-          </div>
+          <FormLabel>매칭 소개글</FormLabel>
           <FormControl>
-            <TextArea maxLength={300} onChange={(event) => set("introduction", event.target.value)} placeholder="예: 천천히 랠리하면서 즐겁게 연습할 분을 찾아요. 처음 게임을 해봐도 괜찮아요!" value={form.introduction} />
+            <TextArea autoComplete="off" width="100%" minRows={6} maxLength={300} onChange={(event) => set("introduction", event.target.value)} placeholder="예: 천천히 랠리하면서 즐겁게 연습할 분을 찾아요. 처음 게임을 해봐도 괜찮아요!" value={form.introduction} />
           </FormControl>
           <p className="text-right text-xs text-[var(--tm-text-secondary)]">{form.introduction.length} / 300</p>
         </FormField>
@@ -738,12 +716,13 @@ function MatchPreviewSheet({
             <article className="mt-4 overflow-hidden rounded-3xl border border-[var(--tm-border-default)] bg-white shadow-[0_12px_30px_rgba(29,50,84,0.08)]">
               <div className="p-5">
                 <p className="inline-flex rounded-full bg-[var(--tm-bg-subtle)] px-3 py-1.5 text-xs font-bold text-[var(--tm-action-primary)]">모집자가 코트를 예약했어요</p>
-                <h2 className="mt-3 text-xl font-bold leading-7">{form.title}</h2>
+                <h2 className="mt-3 text-xl font-bold leading-7">{form.courtName}</h2>
+                <p className="mt-2 text-sm">{form.gameType ? gameTypeLabels[form.gameType] : ""}{form.splitRecruitment ? ` · 남자 ${form.maleRecruitCount}명 / 여자 ${form.femaleRecruitCount}명 모집` : " · 성별 무관"}</p>
                 <dl className="mt-5 grid gap-4">
                   <PreviewItem icon={<CalendarBlank aria-hidden size={19} weight="fill" />} label="일시" value={formatSchedule(form.date, form.startTime, form.endTime)} />
                   <PreviewItem icon={<MapPin aria-hidden size={19} weight="fill" />} label="코트" value={regionText || "코트 정보를 입력해 주세요"} />
                   <PreviewItem icon={<UsersThree aria-hidden size={19} weight="fill" />} label="모집" value={`추가 ${form.recruitCount}명 · 총 ${expectedPeople}명 예정`} />
-                  <PreviewItem icon={<CurrencyKrw aria-hidden size={19} weight="bold" />} label="예상 1인 비용" value={`약 ${fee.toLocaleString("ko-KR")}원`} />
+                  <PreviewItem icon={<CurrencyKrw aria-hidden size={19} weight="bold" />} label="게스트 참가비용" value={`${fee.toLocaleString("ko-KR")}원`} />
                 </dl>
                 <div className="mt-5 border-t border-[var(--tm-border-subtle)] pt-4">
                   <p className="text-sm font-bold">함께하고 싶은 플레이</p>
@@ -753,10 +732,10 @@ function MatchPreviewSheet({
                     {getLabel(preferences, form.partnerPreference)}
                   </p>
                   {form.partnerPreference === "COMPLETE_BEGINNER_WELCOME" ? <p className="mt-3 inline-flex rounded-full bg-[var(--tm-bg-subtle)] px-3 py-1.5 text-xs font-bold text-[var(--tm-action-primary)]">초보자 환영</p> : null}
-                  {form.additionalCostNote ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-3 py-2 text-xs leading-5 text-[var(--tm-text-secondary)]">추가 안내: {form.additionalCostNote}</p> : null}
                   {form.introduction ? <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{form.introduction}</p> : null}
                 </div>
-                <p className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">코트 비용은 앱에서 결제되지 않으며, 참가자끼리 별도로 정산해요.</p>
+                {form.settlementBank.trim() ? <div className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] p-4 text-sm"><p className="font-bold">정산 정보 · 수락된 참가자에게만 공개</p><p className="mt-2 break-all">{form.settlementBank} {form.settlementAccountNumber} · {form.settlementAccountHolder}</p></div> : null}
+                <p className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">참가비는 앱에서 결제되지 않으며, 참가자와 직접 정산해요.</p>
               </div>
             </article>
             {error ? (

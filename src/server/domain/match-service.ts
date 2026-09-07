@@ -1,3 +1,5 @@
+import { genderApplicationBlock, hasGenderQuota, remainingGenderSpots } from "@/matches/recruitment";
+import { gameTypeLabels } from "@/matches/game-type";
 import { Prisma } from "@/generated/prisma/client";
 import type { PlayPurpose, PrismaClient } from "@/generated/prisma/client";
 
@@ -37,7 +39,7 @@ const matchInclude = {
       },
     },
   },
-  applications: { select: { id: true, applicantUserId: true, status: true } },
+  applications: { select: { id: true, applicantUserId: true, status: true, applicantGender: true } },
   conversation: { select: { status: true } },
   externalCourtImageUpload: { select: { id: true } },
   courtSlot: {
@@ -113,6 +115,7 @@ function toProfileSnapshot(profile: ProfileWithRelations) {
   return {
     schemaVersion: 1,
     profileVersion: profile.version,
+    gender: profile.gender ?? null,
     ...toProfileView(profile),
   };
 }
@@ -220,6 +223,8 @@ function toMatchCardView(match: MatchWithRelations, viewer: Viewer) {
   return {
     id: match.id,
     title: match.title,
+    recruitment: hasGenderQuota(match) ? { maleCount: match.maleRecruitCount, femaleCount: match.femaleRecruitCount, maleRemaining: remainingGenderSpots(match, match.applications, "MALE"), femaleRemaining: remainingGenderSpots(match, match.applications, "FEMALE") } : null,
+    gameType: match.gameType ? { code: match.gameType, label: gameTypeLabels[match.gameType] } : null,
     status: match.status,
     statusLabel: matchStatusLabels[match.status],
     startsAt: match.startsAt.toISOString(),
@@ -238,7 +243,7 @@ function toMatchCardView(match: MatchWithRelations, viewer: Viewer) {
     acceptedCount,
     remainingSpots: Math.max(match.recruitCount - acceptedCount, 0),
     estimatedTotalParticipants: match.recruitCount + 1,
-    estimatedFeePerPersonKrw: getEstimatedFeePerPerson(match.totalCourtFeeKrw, match.recruitCount),
+    estimatedFeePerPersonKrw: getEstimatedFeePerPerson(match.totalCourtFeeKrw, match.recruitCount, match.courtSource),
     recommendationReasons: recommendation.reasons,
     isHost: match.hostUserId === viewer.id,
   };
@@ -410,14 +415,17 @@ export async function getMatchDetail(prisma: PrismaClient, viewer: Viewer, match
 
   const now = new Date();
   const acceptedCount = getAcceptedCount(match.applications);
-  const canApply = relation === "NONE" && match.status === "OPEN" && match.startsAt > now && hasRemainingSpots(match.recruitCount, match.applications);
+  const genderBlock = genderApplicationBlock(match, match.applications, viewer.profile.gender);
+  const canApply = !genderBlock && relation === "NONE" && match.status === "OPEN" && match.startsAt > now && hasRemainingSpots(match.recruitCount, match.applications);
   const applyBlockedReason = canApply
     ? null
     : relation === "HOST"
       ? "OWN_MATCH"
       : relation === "APPLICANT"
         ? "ALREADY_APPLIED"
-        : match.status !== "OPEN"
+        : genderBlock
+          ? genderBlock
+          : match.status !== "OPEN"
           ? "MATCH_NOT_OPEN"
           : match.startsAt <= now
             ? "MATCH_STARTED"
@@ -442,6 +450,9 @@ export async function getMatchDetail(prisma: PrismaClient, viewer: Viewer, match
     totalCourtFeeKrw: match.totalCourtFeeKrw,
     additionalCostNote: match.additionalCostNote,
     introduction: match.introduction,
+    settlementAccount: canSeeContact && match.settlementBank && match.settlementAccountNumber && match.settlementAccountHolder
+      ? { bank: match.settlementBank, accountNumber: match.settlementAccountNumber, accountHolder: match.settlementAccountHolder }
+      : null,
     partnerPreferenceLabel: partnerPreferenceLabels[match.partnerPreference],
     host: { nickname: match.host.nickname, tennisProfile: toProfileView(match.host.tennisProfile) },
     viewer: {
@@ -468,8 +479,14 @@ function optionalText(value: string | null | undefined) {
 }
 
 function isSameCreateRequest(match: MatchWithRelations, input: MatchCreateInput) {
-  const sameCommonInput = match.title === input.title &&
+  const sameCommonInput = (input.title === undefined || match.title === input.title) &&
+    (match.gameType ?? null) === (input.gameType ?? null) &&
+    (match.settlementBank ?? null) === optionalText(input.settlementAccount?.bank) &&
+    (match.settlementAccountNumber ?? null) === optionalText(input.settlementAccount?.accountNumber) &&
+    (match.settlementAccountHolder ?? null) === optionalText(input.settlementAccount?.accountHolder) &&
     match.courtSource === input.courtSource &&
+    (match.maleRecruitCount ?? null) === (input.maleRecruitCount ?? null) &&
+    (match.femaleRecruitCount ?? null) === (input.femaleRecruitCount ?? null) &&
     match.recruitCount === input.recruitCount &&
     match.partnerPreference === input.partnerPreference &&
     match.introduction === optionalText(input.introduction) &&
@@ -556,7 +573,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
           data: {
             hostUserId: viewer.id,
             clientRequestId: input.clientRequestId,
-            title: input.title,
+            title: input.title ?? slot.courtUnit.court.name.slice(0, 80),
             startsAt: slot.startsAt,
             endsAt: slot.endsAt,
             courtSource: "PARTNER_COURT",
@@ -570,6 +587,12 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
             totalCourtFeeKrw: slot.priceKrw,
             additionalCostNote: null,
             introduction: optionalText(input.introduction),
+            maleRecruitCount: input.maleRecruitCount ?? null,
+            femaleRecruitCount: input.femaleRecruitCount ?? null,
+            gameType: input.gameType ?? null,
+            settlementBank: optionalText(input.settlementAccount?.bank),
+            settlementAccountNumber: optionalText(input.settlementAccount?.accountNumber),
+            settlementAccountHolder: optionalText(input.settlementAccount?.accountHolder),
             purposes: { create: input.playPurposes.map((purpose) => ({ purpose })) },
           },
           select: { id: true },
@@ -589,7 +612,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
 
       return transaction.match.create({
         data: {
-          hostUserId: viewer.id, clientRequestId: input.clientRequestId, title: input.title,
+          hostUserId: viewer.id, clientRequestId: input.clientRequestId, title: input.title ?? input.externalCourt.name.slice(0, 80),
           startsAt: new Date(input.startsAt), endsAt: new Date(input.endsAt), courtSource: "EXTERNAL_RESERVED",
           externalCourtName: input.externalCourt.name,
           externalCourtAddress: input.externalCourt.address,
@@ -597,6 +620,12 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
           externalCourtImageUploadId: imageUploadId, courtSlotId: null, recruitCount: input.recruitCount,
           partnerPreference: input.partnerPreference, totalCourtFeeKrw: input.totalCourtFeeKrw,
           additionalCostNote: optionalText(input.additionalCostNote), introduction: optionalText(input.introduction),
+          maleRecruitCount: input.maleRecruitCount ?? null,
+          femaleRecruitCount: input.femaleRecruitCount ?? null,
+          gameType: input.gameType ?? null,
+          settlementBank: optionalText(input.settlementAccount?.bank),
+          settlementAccountNumber: optionalText(input.settlementAccount?.accountNumber),
+          settlementAccountHolder: optionalText(input.settlementAccount?.accountHolder),
           purposes: { create: input.playPurposes.map((purpose) => ({ purpose })) },
         },
         select: { id: true },
@@ -632,6 +661,7 @@ function toApplicationView(application: ApplicationWithRelations, supplyNotice: 
     status: application.status,
     statusLabel: getApplicationStatusLabel(application.status, application.match.status),
     message: application.message,
+    applicantGender: application.applicantGender ?? null,
     applicant: {
       nickname: application.applicantUser.nickname,
       profileSnapshot: application.profileSnapshot,
@@ -647,7 +677,7 @@ function toApplicationView(application: ApplicationWithRelations, supplyNotice: 
       courtName: application.match.courtSource === "PARTNER_COURT"
         ? application.match.courtSlot?.courtUnit.court.name ?? null
         : application.match.externalCourtName,
-      estimatedFeePerPersonKrw: getEstimatedFeePerPerson(application.match.totalCourtFeeKrw, application.match.recruitCount),
+      estimatedFeePerPersonKrw: getEstimatedFeePerPerson(application.match.totalCourtFeeKrw, application.match.recruitCount, application.match.courtSource),
     },
     createdAt: application.createdAt.toISOString(),
     decidedAt: application.decidedAt?.toISOString() ?? null,
@@ -672,7 +702,9 @@ export async function createApplication(prisma: PrismaClient, viewer: Viewer, ma
           status: true,
           startsAt: true,
           recruitCount: true,
-          applications: { select: { status: true, applicantUserId: true } },
+          maleRecruitCount: true,
+          femaleRecruitCount: true,
+          applications: { select: { status: true, applicantUserId: true, applicantGender: true } },
         },
       });
 
@@ -685,10 +717,14 @@ export async function createApplication(prisma: PrismaClient, viewer: Viewer, ma
       if (match.applications.some((item) => item.applicantUserId === viewer.id)) throw new DomainError("APPLICATION_ALREADY_EXISTS", 409, "이미 신청한 매칭이에요.");
       if (!hasRemainingSpots(match.recruitCount, match.applications)) throw new DomainError("NO_REMAINING_SPOTS", 409, "남은 자리가 없어요.");
 
+      const genderBlock = genderApplicationBlock(match, match.applications, viewer.profile.gender);
+      if (genderBlock) throw new DomainError(genderBlock, 409, genderBlock === "PROFILE_GENDER_REQUIRED" ? "프로필에서 성별을 입력한 뒤 신청해 주세요." : "해당 성별의 모집 인원이 모두 찼어요.");
+
       return transaction.matchApplication.create({
         data: {
           matchId,
           applicantUserId: viewer.id,
+          applicantGender: hasGenderQuota(match) ? viewer.profile.gender : null,
           message: optionalText(input.message),
           profileSnapshot: toProfileSnapshot(viewer.profile),
           profileSnapshotVersion: 1,
@@ -762,7 +798,7 @@ export async function acceptApplication(prisma: PrismaClient, viewer: Viewer, ap
   return prisma.$transaction(async (transaction) => {
     const application = await transaction.matchApplication.findUnique({
       where: { id: applicationId },
-      include: { match: { select: { id: true, hostUserId: true, status: true, startsAt: true, recruitCount: true, version: true } } },
+      include: { match: { select: { id: true, hostUserId: true, status: true, startsAt: true, recruitCount: true, maleRecruitCount: true, femaleRecruitCount: true, version: true } } },
     });
     if (!application || application.match.hostUserId !== viewer.id) throw new DomainError("MATCH_HOST_REQUIRED", 403, "이 매칭의 모집자만 신청을 검토할 수 있어요.");
     await reconcileStartedMatch(transaction, application.match.id);
@@ -781,6 +817,12 @@ export async function acceptApplication(prisma: PrismaClient, viewer: Viewer, ap
     const acceptedCount = await transaction.matchApplication.count({ where: { matchId: application.match.id, status: "ACCEPTED" } });
     if (acceptedCount >= application.match.recruitCount) throw new DomainError("NO_REMAINING_SPOTS", 409, "남은 자리가 없어 신청을 수락할 수 없어요.");
 
+    if (hasGenderQuota(application.match)) {
+      if (!application.applicantGender) throw new DomainError("PROFILE_GENDER_REQUIRED", 409, "신청 당시 성별 정보가 없어 수락할 수 없어요.");
+      const genderCount = await transaction.matchApplication.count({ where: { matchId: application.match.id, status: "ACCEPTED", applicantGender: application.applicantGender } });
+      const quota = application.applicantGender === "MALE" ? application.match.maleRecruitCount : application.match.femaleRecruitCount;
+      if (genderCount >= (quota ?? 0)) throw new DomainError("GENDER_QUOTA_FULL", 409, "해당 성별의 모집 인원이 모두 차서 수락할 수 없어요.");
+    }
     const decidedAt = new Date();
     const accepted = await transaction.matchApplication.updateMany({
       where: { id: application.id, status: "PENDING" },

@@ -35,8 +35,12 @@ describe("M3 match discovery rules", () => {
     expect(isDiscoverableMatch({ ...base, startsAt: new Date("2028-01-01T01:00:00.000Z") })).toBe(false);
   });
 
-  it("rounds the expected individual fee up to a won", () => {
-    expect(getEstimatedFeePerPerson(40_000, 2)).toBe(13_334);
+  it("rounds the expected individual fee up to a won for a partner court's shared total", () => {
+    expect(getEstimatedFeePerPerson(40_000, 2, "PARTNER_COURT")).toBe(13_334);
+  });
+
+  it("treats an external-reserved match's amount as the guest fee itself, unsplit", () => {
+    expect(getEstimatedFeePerPerson(40_000, 2, "EXTERNAL_RESERVED")).toBe(40_000);
   });
 });
 
@@ -84,7 +88,7 @@ describe("M4 match creation input", () => {
   });
 
   it("keeps the null fee calculation for historical court-undecided records", () => {
-    expect(getEstimatedFeePerPerson(null, 2)).toBeNull();
+    expect(getEstimatedFeePerPerson(null, 2, "COURT_TBD")).toBeNull();
   });
 
   it("rejects an invalid court source or time range while keeping contact in the Match chat", () => {
@@ -125,5 +129,50 @@ describe("M7 lifecycle inputs and user-facing state", () => {
     expect(getApplicationStatusLabel("CANCELLED", "CANCELLED")).toBe("매칭이 취소됐어요");
     expect(getApplicationStatusLabel("CANCELLED", "EXPIRED")).toBe("성사 없이 종료됐어요");
     expect(getApplicationStatusLabel("ACCEPTED", "CLOSED")).toBe("같이 치게 됐어요");
+  });
+});
+
+
+describe("match creation game and settlement validation", () => {
+  const request = {
+    clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07cd",
+    courtSource: "EXTERNAL_RESERVED", externalCourt: { name: "테니스장", address: "서울 마포구" },
+    startsAt: "2099-01-02T10:00:00+09:00", endsAt: "2099-01-02T12:00:00+09:00",
+    recruitCount: 2, playPurposes: ["RALLY_PRACTICE"], partnerPreference: "SIMILAR_LEVEL", totalCourtFeeKrw: 24000,
+  };
+  it("accepts a title-free request and an optional settlement account", () => {
+    expect(matchCreateInputSchema.parse({ ...request, gameType: "RALLY" }).title).toBeUndefined();
+    expect(matchCreateInputSchema.parse({ ...request, settlementAccount: null }).settlementAccount).toBeNull();
+  });
+  it.each([
+    { bank: "은행", accountNumber: "12345" },
+    { bank: "", accountNumber: "12345", accountHolder: "홍길동" },
+    { bank: "은행", accountNumber: "abcde", accountHolder: "홍길동" },
+    { bank: "은행", accountNumber: "-----", accountHolder: "홍길동" },
+  ])("rejects partial or invalid accounts", (settlementAccount) => {
+    expect(matchCreateInputSchema.safeParse({ ...request, settlementAccount }).success).toBe(false);
+  });
+  it("rejects unknown game types", () => {
+    expect(matchCreateInputSchema.safeParse({ ...request, gameType: "UNKNOWN" }).success).toBe(false);
+  });
+});
+
+describe("gender quota and half-hour creation contract", () => {
+  const request = {
+    clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07cd", courtSource: "EXTERNAL_RESERVED",
+    externalCourt: { name: "테니스장", address: "서울 마포구" },
+    startsAt: "2099-01-02T10:00:00+09:00", endsAt: "2099-01-02T12:30:00+09:00",
+    recruitCount: 3, playPurposes: ["GAME"], partnerPreference: "SIMILAR_LEVEL", totalCourtFeeKrw: 24000,
+    gameType: "MIXED_DOUBLES", maleRecruitCount: 1, femaleRecruitCount: 2,
+  };
+  it("accepts quota totals that exclude the host", () => {
+    expect(matchCreateInputSchema.parse(request).recruitCount).toBe(3);
+  });
+  it.each([
+    { maleRecruitCount: null }, { femaleRecruitCount: -1 }, { maleRecruitCount: 0.5 },
+    { recruitCount: 4 }, { gameType: "MENS_DOUBLES" }, { gameType: "WOMENS_DOUBLES" },
+    { startsAt: "2099-01-02T10:15:00+09:00" }, { endsAt: "2099-01-02T12:30:01+09:00" },
+  ])("rejects invalid quotas or non-half-hour timing", (change) => {
+    expect(matchCreateInputSchema.safeParse({ ...request, ...change }).success).toBe(false);
   });
 });
