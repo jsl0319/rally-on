@@ -328,7 +328,7 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 | `hostUserId` | UUID | O | 모집자 User FK |
 | `clientRequestId` | UUID | O | 모집자별 매칭 생성 멱등성 키 |
 | `regionCode` | varchar(20) | O | Match 지역 FK |
-| `title` | varchar(80) | O | 짧은 모집 제목 |
+| `title` | varchar(80) | O | 이전 기록·클라이언트 호환용. 새 화면에서는 입력하지 않으며 서버가 코트명에서 생성 |
 | `startsAt` | timestamptz | O | 시작 시각 |
 | `endsAt` | timestamptz | O | 종료 시각, 시작보다 이후 |
 | `courtSource` | CourtSource | O | 신규 생성은 `EXTERNAL_RESERVED` 또는 Pilot의 `PARTNER_COURT`; `COURT_TBD`는 과거 기록 |
@@ -1297,3 +1297,7 @@ WHERE id = :id AND version = :expectedVersion
 - 매칭 취소·완료
 
 Court Partner와 Court Commerce API는 Core API와 별도 섹션으로 구분하고, 구현 단계가 승인되기 전에는 엔드포인트를 활성 범위로 간주하지 않는다.
+
+## 2026-09-07 게임 유형과 참가자 간 정산 안내
+
+Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_DOUBLES, SINGLES, RALLY, OTHER)과 `settlementBank`(50자), `settlementAccountNumber`(40자), `settlementAccountHolder`(50자)를 추가한다. 정산 3개 열은 모두 NULL 또는 모두 값이 있어야 하는 DB 제약을 둔다. 과거 데이터는 NULL로 보존하며 성별 필드·성별별 정원은 추가하지 않는다. `title` 열은 이전 클라이언트와 기록 호환용으로 유지하며 제목 없는 새 요청은 서버에서 코트명 앞 80자로 채운다. 화면 대표 이름에는 최대 100자의 원본 코트명을 사용한다. 계좌는 목록 DTO에 포함하지 않으며 상세에서도 모집자·ACCEPTED 참가자에게만 반환한다. 계좌를 로그·분석 이벤트·공개 메타데이터에 담지 않는다.

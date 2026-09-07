@@ -307,7 +307,13 @@ model AuthAccount {
   @@map("auth_accounts")
 }
 
+enum ProfileGender {
+  MALE
+  FEMALE
+}
+
 model TennisProfile {
+  gender              ProfileGender?
   id                  String          @id @default(uuid()) @db.Uuid
   userId              String          @unique @map("user_id") @db.Uuid
   experienceRange     ExperienceRange @map("experience_range")
@@ -362,6 +368,15 @@ model ApiRateLimit {
   @@map("api_rate_limits")
 }
 
+enum MatchGameType {
+  MIXED_DOUBLES
+  MENS_DOUBLES
+  WOMENS_DOUBLES
+  SINGLES
+  RALLY
+  OTHER
+}
+
 model Match {
   id                   String            @id @default(uuid()) @db.Uuid
   hostUserId           String            @map("host_user_id") @db.Uuid
@@ -380,6 +395,12 @@ model Match {
   totalCourtFeeKrw     Int?              @map("total_court_fee_krw")
   additionalCostNote   String?           @map("additional_cost_note") @db.VarChar(200)
   introduction         String?           @db.VarChar(300)
+  maleRecruitCount     Int?              @map("male_recruit_count")
+  femaleRecruitCount   Int?              @map("female_recruit_count")
+  gameType             MatchGameType?    @map("game_type")
+  settlementBank       String?           @map("settlement_bank") @db.VarChar(50)
+  settlementAccountNumber String?        @map("settlement_account_number") @db.VarChar(40)
+  settlementAccountHolder String?        @map("settlement_account_holder") @db.VarChar(50)
   status               MatchStatus       @default(OPEN)
   version              Int               @default(1)
   closedAt             DateTime?         @map("closed_at") @db.Timestamptz(6)
@@ -438,6 +459,7 @@ model MatchPurpose {
 }
 
 model MatchApplication {
+  applicantGender        ProfileGender?    @map("applicant_gender")
   id                     String            @id @default(uuid()) @db.Uuid
   matchId                String            @map("match_id") @db.Uuid
   applicantUserId        String            @map("applicant_user_id") @db.Uuid

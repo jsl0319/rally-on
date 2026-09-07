@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     const user = await getRateLimitedCurrentUser();
     const viewer = await getOnboardedViewer(getPrisma(), user);
     const result = await createMatch(getPrisma(), viewer, matchCreateInputSchema.parse(await request.json()));
-    return Response.json(result.match, { status: result.created ? 201 : 200, headers: { Location: `/api/v1/matches/${result.match.id}` } });
+    return Response.json(result.match, { status: result.created ? 201 : 200, headers: { Location: `/api/v1/matches/${result.match.id}`, "Cache-Control": "private, no-store" } });
   } catch (error) {
     return handleApiError(error);
   }

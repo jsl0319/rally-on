@@ -64,7 +64,13 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   await hostPage.getByLabel("매칭 날짜").fill(startsOn);
   await hostPage.getByLabel("시작 시간").fill("10:00");
   await hostPage.getByLabel("종료 시간").fill("13:30");
-  await hostPage.getByLabel("매칭 제목").fill(fixture.matchTitle);
+  await expect(hostPage.getByLabel("매칭 제목")).toHaveCount(0);
+  await hostPage.getByRole("button", { name: "랠리", exact: true }).click();
+  await hostPage.getByLabel("은행", { exact: true }).fill("테스트은행");
+  await hostPage.getByLabel("계좌번호", { exact: true }).fill("123-456-789");
+  await hostPage.getByLabel("예금주", { exact: true }).fill("테스트모집자");
+  await hostPage.getByLabel("매칭 소개글", { exact: true }).fill("편하게 함께 연습해요.");
+  await expect(hostPage.getByRole("button", { name: "자동으로 소개 만들기" })).toHaveCount(0);
   await hostPage.getByLabel("전체 코트 비용").fill("24000");
   await hostPage.getByRole("button", { name: "미리보기" }).click();
   const previewDialog = hostPage.getByRole("dialog", { name: "미리보기" });
@@ -79,7 +85,8 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   const applicantPage = await applicantContext.newPage();
 
   await applicantPage.goto(`/matches/${matchId}`);
-  await expect(applicantPage.getByRole("heading", { name: fixture.matchTitle })).toBeVisible();
+  await expect(applicantPage.getByRole("heading", { name: "E2E 테니스장" })).toBeVisible();
+  await expect(applicantPage.getByRole("heading", { name: "정산 정보" })).toHaveCount(0);
   await applicantPage.getByRole("button", { name: "같이 치기" }).click();
   await applicantPage.getByLabel(/모집자에게 한마디/).fill("천천히 랠리하며 함께 연습하고 싶어요.");
   await applicantPage.getByRole("button", { name: "신청하기", exact: true }).click();
@@ -93,11 +100,13 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   await hostPage.getByRole("button", { name: "네, 함께 칠게요" }).click();
   await expect(hostPage.getByRole("heading", { name: "같이 치기로 했어요" })).toBeVisible();
 
+  await applicantPage.goto(`/matches/${matchId}`);
+  await expect(applicantPage.getByText("123-456-789", { exact: true })).toBeVisible();
   await applicantPage.goto("/activity/sent");
-  const externalReservedCard = applicantPage.locator("article").filter({ hasText: fixture.matchTitle });
+  const externalReservedCard = applicantPage.locator("article").filter({ hasText: "E2E 테니스장" });
   await expect(externalReservedCard.getByText("같이 치게 됐어요. 매칭 정보를 확인해 주세요.")).toBeVisible();
   await externalReservedCard.getByRole("link", { name: "채팅방 열기" }).click();
-  await expect(applicantPage.getByRole("heading", { name: fixture.matchTitle })).toBeVisible();
+  await expect(applicantPage.getByRole("heading", { name: "E2E 테니스장" })).toBeVisible();
   await expect(applicantPage.getByRole("button", { name: "사진 추가" })).toBeVisible();
   await applicantPage.getByLabel("메시지").fill("E2E 자동화 메시지");
   const [messageResponse] = await Promise.all([
@@ -135,7 +144,7 @@ test("공개된 코트 시간은 하나의 코트 매칭으로 열고 신청·�
   await expect(hostPage.getByRole("link", { name: "이 시간으로 코트 매칭 열기" })).toBeVisible();
   await hostPage.getByRole("link", { name: "이 시간으로 코트 매칭 열기" }).click();
   await expect(hostPage.getByRole("heading", { name: /함께 칠 메이트를/ })).toBeVisible();
-  await hostPage.getByLabel("매칭 제목").fill(fixture.partnerMatchTitle);
+  await expect(hostPage.getByLabel("매칭 제목")).toHaveCount(0);
   await hostPage.getByRole("button", { name: "이 시간으로 코트 매칭 열기" }).click();
   await expect(hostPage).toHaveURL(/\/matches\/[0-9a-f-]{36}$/);
   await expect(hostPage.getByText("Rally On에서 준비한 코트예요")).toBeVisible();
@@ -146,7 +155,7 @@ test("공개된 코트 시간은 하나의 코트 매칭으로 열고 신청·�
   await signInAs(applicantContext, e2eUsers.applicant.id);
   const applicantPage = await applicantContext.newPage();
   await applicantPage.goto(`/matches/${matchId}`);
-  await expect(applicantPage.getByRole("heading", { name: fixture.partnerMatchTitle })).toBeVisible();
+  await expect(applicantPage.getByRole("heading", { name: "E2E 준비된 테니스장" })).toBeVisible();
   await expect(applicantPage.getByText("Rally On에서 준비한 코트예요")).toBeVisible();
   await applicantPage.getByRole("button", { name: "같이 치기" }).click();
   await applicantPage.getByRole("button", { name: "신청하기", exact: true }).click();
@@ -159,7 +168,7 @@ test("공개된 코트 시간은 하나의 코트 매칭으로 열고 신청·�
   await expect(hostPage.getByRole("heading", { name: "같이 치기로 했어요" })).toBeVisible();
 
   await applicantPage.goto("/activity/sent");
-  await applicantPage.locator("article").filter({ hasText: fixture.partnerMatchTitle }).getByRole("link", { name: "채팅방 열기" }).click();
+  await applicantPage.locator("article").filter({ hasText: "E2E 준비된 테니스장" }).getByRole("link", { name: "채팅방 열기" }).click();
   await applicantPage.getByLabel("메시지").fill("준비된 코트 E2E 메시지");
   await applicantPage.getByRole("button", { name: "보내기" }).click();
   await expect(applicantPage.getByText("준비된 코트 E2E 메시지")).toBeVisible();
@@ -202,7 +211,7 @@ test("과거 코트 미정 매칭은 비공개·신청 불가이지만 기존 �
   await signInAs(hostContext, e2eUsers.host.id);
   const hostPage = await hostContext.newPage();
   await hostPage.goto(`/matches/${fixture.legacyMatchId}`);
-  await expect(hostPage.getByRole("heading", { name: fixture.legacyMatchTitle })).toBeVisible();
+  await expect(hostPage.getByRole("heading", { name: "코트 미정" })).toBeVisible();
   const completion = await hostPage.evaluate(async (matchId) => {
     const response = await fetch(`/api/v1/matches/${matchId}/complete`, {
       method: "POST",

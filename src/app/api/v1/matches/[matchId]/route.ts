@@ -10,7 +10,7 @@ export async function GET(_request: Request, context: { params: Promise<{ matchI
     const { matchId } = await context.params;
     const user = await getRateLimitedCurrentUser();
     const viewer = await getOnboardedViewer(getPrisma(), user);
-    return Response.json(await getMatchDetail(getPrisma(), viewer, matchId));
+    return Response.json(await getMatchDetail(getPrisma(), viewer, matchId), { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return handleApiError(error);
   }

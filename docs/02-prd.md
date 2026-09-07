@@ -705,3 +705,7 @@ CourtSlot
 - 다음 설계 단계: `04-erd.md`
 
 ERD에서는 `User`, `TennisProfile`, `Match`, `MatchApplication`과 외부 예약 코트 정보를 Core MVP 모델로 먼저 정의한다. `CourtOperator`, `Court`, `CourtSlot`과 `Match.courtSlotId` 연결은 후속 Pilot 확장 모델로 구분한다. Commerce는 별도 단계이며, `CourtBooking`은 사용하지 않는다.
+
+## 2026-09-07 매칭 개설 입력 개선
+
+사용자 승인: 매칭 제목 입력을 없애고 목록·상세 대표 이름은 테니스장명을 사용한다. 일반 개설에 게임 유형(혼복·남복·여복·단식·랠리·기타)을 추가하되 모집 인원은 총원 방식, 성별 미수집 정책을 유지한다. 게임 유형은 기존 Player Skill과 Match Purpose를 변경하지 않는다. 정산 계좌(은행·계좌번호·예금주)는 선택 입력, 모집자와 ACCEPTED 참가자에게만 공개한다. 앱 밖 비용 분담 안내이며 결제·송금·입금 확인은 제공하지 않는다. 매칭 소개글은 넓은 직접 입력 영역으로 제공하고 자동 생성 기능을 제거한다. 상세 흐름은 화면 명세 12절을 따른다.

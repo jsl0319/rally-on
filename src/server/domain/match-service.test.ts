@@ -595,3 +595,72 @@ describe("match service operation safeguards", () => {
     }));
   });
 });
+
+
+describe("match game and settlement information", () => {
+  const account = { bank: "테스트은행", accountNumber: "123-456-789", accountHolder: "테스트모집자" };
+  const accountMatch = (overrides: Record<string, unknown> = {}) => makeMatch({
+    gameType: "RALLY", settlementBank: account.bank,
+    settlementAccountNumber: account.accountNumber, settlementAccountHolder: account.accountHolder,
+    ...overrides,
+  });
+  function database(match: ReturnType<typeof makeMatch>) {
+    const prisma = {
+      match: { findUnique: vi.fn().mockResolvedValue(match), findMany: vi.fn().mockResolvedValue([match]) },
+      matchSupplyNoticeRecipient: { findFirst: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(async (callback: (transaction: unknown) => unknown) => callback(prisma)),
+    };
+    return prisma as unknown as Parameters<typeof getMatchDetail>[0];
+  }
+  it.each(["PENDING", "REJECTED", "WITHDRAWN", "CANCELLED", "NONE"])("withholds the account from %s viewers and all list responses", async (status) => {
+    const match = accountMatch({ hostUserId: "another-host", applications: status === "NONE" ? [] : [{ applicantUserId: viewer.id, status }] });
+    const prisma = database(match);
+    const detail = await getMatchDetail(prisma, viewer, match.id);
+    expect(detail.settlementAccount).toBeNull();
+    expect(detail.gameType).toEqual({ code: "RALLY", label: "랠리" });
+    const list = await getMatches(prisma, viewer, { startsFrom: new Date("2029-01-01"), limit: 20 });
+    expect(JSON.stringify(list)).not.toContain(account.accountNumber);
+    expect(JSON.stringify(detail)).not.toContain(account.accountNumber);
+  });
+  it.each(["HOST", "ACCEPTED"])("shows the account only to %s", async (role) => {
+    const match = accountMatch(role === "HOST" ? {} : { hostUserId: "another-host", applications: [{ applicantUserId: viewer.id, status: "ACCEPTED" }] });
+    const detail = await getMatchDetail(database(match), viewer, match.id);
+    expect(detail.settlementAccount).toEqual(account);
+  });
+  it.each([
+    { gameType: "SINGLES" },
+    { settlementAccount: { ...account, accountNumber: "999-888-777" } },
+  ])("rejects changed game or settlement information on an idempotent retry", async (change) => {
+    const request = matchCreateInputSchema.parse({ ...input, gameType: "RALLY", settlementAccount: account, ...change });
+    await expect(createMatch(database(accountMatch()), viewer, request)).rejects.toMatchObject({ code: "IDEMPOTENCY_KEY_REUSED" });
+  });
+});
+
+describe("gender quota application safeguards", () => {
+  it.each([
+    { gender: null, expected: "PROFILE_GENDER_REQUIRED" },
+    { gender: "FEMALE", expected: "GENDER_QUOTA_FULL" },
+  ])("rejects an ineligible application before storing it", async ({ gender, expected }) => {
+    const match = makeMatch({ maleRecruitCount: 1, femaleRecruitCount: 0 });
+    const transaction = { match: { findUnique: vi.fn().mockResolvedValue(match) }, matchApplication: { create: vi.fn() } };
+    const prisma = { $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)) } as unknown as Parameters<typeof createApplication>[0];
+    const applicant = { ...viewer, id: "applicant", profile: { ...viewer.profile, gender } } as Parameters<typeof createApplication>[1];
+    await expect(createApplication(prisma, applicant, match.id, { message: null })).rejects.toMatchObject({ code: expected });
+    expect(transaction.matchApplication.create).not.toHaveBeenCalled();
+  });
+  it("checks the gender quota after reserving the match version, even when total seats remain", async () => {
+    const match = makeMatch({ recruitCount: 3, maleRecruitCount: 1, femaleRecruitCount: 2 });
+    const transaction = {
+      match: { findUnique: vi.fn().mockResolvedValue(match), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      matchApplication: {
+        findUnique: vi.fn().mockResolvedValue({ id: "application", status: "PENDING", applicantGender: "MALE", match }),
+        count: vi.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(1), updateMany: vi.fn(),
+      },
+    };
+    const prisma = { $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)) } as unknown as Parameters<typeof acceptApplication>[0];
+    await expect(acceptApplication(prisma, viewer, "application", { expectedMatchVersion: 1 })).rejects.toMatchObject({ code: "GENDER_QUOTA_FULL" });
+    expect(transaction.matchApplication.count).toHaveBeenLastCalledWith({ where: { matchId: match.id, status: "ACCEPTED", applicantGender: "MALE" } });
+    expect(transaction.match.updateMany.mock.invocationCallOrder[0]).toBeLessThan(transaction.matchApplication.count.mock.invocationCallOrder[0]);
+    expect(transaction.matchApplication.updateMany).not.toHaveBeenCalled();
+  });
+});

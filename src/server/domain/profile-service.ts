@@ -21,6 +21,7 @@ export type ProfileWithRelations = Prisma.TennisProfileGetPayload<{
 
 export function toProfileView(profile: ProfileWithRelations) {
   return {
+    gender: profile.gender ?? null,
     experienceRange: profile.experienceRange,
     rallyLevel: profile.rallyLevel,
     gameExperience: profile.gameExperience,
@@ -60,6 +61,7 @@ export async function saveProfile(
       ? await transaction.tennisProfile.update({
           where: { id: current.id },
           data: {
+            gender: input.gender,
             experienceRange: input.experienceRange,
             rallyLevel: input.rallyLevel,
             gameExperience: input.gameExperience,
@@ -74,6 +76,7 @@ export async function saveProfile(
       : await transaction.tennisProfile.create({
           data: {
             userId,
+            gender: input.gender,
             experienceRange: input.experienceRange,
             rallyLevel: input.rallyLevel,
             gameExperience: input.gameExperience,

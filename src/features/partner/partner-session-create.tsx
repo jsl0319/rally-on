@@ -35,7 +35,6 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(() => ({
     clientRequestId: crypto.randomUUID(),
-    title: "",
     recruitCount: 1,
     playPurposes: ["RALLY_PRACTICE"],
     partnerPreference: "COMPLETE_BEGINNER_WELCOME",
@@ -69,7 +68,7 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
   const submit = async () => {
     setSubmitError("");
     if (!slot) return;
-    if (!form.title.trim() || form.playPurposes.length === 0) return setSubmitError("매칭 제목과 원하는 플레이를 확인해 주세요.");
+    if (form.playPurposes.length === 0) return setSubmitError("원하는 플레이를 확인해 주세요.");
     if (form.recruitCount < 1 || form.recruitCount + 1 > slot.maxParticipantCount) return setSubmitError(`추가 모집 인원은 ${Math.max(slot.maxParticipantCount - 1, 0)}명까지 선택할 수 있어요.`);
 
     setSaving(true);
@@ -81,7 +80,6 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
           clientRequestId: form.clientRequestId,
           courtSource: "PARTNER_COURT",
           courtSlotId: slot.id,
-          title: form.title,
           recruitCount: form.recruitCount,
           playPurposes: form.playPurposes,
           partnerPreference: form.partnerPreference,
@@ -106,7 +104,6 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
     <p className="mt-5 text-sm font-semibold text-[var(--tm-action-primary)]">코트 매칭 열기</p><h1 className="mt-1 text-2xl font-bold">함께 칠 메이트를<br />모집해 볼까요?</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">코트, 시간, 비용은 운영자가 준비한 정보로 고정돼요.</p>
     <section className="mt-6 overflow-hidden rounded-3xl border border-[var(--tm-border-default)] bg-white p-4"><CourtMedia alt={`${slot.court.name} 코트 이미지`} className="aspect-[7/3] w-full" fallbackLabel="Rally On 기본 코트 이미지" image={slot.court.image} /><p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">Rally On에서 준비한 코트예요</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">🗓 {formatPartnerSchedule(slot.startsAt, slot.endsAt)}<br />📍 {slot.court.name} · {slot.court.courtNumber}<br />전체 {slot.totalCourtFeeKrw.toLocaleString("ko-KR")}원 · 현장 최대 {slot.maxParticipantCount}명</p>{slot.usageNote ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-3 py-2 text-sm leading-5 text-[var(--tm-text-secondary)]">{slot.usageNote}</p> : null}</section>
     <FormFields>
-      <label>매칭 제목<input maxLength={80} onChange={(event) => update("title", event.target.value)} placeholder="예: 퇴근 후 편하게 랠리해요" value={form.title} /></label>
       <label>추가 모집 인원 <span className="font-normal text-[var(--tm-text-secondary)]">(최대 {maxRecruitCount}명)</span><input max={maxRecruitCount} min="1" onChange={(event) => update("recruitCount", Number(event.target.value))} type="number" value={form.recruitCount} /></label>
     </FormFields>
     <p className="mt-6 text-sm font-semibold">원하는 플레이 <span className="font-normal text-[var(--tm-text-secondary)]">(최대 2개)</span></p><div className="mt-3 grid gap-2">{purposes.map(([code, label]) => <SelectCard key={code} selected={form.playPurposes.includes(code)} onClick={() => togglePurpose(code)}>{label}</SelectCard>)}</div>

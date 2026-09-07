@@ -1265,7 +1265,7 @@ POST /api/v1/applications/{applicationId}/withdraw
 | `nickname` | 공백 제거 후 2~12자, 한글·영문·숫자, 정규화 후 유일 |
 | `activityRegionCode` | 활성 시·군·구 한 곳 |
 | `nearbyRegionAllowed` | 필수 boolean |
-| `title` | 공백 제거 후 1~80자 |
+| `title` | 선택, 이전 클라이언트 호환용. 제공 시 공백 제거 후 1~80자, 생략 시 코트명에서 내부 생성 |
 | `startsAt`, `endsAt` | 미래 시작, 시작 < 종료 |
 | `regionCode` | 활성 Region |
 | `externalCourt.name` | 1~100자 |
@@ -1781,3 +1781,9 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 - 각 개발 단계의 시연 가능한 결과물
 
 프로젝트가 초기화되고 실제 실행 명령과 환경 변수가 확정된 후에 `README.md`를 작성한다.
+
+## 2026-09-07 매칭 개설 계약 변경
+
+`POST /api/v1/matches`: `title`은 이전 클라이언트 호환용 선택 값이다. 생략하면 서버에서 코트명 앞 80자로 내부 title을 생성한다. `gameType`은 MIXED_DOUBLES/MENS_DOUBLES/WOMENS_DOUBLES/SINGLES/RALLY/OTHER 중 하나이며 이전 클라이언트 호환을 위해 생략·null을 허용한다. `settlementAccount`는 생략·null 또는 `{bank, accountNumber, accountHolder}` 객체다. bank와 accountHolder는 공백 제거 후 1~50자, accountNumber는 공백 제거 후 숫자·하이픈 5~40자이고 숫자를 포함해야 한다. 일부만 입력하면 422로 거절한다. 재시도의 동일성 비교에 게임 유형과 계좌 세 항목을 포함한다.
+
+목록과 상세의 `gameType` 응답은 `{code, label}` 또는 null이다. 정산 계좌는 목록에 포함하지 않는다. 상세 `settlementAccount`는 모집자 또는 해당 Match의 ACCEPTED 신청자에게만 객체로 반환하고 그 외에는 null이다. 인증·온보딩·기존 상세 접근 권한은 유지한다. 결제·정산 관련 후속 단계의 계좌 미반환 규칙은 PG/운영자 계좌에 적용되며, 이 명시적인 참가자 간 계좌 안내는 별도 계약이다.

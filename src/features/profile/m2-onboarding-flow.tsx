@@ -6,12 +6,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ProfileGenderField } from "./profile-gender-field";
+import type { Gender } from "@/matches/recruitment";
+
 import { getSafeReturnTo, getStartAuthCallbackPath } from "@/navigation/return-to";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { Button } from "@/components/ui/button";
 
 type Screen = "loading" | "login" | "error" | "nickname" | 0 | 1 | 2 | 3 | "result";
 type ProfileDraft = {
+  gender: Gender | null;
   nickname: string;
   experienceRange: "UNDER_3_MONTHS" | "MONTHS_3_TO_6" | "MONTHS_6_TO_12" | "YEARS_1_TO_2" | "YEARS_2_PLUS" | "";
   rallyLevel: "STARTING" | "SHORT_RALLY" | "COMFORTABLE_RALLY" | "STANDARD_RALLY" | "";
@@ -25,6 +29,7 @@ type MeResponse = {
   nicknameConfirmed: boolean;
   onboardingCompleted: boolean;
   tennisProfile: null | {
+    gender: Gender | null;
     experienceRange: ProfileDraft["experienceRange"];
     rallyLevel: ProfileDraft["rallyLevel"];
     gameExperience: ProfileDraft["gameExperience"];
@@ -34,6 +39,7 @@ type MeResponse = {
 };
 
 const initialDraft: ProfileDraft = {
+  gender: null,
   nickname: "",
   experienceRange: "",
   rallyLevel: "",
@@ -116,6 +122,7 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
         }
         const profile = me.tennisProfile;
         setDraft({
+          gender: profile?.gender ?? null,
           nickname: me.nickname,
           experienceRange: profile?.experienceRange ?? "",
           rallyLevel: profile?.rallyLevel ?? "",
@@ -159,6 +166,7 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          gender: draft.gender,
           experienceRange: draft.experienceRange,
           rallyLevel: draft.rallyLevel,
           gameExperience: draft.gameExperience,
@@ -218,7 +226,7 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
       </div>
     );
 
-    return <FormShell step={screen + 1} onBack={goBack}><h1>{question.title.split("\n").map((line) => <span key={line}>{line}<br /></span>)}</h1><p>{question.description}</p>{questionContent}{error ? <ErrorMessage message={error} /> : null}<ActionButton disabled={!canContinue} loading={loading} onClick={() => screen === 3 ? void saveProfile() : setScreen((screen + 1) as Screen)}>{screen === 3 ? "프로필 완성하기" : "다음"}</ActionButton></FormShell>;
+    return <FormShell step={screen + 1} onBack={goBack}><h1>{question.title.split("\n").map((line) => <span key={line}>{line}<br /></span>)}</h1><p>{question.description}</p>{questionContent}{screen === 3 ? <ProfileGenderField onChange={(gender) => setDraft((current) => ({ ...current, gender }))} value={draft.gender} /> : null}{error ? <ErrorMessage message={error} /> : null}<ActionButton disabled={!canContinue} loading={loading} onClick={() => screen === 3 ? void saveProfile() : setScreen((screen + 1) as Screen)}>{screen === 3 ? "프로필 완성하기" : "다음"}</ActionButton></FormShell>;
   }
 
   return <FormShell step={4} onBack={goBack}><div className="mt-8 grid size-12 place-items-center rounded-full bg-[var(--tm-bg-subtle)] text-2xl text-[var(--tm-action-primary)]">✓</div><h1 className="mt-6">{draft.nickname}님의<br />플레이 프로필이 완성됐어요</h1><p>이 정보를 기준으로 잘 맞는 매치를 먼저 보여드릴게요.</p><div className="mt-8 rounded-2xl bg-[var(--tm-bg-subtle-muted)] p-5"><strong>{draft.nickname}</strong><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">{draft.experienceRange === "YEARS_1_TO_2" ? "1~2년" : "테니스 프로필"}</p></div><ActionButton onClick={() => onCompleted ? onCompleted() : router.replace(safeReturnTo)}>추천 매치 보기</ActionButton>{error ? <ErrorMessage message={error} /> : null}</FormShell>;
