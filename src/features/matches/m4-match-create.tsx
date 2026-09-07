@@ -593,17 +593,17 @@ function CostAndNoticeSection({ form, set }: { form: MatchCreateForm; set: FormS
           <FormControl>
             <TextField
               inputMode="numeric"
-              max={MAX_COURT_FEE_KRW}
-              min="0"
               onChange={(event) => {
-                const { value } = event.target;
-                if (value !== "" && (!Number.isFinite(Number(value)) || Number(value) > MAX_COURT_FEE_KRW)) return;
-                set("totalCourtFeeKrw", value);
+                // 콤마 구분 표시를 위해 text 입력으로 받고, 저장은 숫자만 남긴 문자열로 한다
+                // (표시는 항상 Number(...).toLocaleString()로 다시 포맷한다).
+                const digits = event.target.value.replace(/[^0-9]/g, "");
+                if (digits !== "" && (!Number.isFinite(Number(digits)) || Number(digits) > MAX_COURT_FEE_KRW)) return;
+                set("totalCourtFeeKrw", digits);
               }}
               placeholder="예: 24,000"
               trailingContent={<TextFieldContent variant="text">원</TextFieldContent>}
-              type="number"
-              value={form.totalCourtFeeKrw}
+              type="text"
+              value={form.totalCourtFeeKrw === "" ? "" : Number(form.totalCourtFeeKrw).toLocaleString("ko-KR")}
             />
           </FormControl>
           <p className="mt-2 text-xs text-[var(--tm-text-secondary)]">최대 {MAX_COURT_FEE_KRW.toLocaleString("ko-KR")}원까지 입력할 수 있어요. 게스트 한 명당 내는 참가비예요.</p>
