@@ -136,7 +136,6 @@ export function M3MatchDetail({ params }: { params: Promise<{ matchId: string }>
         <div className="absolute left-5 top-5 flex size-11 items-center justify-center rounded-full bg-white/95 shadow-sm backdrop-blur"><BackButton fallbackPath={returnTo} /></div>
       </div>
       <header className="px-5 py-6 sm:px-7">
-        {detail.court.source === "PARTNER_COURT" ? <p className="mb-3 inline-flex rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">{detail.court.sourceLabel}</p> : null}
         <div className="flex flex-wrap gap-2"><MatchBadge tone="blue">{detail.statusLabel}</MatchBadge>{detail.gameType ? <MatchBadge>{detail.gameType.label}</MatchBadge> : null}{detail.beginnerWelcome ? <MatchBadge tone="green">초보자 환영</MatchBadge> : null}</div>
         <h1 className="mt-4 break-words text-[26px] font-bold leading-snug tracking-tight">{detail.court.name ?? "코트 미정"}</h1>
         {detail.court.address ? <p className="mt-2 flex items-start gap-1.5 text-sm leading-6 text-slate-500"><MapPin size={18} className="mt-0.5 shrink-0" aria-hidden />{detail.court.address}</p> : null}
