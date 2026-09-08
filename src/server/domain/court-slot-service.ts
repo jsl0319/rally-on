@@ -580,16 +580,24 @@ export async function reportCourtSupplyIncident(
   });
 }
 
-export async function getPublicCourtSlots(prisma: PrismaClient, availableOnly: boolean) {
+/**
+ * CP01 목록은 아직 끝나지 않은 공개 시간만 시간순으로 보여 준다. 이미 지난 시간은
+ * `ENDED`로 남아 있어도 목록에서 빼고, 상태·갱신 시각이 필요하면 상세 경로에서 읽는다.
+ * 목록에는 페이징 UI가 없으므로 가장 가까운 시간부터 `publicCourtSlotListLimit`개까지만 읽는다.
+ */
+export const publicCourtSlotListLimit = 50;
+
+export async function getPublicCourtSlots(prisma: PrismaClient, availableOnly: boolean, limit = publicCourtSlotListLimit) {
   const now = new Date();
   const slots = await prisma.courtSlot.findMany({
     where: {
       visibility: "PUBLIC",
       courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
-      ...(availableOnly ? { status: "AVAILABLE", startsAt: { gt: now } } : {}),
+      ...(availableOnly ? { status: "AVAILABLE", startsAt: { gt: now } } : { endsAt: { gt: now } }),
     },
     include: courtSlotInclude,
     orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+    take: limit,
   });
   return { items: slots.map((slot) => toCourtSlotView(slot, now)) };
 }

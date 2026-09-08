@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { courtSlotCreateInputSchema, courtSlotUpdateInputSchema, courtSupplyIncidentInputSchema } from "./court-slot";
-import { blockCourtSlot, createCourt, createCourtSlot, getPublicCourtSlot, getPublicCourtSlots, publishCourtSlot, reportCourtSupplyIncident, updateCourtSlot } from "./court-slot-service";
+import { blockCourtSlot, createCourt, createCourtSlot, getPublicCourtSlot, getPublicCourtSlots, publicCourtSlotListLimit, publishCourtSlot, reportCourtSupplyIncident, updateCourtSlot } from "./court-slot-service";
 
 const viewer = { id: "operator-user-id" };
 const futureStartsAt = new Date("2030-01-02T01:00:00.000Z");
@@ -160,6 +160,31 @@ describe("Court Partner time supply authorization and state transitions", () => 
         courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
       }),
     }));
+  });
+
+  it("keeps finished times out of the public slot list", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const prisma = { courtSlot: { findMany } } as unknown as Parameters<typeof getPublicCourtSlots>[0];
+
+    await expect(getPublicCourtSlots(prisma, false)).resolves.toEqual({ items: [] });
+
+    const [{ where, orderBy, take }] = findMany.mock.calls[0] as [{ where: { endsAt: { gt: Date }; status?: string }; orderBy: unknown; take: number }];
+    expect(where.endsAt.gt).toBeInstanceOf(Date);
+    expect(where.status).toBeUndefined();
+    expect(orderBy).toEqual([{ startsAt: "asc" }, { id: "asc" }]);
+    expect(take).toBe(publicCourtSlotListLimit);
+  });
+
+  it("only offers still-upcoming available times when a session host picks a slot", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const prisma = { courtSlot: { findMany } } as unknown as Parameters<typeof getPublicCourtSlots>[0];
+
+    await getPublicCourtSlots(prisma, true);
+
+    const [{ where }] = findMany.mock.calls[0] as [{ where: { status: string; startsAt: { gt: Date }; endsAt?: unknown } }];
+    expect(where.status).toBe("AVAILABLE");
+    expect(where.startsAt.gt).toBeInstanceOf(Date);
+    expect(where.endsAt).toBeUndefined();
   });
 
   it("does not publish an inactive court even when the operator application remains approved", async () => {

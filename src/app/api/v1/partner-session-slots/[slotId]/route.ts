@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import { getRateLimitedCurrentUser } from "@/server/auth/current-user";
 import { getPrisma } from "@/server/db/prisma";
 import { getOnboardedViewer } from "@/server/domain/match-service";
@@ -17,4 +19,3 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slo
     return handleApiError(error);
   }
 }
-import { z } from "zod";
