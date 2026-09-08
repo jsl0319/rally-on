@@ -1,7 +1,7 @@
 import type { ApplicationStatus, GameExperience, MatchStatus, PlayPurpose, RallyLevel } from "@/generated/prisma/client";
 import { z } from "zod";
 import { needsGenderQuota } from "@/matches/recruitment";
-import { gameTypes } from "@/matches/game-type";
+import { activeGameTypes } from "@/matches/game-type";
 
 import { gameLabels, purposeLabels, rallyLabels } from "./profile";
 
@@ -33,7 +33,7 @@ const matchCreateCommonSchema = z.object({
   partnerPreference: z.enum(["COMPLETE_BEGINNER_WELCOME", "SIMILAR_LEVEL", "GAME_CAPABLE"]),
   maleRecruitCount: z.number().int().min(0).max(10, "남자 모집 인원은 10명 이하로 입력해 주세요.").nullable().optional(),
   femaleRecruitCount: z.number().int().min(0).max(10, "여자 모집 인원은 10명 이하로 입력해 주세요.").nullable().optional(),
-  gameType: z.enum(gameTypes).nullable().optional(),
+  gameType: z.enum(activeGameTypes).nullable().optional(),
   settlementAccount: settlementAccountSchema.nullable().optional(),
   introduction: z.string().trim().max(300).nullable().optional(),
 });

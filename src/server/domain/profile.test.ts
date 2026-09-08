@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { nicknameSchema, profileInputSchema } from "./profile";
 
 const validProfile = {
+  gender: "MALE",
   experienceRange: "YEARS_1_TO_2",
   rallyLevel: "SHORT_RALLY",
   gameExperience: "NONE",
@@ -17,6 +18,11 @@ describe("M2 profile input", () => {
 
   it("accepts the current profile version when editing an existing profile", () => {
     expect(profileInputSchema.parse({ ...validProfile, expectedVersion: 2 }).expectedVersion).toBe(2);
+  });
+
+  it("requires a gender", () => {
+    const withoutGender = { ...validProfile, gender: undefined };
+    expect(() => profileInputSchema.parse(withoutGender)).toThrow("성별을 선택해 주세요.");
   });
 
   it("rejects more than two play purposes", () => {

@@ -12,6 +12,8 @@ import { getSafeReturnTo } from "@/navigation/return-to";
 import { EntrySelection } from "@/features/profile/entry-selection";
 import { M2OnboardingFlow } from "@/features/profile/m2-onboarding-flow";
 
+import { activeGameTypes, gameTypeLabels, type ActiveGameType } from "@/matches/game-type";
+
 import { MatchCard, type MatchCardData } from "./m3-match-card";
 
 type MeResponse = {
@@ -23,16 +25,8 @@ type MeResponse = {
 type MatchListResponse = { items: MatchCardData[] };
 type Screen = "loading" | "entry" | "onboarding" | "home" | "error";
 type ListStatus = "loading" | "ready" | "error";
-type PlayPurpose = "CASUAL_HIT" | "RALLY_PRACTICE" | "STROKE_PRACTICE" | "GAME_INTRO" | "GAME";
 type MatchSort = "recommended" | "soonest" | "newest";
-
-const PURPOSE_OPTIONS: { value: PlayPurpose; label: string }[] = [
-  { value: "CASUAL_HIT", label: "편하게 공 주고받기" },
-  { value: "RALLY_PRACTICE", label: "랠리" },
-  { value: "STROKE_PRACTICE", label: "스트로크 연습" },
-  { value: "GAME_INTRO", label: "게임 입문" },
-  { value: "GAME", label: "게임" },
-];
+const GAME_TYPE_OPTIONS = activeGameTypes.map((value) => ({ value, label: gameTypeLabels[value] }));
 
 const SORT_OPTIONS: { value: MatchSort; label: string }[] = [
   { value: "recommended", label: "추천순" },
@@ -40,8 +34,8 @@ const SORT_OPTIONS: { value: MatchSort; label: string }[] = [
   { value: "newest", label: "매칭 생성순" },
 ];
 
-function purposeLabel(value: PlayPurpose | null) {
-  return PURPOSE_OPTIONS.find((option) => option.value === value)?.label ?? "게임 유형";
+function gameTypeLabel(value: ActiveGameType | null) {
+  return GAME_TYPE_OPTIONS.find((option) => option.value === value)?.label ?? "게임 유형";
 }
 
 function sortLabel(value: MatchSort) {
@@ -95,7 +89,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   const [matches, setMatches] = useState<MatchCardData[]>([]);
   const [listStatus, setListStatus] = useState<ListStatus>("loading");
   const [listError, setListError] = useState("");
-  const [purpose, setPurpose] = useState<PlayPurpose | null>(null);
+  const [gameType, setGameType] = useState<ActiveGameType | null>(null);
   const [sort, setSort] = useState<MatchSort>("recommended");
   const [date, setDate] = useState<string | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -133,7 +127,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
     setListStatus("loading");
     try {
       const params = new URLSearchParams({ limit: "30", sort });
-      if (purpose) params.set("playPurpose", purpose);
+      if (gameType) params.set("gameType", gameType);
       if (date) params.set("date", date);
       const response = await requestJson<MatchListResponse>(`/api/v1/matches?${params.toString()}`);
       setMatches(response.items);
@@ -142,7 +136,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
       setListError(caught instanceof Error ? caught.message : "매칭을 불러오지 못했어요.");
       setListStatus("error");
     }
-  }, [purpose, sort, date]);
+  }, [gameType, sort, date]);
 
   useEffect(() => {
     if (screen !== "home") return;
@@ -155,7 +149,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   if (screen === "onboarding") return <M2OnboardingFlow returnTo={safeReturnTo} />;
   if (screen === "error") return <HomeStateFrame><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">{error}</p><Button className="mt-6" onClick={() => void loadMe()}>다시 불러오기</Button></div></HomeStateFrame>;
 
-  const hasFilter = purpose !== null || date !== null;
+  const hasFilter = gameType !== null || date !== null;
 
   return (
     <main className="min-h-svh bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
@@ -173,7 +167,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
 
         <div className="mt-5 flex items-center gap-2">
           <FilterChip active={date !== null} icon={<CalendarBlank aria-hidden size={15} weight="bold" />} label={dateLabel(date)} onClick={() => setIsDateOpen(true)} />
-          <FilterChip active={purpose !== null} icon={<Funnel aria-hidden size={15} weight="bold" />} label={purposeLabel(purpose)} onClick={() => setIsFilterOpen(true)} />
+          <FilterChip active={gameType !== null} icon={<Funnel aria-hidden size={15} weight="bold" />} label={gameTypeLabel(gameType)} onClick={() => setIsFilterOpen(true)} />
           <FilterChip active={sort !== "recommended"} label={sortLabel(sort)} onClick={() => setIsSortOpen(true)} />
         </div>
 
@@ -184,7 +178,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
         ) : matches.length > 0 ? (
           <div className="mt-4 grid gap-4">{matches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
         ) : hasFilter ? (
-          <EmptyFilteredState onReset={() => { setPurpose(null); setDate(null); }} />
+          <EmptyFilteredState onReset={() => { setGameType(null); setDate(null); }} />
         ) : (
           <EmptyMatchState />
         )}
@@ -198,9 +192,9 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
 
       <FilterSheet
         onClose={() => setIsFilterOpen(false)}
-        onSelect={(value) => { setPurpose(value); setIsFilterOpen(false); }}
+        onSelect={(value) => { setGameType(value); setIsFilterOpen(false); }}
         open={isFilterOpen}
-        value={purpose}
+        value={gameType}
       />
       <SortSheet
         onClose={() => setIsSortOpen(false)}
@@ -218,7 +212,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   );
 }
 
-function FilterSheet({ onClose, onSelect, open, value }: { onClose: () => void; onSelect: (value: PlayPurpose | null) => void; open: boolean; value: PlayPurpose | null }) {
+function FilterSheet({ onClose, onSelect, open, value }: { onClose: () => void; onSelect: (value: ActiveGameType | null) => void; open: boolean; value: ActiveGameType | null }) {
   if (!open) return null;
 
   return (
@@ -229,7 +223,7 @@ function FilterSheet({ onClose, onSelect, open, value }: { onClose: () => void; 
           <ModalContentItem>
             <div className="grid gap-1">
               <SheetOptionRow label="전체" onClick={() => onSelect(null)} selected={value === null} />
-              {PURPOSE_OPTIONS.map((option) => <SheetOptionRow key={option.value} label={option.label} onClick={() => onSelect(option.value)} selected={value === option.value} />)}
+              {GAME_TYPE_OPTIONS.map((option) => <SheetOptionRow key={option.value} label={option.label} onClick={() => onSelect(option.value)} selected={value === option.value} />)}
             </div>
           </ModalContentItem>
         </ModalContent>

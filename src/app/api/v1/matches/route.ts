@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { activeGameTypes } from "@/matches/game-type";
 
 import { getRateLimitedCurrentUser } from "@/server/auth/current-user";
 import { getPrisma } from "@/server/db/prisma";
@@ -52,7 +53,12 @@ function parseSearchParams(request: Request) {
     throw new DomainError("INVALID_REQUEST", 400, "날짜 형식을 확인해 주세요.");
   }
 
+  const gameTypeValue = params.get("gameType");
+  const gameType = gameTypeValue === null ? null : z.enum(activeGameTypes).safeParse(gameTypeValue);
+  if (gameType && !gameType.success) throw new DomainError("INVALID_REQUEST", 400, "게임 유형을 다시 선택해 주세요.");
+
   return {
+    gameType: gameType?.data,
     playPurpose: playPurpose?.data,
     startsFrom,
     cursor: params.get("cursor") ? parseCursor(params.get("cursor")!) : undefined,

@@ -1300,4 +1300,8 @@ Court Partner와 Court Commerce API는 Core API와 별도 섹션으로 구분하
 
 ## 2026-09-07 게임 유형과 참가자 간 정산 안내
 
-Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_DOUBLES, SINGLES, RALLY, OTHER)과 `settlementBank`(50자), `settlementAccountNumber`(40자), `settlementAccountHolder`(50자)를 추가한다. 정산 3개 열은 모두 NULL 또는 모두 값이 있어야 하는 DB 제약을 둔다. 과거 데이터는 NULL로 보존하며 성별 필드·성별별 정원은 추가하지 않는다. `title` 열은 이전 클라이언트와 기록 호환용으로 유지하며 제목 없는 새 요청은 서버에서 코트명 앞 80자로 채운다. 화면 대표 이름에는 최대 100자의 원본 코트명을 사용한다. 계좌는 목록 DTO에 포함하지 않으며 상세에서도 모집자·ACCEPTED 참가자에게만 반환한다. 계좌를 로그·분석 이벤트·공개 메타데이터에 담지 않는다.
+Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_DOUBLES, SINGLES, RALLY, OTHER)과 `settlementBank`(50자), `settlementAccountNumber`(40자), `settlementAccountHolder`(50자)를 추가한다. 정산 3개 열은 모두 NULL 또는 모두 값이 있어야 하는 DB 제약을 둔다. 과거 데이터는 NULL로 보존한다. 성별과 남녀별 정원은 이후 별도 마이그레이션으로 도입됐다(`TennisProfile.gender`, `Match.maleRecruitCount`·`femaleRecruitCount`). `title` 열은 이전 클라이언트와 기록 호환용으로 유지하며 제목 없는 새 요청은 서버에서 코트명 앞 80자로 채운다. 화면 대표 이름에는 최대 100자의 원본 코트명을 사용한다. 계좌는 목록 DTO에 포함하지 않으며 상세에서도 모집자·ACCEPTED 참가자에게만 반환한다. 계좌를 로그·분석 이벤트·공개 메타데이터에 담지 않는다.
+
+### 2026-09-08 게임 유형 정리
+
+새 개설·게임 유형 필터는 MIXED_DOUBLES(혼복), MENS_DOUBLES(남복), WOMENS_DOUBLES(여복), OTHER(기타)만 허용한다. 기존 SINGLES·RALLY·미지정 기록은 변경하지 않고 전체 목록·상세에서 기존 표시를 유지한다. 기타 필터는 OTHER만 조회하며 이전 유형을 임의로 기타로 합치지 않는다. GET /api/v1/matches의 gameType 쿼리로 실제 Match.gameType을 필터링하고 잘못된 유형은 400, 새 생성의 폐기된 유형은 422로 거절한다. 기존 playPurpose API 필터와 추천은 활동 목적 기준으로 유지하되 홈의 게임 유형 UI와 구분한다. 원하는 플레이의 랠리 연습은 별개 개념으로 유지한다.

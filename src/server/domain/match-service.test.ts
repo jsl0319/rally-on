@@ -159,6 +159,7 @@ describe("match service operation safeguards", () => {
       },
       matchConversation: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "conversation-id" }) },
       matchConversationMember: { createMany: vi.fn() },
+      user: { findUnique: vi.fn().mockResolvedValue({ matchNotificationsEnabled: false }) },
     };
     const prisma = { $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)) } as unknown as Parameters<typeof acceptApplication>[0];
     await expect(acceptApplication(prisma, viewer, "application-id", { expectedMatchVersion: 3 })).resolves.toMatchObject({ application: { status: "ACCEPTED" } });
@@ -600,7 +601,7 @@ describe("match service operation safeguards", () => {
 describe("match game and settlement information", () => {
   const account = { bank: "테스트은행", accountNumber: "123-456-789", accountHolder: "테스트모집자" };
   const accountMatch = (overrides: Record<string, unknown> = {}) => makeMatch({
-    gameType: "RALLY", settlementBank: account.bank,
+    gameType: "OTHER", settlementBank: account.bank,
     settlementAccountNumber: account.accountNumber, settlementAccountHolder: account.accountHolder,
     ...overrides,
   });
@@ -617,7 +618,7 @@ describe("match game and settlement information", () => {
     const prisma = database(match);
     const detail = await getMatchDetail(prisma, viewer, match.id);
     expect(detail.settlementAccount).toBeNull();
-    expect(detail.gameType).toEqual({ code: "RALLY", label: "랠리" });
+    expect(detail.gameType).toEqual({ code: "OTHER", label: "기타" });
     const list = await getMatches(prisma, viewer, { startsFrom: new Date("2029-01-01"), limit: 20 });
     expect(JSON.stringify(list)).not.toContain(account.accountNumber);
     expect(JSON.stringify(detail)).not.toContain(account.accountNumber);
@@ -628,10 +629,10 @@ describe("match game and settlement information", () => {
     expect(detail.settlementAccount).toEqual(account);
   });
   it.each([
-    { gameType: "SINGLES" },
+    { gameType: null },
     { settlementAccount: { ...account, accountNumber: "999-888-777" } },
   ])("rejects changed game or settlement information on an idempotent retry", async (change) => {
-    const request = matchCreateInputSchema.parse({ ...input, gameType: "RALLY", settlementAccount: account, ...change });
+    const request = matchCreateInputSchema.parse({ ...input, gameType: "OTHER", settlementAccount: account, ...change });
     await expect(createMatch(database(accountMatch()), viewer, request)).rejects.toMatchObject({ code: "IDEMPOTENCY_KEY_REUSED" });
   });
 });
@@ -662,5 +663,23 @@ describe("gender quota application safeguards", () => {
     expect(transaction.matchApplication.count).toHaveBeenLastCalledWith({ where: { matchId: match.id, status: "ACCEPTED", applicantGender: "MALE" } });
     expect(transaction.match.updateMany.mock.invocationCallOrder[0]).toBeLessThan(transaction.matchApplication.count.mock.invocationCallOrder[0]);
     expect(transaction.matchApplication.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("game type discovery filters", () => {
+  it("filters the game type independently of play purpose and retains date/sort options", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const prisma = { match: { findMany } } as unknown as Parameters<typeof getMatches>[0];
+    await getMatches(prisma, viewer, { gameType: "MIXED_DOUBLES", startsFrom: new Date("2030-01-01"), date: "2030-01-02", sort: "soonest", limit: 20 });
+    const query = findMany.mock.calls[0][0];
+    expect(query.where.gameType).toBe("MIXED_DOUBLES");
+    expect(query.where.purposes).toBeUndefined();
+    expect(query.where.startsAt.lt).toEqual(new Date("2030-01-03T00:00:00+09:00"));
+  });
+  it("keeps historical game types readable in the all list", async () => {
+    const prisma = { match: { findMany: vi.fn().mockResolvedValue([makeMatch({ gameType: "RALLY" })]) } } as unknown as Parameters<typeof getMatches>[0];
+    const result = await getMatches(prisma, viewer, { startsFrom: new Date("2029-01-01"), limit: 20 });
+    expect(result.items[0].gameType).toEqual({ code: "RALLY", label: "랠리" });
   });
 });

@@ -204,7 +204,9 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
   if (typeof screen === "number") {
     const question = questions[screen];
     const selected = question.key === "playPurposes" ? draft.playPurposes : draft[question.key as "experienceRange" | "rallyLevel" | "gameExperience"];
-    const canContinue = Array.isArray(selected) ? selected.length > 0 : Boolean(selected);
+    const selectionDone = Array.isArray(selected) ? selected.length > 0 : Boolean(selected);
+    // 성별은 마지막 화면에서 함께 받는 필수 항목이다.
+    const canContinue = selectionDone && (screen !== 3 || draft.gender !== null);
     const options = "options" in question ? question.options : [];
     const selectOption = (value: string) => {
       if (question.key === "playPurposes") {

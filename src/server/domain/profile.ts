@@ -8,7 +8,7 @@ export const nicknameSchema = z
   .regex(/^[가-힣a-zA-Z0-9]+$/, "닉네임은 한글, 영문, 숫자만 사용할 수 있어요.");
 
 export const profileInputSchema = z.object({
-  gender: z.enum(["MALE", "FEMALE"]).nullable().optional(),
+  gender: z.enum(["MALE", "FEMALE"], { error: "성별을 선택해 주세요." }),
   experienceRange: z.enum([
     "UNDER_3_MONTHS",
     "MONTHS_3_TO_6",

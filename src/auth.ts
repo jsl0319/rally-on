@@ -19,6 +19,20 @@ function initialNickname(profile: Record<string, unknown>, providerAccountId: st
   return normalized.length >= 2 ? normalized : fallbackNickname(providerAccountId);
 }
 
+/**
+ * 카카오가 주는 프로필 이미지 주소. 동의 항목에 따라 없을 수 있고, 응답 모양도
+ * properties / kakao_account 두 갈래라 둘 다 확인한다.
+ */
+function kakaoProfileImageUrl(profile: Record<string, unknown>) {
+  const properties = typeof profile.properties === "object" && profile.properties ? profile.properties as Record<string, unknown> : {};
+  const account = typeof profile.kakao_account === "object" && profile.kakao_account ? profile.kakao_account as Record<string, unknown> : {};
+  const accountProfile = typeof account.profile === "object" && account.profile ? account.profile as Record<string, unknown> : {};
+  const candidate = [properties.profile_image, accountProfile.profile_image_url, properties.thumbnail_image, accountProfile.thumbnail_image_url]
+    .find((value) => typeof value === "string" && value.startsWith("https://"));
+
+  return typeof candidate === "string" && candidate.length <= 500 ? candidate : null;
+}
+
 async function uniqueInitialNickname(base: string) {
   const prisma = getPrisma();
   let suffix = 0;
@@ -41,6 +55,7 @@ async function createInitialUser(provider: string, providerAccountId: string, pr
       await prisma.user.create({
         data: {
           nickname: await uniqueInitialNickname(baseNickname),
+          kakaoProfileImageUrl: kakaoProfileImageUrl(profile),
           authAccounts: { create: { provider, providerAccountId } },
         },
       });
@@ -69,7 +84,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const existingAccount = await getPrisma().authAccount.findUnique({
         where: { provider_providerAccountId: { provider: account.provider, providerAccountId: account.providerAccountId } },
       });
-      if (existingAccount) return true;
+      if (existingAccount) {
+        // 카카오에서 사진을 바꿨을 수 있으니 기본값을 최신으로 유지한다.
+        await getPrisma().user.update({
+          where: { id: existingAccount.userId },
+          data: { kakaoProfileImageUrl: kakaoProfileImageUrl(profile as Record<string, unknown>) },
+        }).catch(() => undefined);
+        return true;
+      }
 
       await createInitialUser(account.provider, account.providerAccountId, profile as Record<string, unknown>);
       return true;

@@ -50,3 +50,9 @@ skills-lock.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 에이전트 작업용 임시 산출물
+/Claude outputs/
+/dev-log.txt
+/migrate-log.txt
+/apply-profile-image.sh

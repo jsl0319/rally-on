@@ -4,7 +4,7 @@ import { CalendarBlank, Clock } from "@phosphor-icons/react";
 import { Modal, ModalContainer, ModalNavigation } from "@wanteddev/wds";
 import { useEffect, useId, useRef, useState } from "react";
 
-import { formatMatchDate, formatMatchTime } from "@/matches/schedule";
+import { formatMatchDate, formatMatchTime, timeSelectionError, firstAvailableMatchTime } from "@/matches/schedule";
 
 type Option = { value: string; label: string };
 const ROW_HEIGHT = 44;
@@ -39,21 +39,34 @@ function Wheel({ label, options, value, onChange }: { label: string; options: Op
   </div>;
 }
 
-export function MatchSchedulePicker({ kind, label, value, minDate, onChange }: { kind: "date" | "time"; label: string; value: string; minDate?: string; onChange: (value: string) => void }) {
+export function MatchSchedulePicker({ kind, label, value, minDate, selectedDate, afterTime, beforeTime, onChange }: { kind: "date" | "time"; label: string; value: string; minDate?: string; selectedDate?: string; afterTime?: string; beforeTime?: string; onChange: (value: string) => void }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const icon = kind === "date" ? <CalendarBlank aria-hidden size={22} /> : <Clock aria-hidden size={22} />;
-  const start = () => { setDraft(value || (kind === "date" ? minDate || "2026-01-01" : "09:00")); setOpen(true); };
+  const start = () => {
+    const initial = kind === "date" ? value || minDate || "2026-01-01"
+      : value && !timeSelectionError(selectedDate, value, afterTime, beforeTime) ? value
+        : firstAvailableMatchTime(selectedDate, afterTime, beforeTime) ?? "23:30";
+    setDraft(initial); setOpen(true);
+  };
   return <>
     <button aria-haspopup="dialog" aria-label={label} className="flex min-h-14 w-full items-center justify-between gap-2 rounded-2xl border border-[var(--tm-border-default)] bg-[var(--tm-bg-subtle)] px-4 text-left text-base" onClick={start} type="button"><span className={value ? "font-medium" : "text-[var(--tm-text-secondary)]"}>{value ? kind === "date" ? formatMatchDate(value) : formatMatchTime(value) : `${kind === "date" ? "날짜" : "시간"}를 선택해 주세요`}</span>{icon}</button>
-    {open ? <ScheduleSheet draft={draft} kind={kind} label={label} minDate={minDate} onCancel={() => setOpen(false)} onChange={setDraft} onConfirm={() => { onChange(draft); setOpen(false); }} /> : null}
+    {open ? <ScheduleSheet draft={draft} kind={kind} label={label} minDate={minDate} selectedDate={selectedDate} afterTime={afterTime} beforeTime={beforeTime} onCancel={() => setOpen(false)} onChange={setDraft} onConfirm={() => { onChange(draft); setOpen(false); }} /> : null}
   </>;
 }
 
-function ScheduleSheet({ draft, kind, label, minDate, onCancel, onChange, onConfirm }: { draft: string; kind: "date" | "time"; label: string; minDate?: string; onCancel: () => void; onChange: (value: string) => void; onConfirm: () => void }) {
+function ScheduleSheet({ draft, kind, label, minDate, selectedDate, afterTime, beforeTime, onCancel, onChange, onConfirm }: { draft: string; kind: "date" | "time"; label: string; minDate?: string; selectedDate?: string; afterTime?: string; beforeTime?: string; onCancel: () => void; onChange: (value: string) => void; onConfirm: () => void }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [year, month, day] = draft.split("-").map(Number);
   const [hour, minute] = draft.split(":").map(Number);
-  const invalid = kind === "date" && Boolean(minDate && draft < minDate);
+  const error = kind === "date"
+    ? minDate && draft < minDate ? "오늘 이후 날짜를 선택해 주세요." : ""
+    : timeSelectionError(selectedDate, draft, afterTime, beforeTime, now);
+  const invalid = Boolean(error);
   const setDate = (nextYear: number, nextMonth: number, nextDay: number) => {
     const days = new Date(nextYear, nextMonth, 0).getDate();
     onChange(`${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(Math.min(nextDay, days)).padStart(2, "0")}`);
@@ -61,7 +74,7 @@ function ScheduleSheet({ draft, kind, label, minDate, onCancel, onChange, onConf
   const setTime = (nextHour: number, nextMinute: number) => onChange(`${String(nextHour).padStart(2, "0")}:${String(nextMinute).padStart(2, "0")}`);
   const firstYear = Number(minDate?.slice(0, 4) || new Date().getFullYear());
   return <Modal open onOpenChange={(next) => { if (!next) onCancel(); }}><ModalContainer handle={false} resize="hug" size="large" variant="bottom" sx={{ borderRadius: 0 }}>
-    <ModalNavigation leadingContent={<button className="px-2 py-3 text-base text-neutral-500" onClick={onCancel} type="button">취소</button>} trailingContent={<button className="px-2 py-3 text-base font-semibold text-[var(--tm-action-primary)] disabled:opacity-40" disabled={invalid} onClick={onConfirm} type="button">완료</button>}>{label}</ModalNavigation>
+    <ModalNavigation leadingContent={<button className="px-2 py-3 text-base text-neutral-500" onClick={onCancel} type="button">취소</button>} trailingContent={<button className="px-2 py-3 text-base font-semibold text-[var(--tm-action-primary)] disabled:opacity-40" disabled={invalid} onClick={() => { const current = Date.now(); setNow(current); if (!invalid && (kind === "date" || !timeSelectionError(selectedDate, draft, afterTime, beforeTime, current))) onConfirm(); }} type="button">완료</button>}>{label}</ModalNavigation>
     <div className="border-t border-[var(--tm-border-default)] bg-white px-4 pb-[max(24px,env(safe-area-inset-bottom))] pt-5">
       <div className="flex gap-2">{kind === "date" ? <>
         <Wheel label="연도" onChange={(value) => setDate(Number(value), month, day)} options={numbers(11, firstYear).map((option) => ({ ...option, label: `${option.value}년` }))} value={String(year)} />
@@ -72,7 +85,7 @@ function ScheduleSheet({ draft, kind, label, minDate, onCancel, onChange, onConf
         <Wheel label="시" onChange={(value) => setTime(Number(value) % 12 + (hour < 12 ? 0 : 12), minute)} options={numbers(12, 1)} value={String(hour % 12 || 12)} />
         <Wheel label="분" onChange={(value) => setTime(hour, Number(value))} options={[{ value: "0", label: "00" }, { value: "30", label: "30" }]} value={String(minute)} />
       </>}</div>
-      <p aria-live="polite" className={`mt-3 text-center text-sm ${invalid ? "text-[var(--tm-status-error-text)]" : "text-[var(--tm-text-secondary)]"}`}>{invalid ? "오늘 이후 날짜를 선택해 주세요." : kind === "date" ? formatMatchDate(draft) : formatMatchTime(draft)}</p>
+      <p aria-live="polite" className={`mt-3 text-center text-sm ${invalid ? "text-[var(--tm-status-error-text)]" : "text-[var(--tm-text-secondary)]"}`}>{invalid ? (kind === "time" && selectedDate && !firstAvailableMatchTime(selectedDate, afterTime, beforeTime, now) ? "선택 가능한 시간이 없어요. 날짜나 상대 시간을 변경해 주세요." : error) : kind === "date" ? formatMatchDate(draft) : formatMatchTime(draft)}</p>
     </div>
   </ModalContainer></Modal>;
 }

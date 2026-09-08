@@ -21,8 +21,8 @@ export function CourtMedia({ alt, className = "", fallbackLabel, image, previewL
   const label = previewLabel ?? (source ? image?.sourceLabel ?? "선택한 코트 사진" : fallbackLabel);
 
   return <div className={`relative overflow-hidden rounded-2xl bg-[var(--tm-action-primary)] ${className}`}>
-    {source ? <Image alt={alt} className="object-cover" fill priority={priority} sizes="(max-width: 560px) 100vw, 560px" src={source} unoptimized /> : <CourtIllustration label={label} />}
-    {source ? <span className="absolute bottom-2 left-2 rounded-lg bg-white/90 px-2 py-1 text-[11px] font-medium leading-4 text-[var(--tm-text-primary)] shadow-sm">{label}</span> : null}
+    {source ? <Image alt={alt} className="object-cover" fill priority={priority} sizes="(max-width: 560px) 100vw, 560px" src={source} unoptimized={!source.startsWith("/images/court-samples/")} /> : <CourtIllustration label={label} />}
+    {source ? <span className="absolute bottom-2 right-2 max-w-[calc(100%-16px)] rounded-md bg-black/55 px-1.5 py-1 text-[10px] font-medium leading-4 text-white backdrop-blur-sm">{label}</span> : null}
   </div>;
 }
 

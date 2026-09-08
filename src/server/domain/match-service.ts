@@ -1,11 +1,12 @@
 import { genderApplicationBlock, hasGenderQuota, remainingGenderSpots } from "@/matches/recruitment";
-import { gameTypeLabels } from "@/matches/game-type";
+import { gameTypeLabels, type ActiveGameType } from "@/matches/game-type";
 import { Prisma } from "@/generated/prisma/client";
 import type { PlayPurpose, PrismaClient } from "@/generated/prisma/client";
 
 import { getProfile, type ProfileWithRelations } from "@/server/domain/profile-service";
 import { DomainError } from "@/server/domain/profile-service";
 import { addAcceptedMemberToConversation, makeConversationReadOnly } from "@/server/domain/match-chat-service";
+import { recordApplicationNotification } from "@/server/domain/notification-service";
 
 import {
   getAcceptedCount,
@@ -336,7 +337,7 @@ function getKstDateFilterEnd(date: string): Date | null {
 export async function getMatches(
   prisma: PrismaClient,
   viewer: Viewer,
-  input: { playPurpose?: PlayPurpose; startsFrom: Date; cursor?: { startsAt: string; id: string }; limit: number; sort?: MatchSort; date?: string },
+  input: { gameType?: ActiveGameType; playPurpose?: PlayPurpose; startsFrom: Date; cursor?: { startsAt: string; id: string }; limit: number; sort?: MatchSort; date?: string },
 ) {
   const sort = input.sort ?? "recommended";
   const dateFilterEnd = input.date ? getKstDateFilterEnd(input.date) : null;
@@ -347,6 +348,7 @@ export async function getMatches(
     NOT: [
       { applications: { some: { applicantUserId: viewer.id } } },
     ],
+    ...(input.gameType ? { gameType: input.gameType } : {}),
     ...(input.playPurpose ? { purposes: { some: { purpose: input.playPurpose } } } : {}),
   } satisfies Prisma.MatchWhereInput;
 
@@ -698,6 +700,7 @@ export async function createApplication(prisma: PrismaClient, viewer: Viewer, ma
         where: { id: matchId },
         select: {
           hostUserId: true,
+          title: true,
           courtSource: true,
           status: true,
           startsAt: true,
@@ -720,7 +723,7 @@ export async function createApplication(prisma: PrismaClient, viewer: Viewer, ma
       const genderBlock = genderApplicationBlock(match, match.applications, viewer.profile.gender);
       if (genderBlock) throw new DomainError(genderBlock, 409, genderBlock === "PROFILE_GENDER_REQUIRED" ? "프로필에서 성별을 입력한 뒤 신청해 주세요." : "해당 성별의 모집 인원이 모두 찼어요.");
 
-      return transaction.matchApplication.create({
+      const created = await transaction.matchApplication.create({
         data: {
           matchId,
           applicantUserId: viewer.id,
@@ -731,6 +734,13 @@ export async function createApplication(prisma: PrismaClient, viewer: Viewer, ma
         },
         include: applicationInclude,
       });
+      await recordApplicationNotification(transaction, {
+        recipientUserId: match.hostUserId,
+        type: "APPLICATION_RECEIVED",
+        matchTitle: match.title,
+        href: `/activity/received/${matchId}`,
+      });
+      return created;
     });
     return toApplicationView(application);
   } catch (error) {
@@ -798,7 +808,7 @@ export async function acceptApplication(prisma: PrismaClient, viewer: Viewer, ap
   return prisma.$transaction(async (transaction) => {
     const application = await transaction.matchApplication.findUnique({
       where: { id: applicationId },
-      include: { match: { select: { id: true, hostUserId: true, status: true, startsAt: true, recruitCount: true, maleRecruitCount: true, femaleRecruitCount: true, version: true } } },
+      include: { match: { select: { id: true, hostUserId: true, title: true, status: true, startsAt: true, recruitCount: true, maleRecruitCount: true, femaleRecruitCount: true, version: true } } },
     });
     if (!application || application.match.hostUserId !== viewer.id) throw new DomainError("MATCH_HOST_REQUIRED", 403, "이 매칭의 모집자만 신청을 검토할 수 있어요.");
     await reconcileStartedMatch(transaction, application.match.id);
@@ -829,6 +839,13 @@ export async function acceptApplication(prisma: PrismaClient, viewer: Viewer, ap
       data: { status: "ACCEPTED", decidedAt },
     });
     if (accepted.count !== 1) throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "이미 처리된 신청이에요.");
+
+    await recordApplicationNotification(transaction, {
+      recipientUserId: application.applicantUserId,
+      type: "APPLICATION_ACCEPTED",
+      matchTitle: application.match.title,
+      href: "/activity/sent",
+    });
 
     await addAcceptedMemberToConversation(transaction, {
       matchId: application.match.id,
@@ -864,7 +881,7 @@ export async function rejectApplication(prisma: PrismaClient, viewer: Viewer, ap
   return prisma.$transaction(async (transaction) => {
     const application = await transaction.matchApplication.findUnique({
       where: { id: applicationId },
-      include: { match: { select: { id: true, hostUserId: true } } },
+      include: { match: { select: { id: true, hostUserId: true, title: true } } },
     });
     if (!application || application.match.hostUserId !== viewer.id) throw new DomainError("MATCH_HOST_REQUIRED", 403, "이 매칭의 모집자만 신청을 검토할 수 있어요.");
     await reconcileStartedMatch(transaction, application.match.id);
@@ -879,6 +896,12 @@ export async function rejectApplication(prisma: PrismaClient, viewer: Viewer, ap
       data: { status: "REJECTED", decidedAt: new Date() },
     });
     if (rejected.count !== 1) throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "이미 처리된 신청이에요.");
+    await recordApplicationNotification(transaction, {
+      recipientUserId: application.applicantUserId,
+      type: "APPLICATION_REJECTED",
+      matchTitle: application.match.title,
+      href: "/activity/sent",
+    });
     const result = await transaction.matchApplication.findUnique({ where: { id: applicationId }, include: applicationInclude });
     if (!result) throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "신청 상태를 다시 확인해 주세요.");
     return toApplicationView(result);

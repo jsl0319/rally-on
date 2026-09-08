@@ -13,3 +13,21 @@ describe("match schedule display", () => {
     for (const time of ["24:00", "09:15", "09:60", "9:00", ""]) expect(isHalfHourTime(time)).toBe(false);
   });
 });
+
+import { firstAvailableMatchTime, isFutureMatchTime, timeSelectionError } from "./schedule";
+
+describe("future match times in Korea", () => {
+  const now = Date.parse("2026-09-08T12:15:00+09:00");
+  it("rejects past and exact current times and starts at the next half hour", () => {
+    expect(isFutureMatchTime("2026-09-08", "09:00", now)).toBe(false);
+    expect(firstAvailableMatchTime("2026-09-08", undefined, undefined, now)).toBe("12:30");
+    expect(isFutureMatchTime("2026-09-08", "12:30", Date.parse("2026-09-08T12:30:00+09:00"))).toBe(false);
+    expect(isFutureMatchTime("2026-09-09", "09:00", now)).toBe(true);
+  });
+  it("checks the selected date, strict ordering and last available slot", () => {
+    expect(timeSelectionError(undefined, "13:00", undefined, undefined, now)).not.toBe("");
+    expect(firstAvailableMatchTime("2026-09-08", "13:00", undefined, now)).toBe("13:30");
+    expect(firstAvailableMatchTime("2026-09-08", undefined, "12:30", now)).toBeNull();
+    expect(firstAvailableMatchTime("2026-09-08", undefined, undefined, Date.parse("2026-09-08T23:30:00+09:00"))).toBeNull();
+  });
+});

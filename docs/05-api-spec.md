@@ -1787,3 +1787,17 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 `POST /api/v1/matches`: `title`은 이전 클라이언트 호환용 선택 값이다. 생략하면 서버에서 코트명 앞 80자로 내부 title을 생성한다. `gameType`은 MIXED_DOUBLES/MENS_DOUBLES/WOMENS_DOUBLES/SINGLES/RALLY/OTHER 중 하나이며 이전 클라이언트 호환을 위해 생략·null을 허용한다. `settlementAccount`는 생략·null 또는 `{bank, accountNumber, accountHolder}` 객체다. bank와 accountHolder는 공백 제거 후 1~50자, accountNumber는 공백 제거 후 숫자·하이픈 5~40자이고 숫자를 포함해야 한다. 일부만 입력하면 422로 거절한다. 재시도의 동일성 비교에 게임 유형과 계좌 세 항목을 포함한다.
 
 목록과 상세의 `gameType` 응답은 `{code, label}` 또는 null이다. 정산 계좌는 목록에 포함하지 않는다. 상세 `settlementAccount`는 모집자 또는 해당 Match의 ACCEPTED 신청자에게만 객체로 반환하고 그 외에는 null이다. 인증·온보딩·기존 상세 접근 권한은 유지한다. 결제·정산 관련 후속 단계의 계좌 미반환 규칙은 PG/운영자 계좌에 적용되며, 이 명시적인 참가자 간 계좌 안내는 별도 계약이다.
+
+### 2026-09-08 게임 유형 정리
+
+새 개설·게임 유형 필터는 MIXED_DOUBLES(혼복), MENS_DOUBLES(남복), WOMENS_DOUBLES(여복), OTHER(기타)만 허용한다. 기존 SINGLES·RALLY·미지정 기록은 변경하지 않고 전체 목록·상세에서 기존 표시를 유지한다. 기타 필터는 OTHER만 조회하며 이전 유형을 임의로 기타로 합치지 않는다. GET /api/v1/matches의 gameType 쿼리로 실제 Match.gameType을 필터링하고 잘못된 유형은 400, 새 생성의 폐기된 유형은 422로 거절한다. 기존 playPurpose API 필터와 추천은 활동 목적 기준으로 유지하되 홈의 게임 유형 UI와 구분한다. 원하는 플레이의 랠리 연습은 별개 개념으로 유지한다.
+
+### GET /api/v1/matches/{matchId}/directions
+
+로그인·온보딩·요청 빈도 제한과 기존 Match 상세 조회 권한을 동일하게 적용한다. 요청자가 임의 주소를 전달하지 않으며 저장된 코트명·주소로만 조회한다. 서버 전용 카카오 REST API 키로 `search/address.json`에 정확 검색을 요청하고 좌표를 카카오맵 `link/to/{name},{latitude},{longitude}`로 반환한다.
+
+- 성공: `{ "href": "https://map.kakao.com/link/to/..." }`, `Cache-Control: private, no-store`.
+- 위치 미정·결과 없음·여러 결과·행정구역만 조회: 422 `DIRECTIONS_NOT_FOUND`.
+- 키 없음·API 오류·시간 초과·잘못된 응답: 503 `DIRECTIONS_UNAVAILABLE`.
+- 키와 외부 API 응답 본문은 클라이언트와 로그에 노출하지 않는다. 지도/좌표를 DB에 추가 저장하지 않는다.
+- 공식 계약: https://developers.kakao.com/docs/ko/local/dev-guide#address-coord 및 https://apis.map.kakao.com/web/guide/#routeurl

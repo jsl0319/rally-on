@@ -1,14 +1,16 @@
 import { LegalNoticePage } from "@/features/legal/legal-notice-page";
 
-export default function PrivacyPage() {
+export default async function PrivacyPage({ searchParams }: { searchParams: Promise<{ returnTo?: string }> }) {
+  const { returnTo } = await searchParams;
   return (
     <LegalNoticePage
+      returnTo={returnTo}
       title="개인정보 처리방침"
       summary="서비스 제공에 필요한 최소한의 정보만 처리하고, 다른 이용자에게 보여 주는 범위를 분명히 합니다."
       sections={[
         {
           title: "처리하는 정보",
-          body: "카카오 계정 식별 정보와 표시명, 닉네임, 테니스 프로필과 선택 입력한 성별, 선택 정산 계좌(은행·계좌번호·예금주), 매칭·신청 정보와 서비스 내 채팅 메시지·신고 정보를 서비스 제공과 안전 조치에 필요한 범위에서 처리합니다.",
+          body: "카카오 계정 식별 정보와 표시명, 닉네임, 테니스 프로필과 성별, 선택 정산 계좌(은행·계좌번호·예금주), 매칭·신청 정보와 서비스 내 채팅 메시지·신고 정보를 서비스 제공과 안전 조치에 필요한 범위에서 처리합니다.",
         },
         {
           title: "이용 목적",

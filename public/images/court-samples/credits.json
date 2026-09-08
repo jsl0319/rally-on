@@ -1,0 +1,32 @@
+[
+  {
+    "file": "aerial.jpg",
+    "author": "Simone Viani",
+    "source": "https://unsplash.com/photos/2XPHSXVT_Ls",
+    "license": "https://unsplash.com/license"
+  },
+  {
+    "file": "blue-stadium.jpg",
+    "author": "Jordan Loritz",
+    "source": "https://unsplash.com/photos/ekFi9O30bSo",
+    "license": "https://unsplash.com/license"
+  },
+  {
+    "file": "clay.jpg",
+    "author": "Steffen Schubert",
+    "source": "https://unsplash.com/photos/mkxDpX711LU",
+    "license": "https://unsplash.com/license"
+  },
+  {
+    "file": "indoor.jpg",
+    "author": "Leonie Janko",
+    "source": "https://unsplash.com/photos/2kH4Zh4zFvg",
+    "license": "https://unsplash.com/license"
+  },
+  {
+    "file": "blue-outdoor.jpg",
+    "author": "Marius Kriz",
+    "source": "https://unsplash.com/photos/sEEHYiMuHtc",
+    "license": "https://unsplash.com/license"
+  }
+]

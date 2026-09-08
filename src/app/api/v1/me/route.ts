@@ -1,10 +1,22 @@
+import { z } from "zod";
+
 import { getRateLimitedCurrentUser } from "@/server/auth/current-user";
 import { getPrisma } from "@/server/db/prisma";
 import { nicknameSchema } from "@/server/domain/profile";
+import { getProfileImageUrl } from "@/server/domain/profile-image-service";
 import { getProfile, toProfileView } from "@/server/domain/profile-service";
 import { apiError, handleApiError } from "@/server/http/api-response";
 
 export const runtime = "nodejs";
+
+const meUpdateSchema = z
+  .object({
+    nickname: nicknameSchema.optional(),
+    matchNotificationsEnabled: z.boolean().optional(),
+  })
+  .refine((value) => value.nickname !== undefined || value.matchNotificationsEnabled !== undefined, {
+    message: "변경할 값을 입력해 주세요.",
+  });
 
 export async function GET() {
   try {
@@ -17,6 +29,8 @@ export async function GET() {
       nicknameConfirmed: user.nicknameConfirmedAt !== null,
       status: user.status,
       onboardingCompleted: user.onboardingCompletedAt !== null,
+      matchNotificationsEnabled: user.matchNotificationsEnabled,
+      profileImageUrl: getProfileImageUrl(user),
       tennisProfile: profile ? toProfileView(profile) : null,
     });
   } catch (error) {
@@ -27,30 +41,35 @@ export async function GET() {
 export async function PATCH(request: Request) {
   try {
     const user = await getRateLimitedCurrentUser();
-    const body: unknown = await request.json();
-    const nickname = nicknameSchema.parse(
-      typeof body === "object" && body !== null ? (body as { nickname?: unknown }).nickname : undefined,
-    );
+    const input = meUpdateSchema.parse(await request.json());
+    const prisma = getPrisma();
 
-    const existing = await getPrisma().user.findFirst({
-      where: { nickname, NOT: { id: user.id } },
-      select: { id: true },
-    });
-    if (existing) {
-      return apiError(409, "NICKNAME_ALREADY_EXISTS", "이미 사용 중인 닉네임이에요.");
+    if (input.nickname !== undefined) {
+      const existing = await prisma.user.findFirst({
+        where: { nickname: input.nickname, NOT: { id: user.id } },
+        select: { id: true },
+      });
+      if (existing) {
+        return apiError(409, "NICKNAME_ALREADY_EXISTS", "이미 사용 중인 닉네임이에요.");
+      }
     }
 
-    const updated = await getPrisma().user.update({
+    const updated = await prisma.user.update({
       where: { id: user.id },
-      data: { nickname, nicknameConfirmedAt: new Date() },
+      data: {
+        ...(input.nickname !== undefined ? { nickname: input.nickname, nicknameConfirmedAt: new Date() } : {}),
+        ...(input.matchNotificationsEnabled !== undefined ? { matchNotificationsEnabled: input.matchNotificationsEnabled } : {}),
+      },
     });
 
     return Response.json({
       id: updated.id,
       nickname: updated.nickname,
-      nicknameConfirmed: true,
+      nicknameConfirmed: updated.nicknameConfirmedAt !== null,
       status: updated.status,
       onboardingCompleted: updated.onboardingCompletedAt !== null,
+      matchNotificationsEnabled: updated.matchNotificationsEnabled,
+      profileImageUrl: getProfileImageUrl(updated),
     });
   } catch (error) {
     return handleApiError(error);

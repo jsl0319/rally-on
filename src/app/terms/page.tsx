@@ -1,8 +1,10 @@
 import { LegalNoticePage } from "@/features/legal/legal-notice-page";
 
-export default function TermsPage() {
+export default async function TermsPage({ searchParams }: { searchParams: Promise<{ returnTo?: string }> }) {
+  const { returnTo } = await searchParams;
   return (
     <LegalNoticePage
+      returnTo={returnTo}
       title="서비스 이용약관"
       summary="Rally On은 테니스 초보자가 함께 칠 사람을 찾고 약속을 조율하도록 돕는 비공개 MVP 서비스예요."
       sections={[

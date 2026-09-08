@@ -152,13 +152,14 @@ describe("M7 lifecycle inputs and user-facing state", () => {
 
 describe("match creation game and settlement validation", () => {
   const request = {
+    introduction: "함께 편하게 연습해요.",
     clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07cd",
     courtSource: "EXTERNAL_RESERVED", externalCourt: { name: "테니스장", address: "서울 마포구" },
     startsAt: "2099-01-02T10:00:00+09:00", endsAt: "2099-01-02T12:00:00+09:00",
     recruitCount: 2, playPurposes: ["RALLY_PRACTICE"], partnerPreference: "SIMILAR_LEVEL", totalCourtFeeKrw: 24000,
   };
   it("accepts a title-free request and an optional settlement account", () => {
-    expect(matchCreateInputSchema.parse({ ...request, gameType: "RALLY" }).title).toBeUndefined();
+    expect(matchCreateInputSchema.parse({ ...request, gameType: "OTHER" }).title).toBeUndefined();
     expect(matchCreateInputSchema.parse({ ...request, settlementAccount: null }).settlementAccount).toBeNull();
   });
   it.each([
@@ -169,13 +170,14 @@ describe("match creation game and settlement validation", () => {
   ])("rejects partial or invalid accounts", (settlementAccount) => {
     expect(matchCreateInputSchema.safeParse({ ...request, settlementAccount }).success).toBe(false);
   });
-  it("rejects unknown game types", () => {
-    expect(matchCreateInputSchema.safeParse({ ...request, gameType: "UNKNOWN" }).success).toBe(false);
+  it.each(["UNKNOWN", "SINGLES", "RALLY"])("rejects unavailable game type %s", (gameType) => {
+    expect(matchCreateInputSchema.safeParse({ ...request, gameType }).success).toBe(false);
   });
 });
 
 describe("gender quota and half-hour creation contract", () => {
   const request = {
+    introduction: "함께 편하게 연습해요.",
     clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07cd", courtSource: "EXTERNAL_RESERVED",
     externalCourt: { name: "테니스장", address: "서울 마포구" },
     startsAt: "2099-01-02T10:00:00+09:00", endsAt: "2099-01-02T12:30:00+09:00",

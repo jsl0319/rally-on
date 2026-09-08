@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { getSafeReturnTo } from "@/navigation/return-to";
+
 type NoticeSection = {
   title: string;
   body: string;
@@ -10,14 +12,25 @@ type LegalNoticePageProps = {
   summary: string;
   sections: NoticeSection[];
   notice: string;
+  /** 어디에서 들어왔는지. 마이에서 열었으면 마이로 돌아가야 한다. */
+  returnTo?: string;
 };
 
-export function LegalNoticePage({ title, summary, sections, notice }: LegalNoticePageProps) {
+/** 로그인 전 화면에서 열면 `/`가 로그인 화면이고, 로그인 후에는 매칭 목록이다. */
+const backLabels: Record<string, string> = {
+  "/": "로그인 화면으로",
+  "/my": "마이로 돌아가기",
+};
+
+export function LegalNoticePage({ title, summary, sections, notice, returnTo }: LegalNoticePageProps) {
+  const backHref = getSafeReturnTo(returnTo, "/");
+  const backLabel = backLabels[backHref] ?? "돌아가기";
+
   return (
     <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 py-6 text-[var(--tm-text-primary)]">
       <article className="mx-auto max-w-[560px] pb-10">
-        <Link className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--tm-action-primary)]" href="/">
-          ← 로그인 화면으로
+        <Link className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--tm-action-primary)]" href={backHref}>
+          ← {backLabel}
         </Link>
         <header className="mt-6 border-b border-[var(--tm-border-default)] pb-6">
           <p className="text-sm font-semibold text-[var(--tm-action-primary)]">Rally On 비공개 MVP 안내</p>
