@@ -79,6 +79,10 @@ enum ApplicationStatus {
   REJECTED
   WITHDRAWN
   CANCELLED
+  /// 코트 매칭 전용. 운영자가 입금을 확인해 참가가 확정된 상태.
+  CONFIRMED
+  /// 코트 매칭 전용. 승인 뒤 입금 기한이 지나 자동 취소된 상태.
+  EXPIRED_UNPAID
 }
 
 enum MatchConversationStatus {
@@ -161,6 +165,13 @@ enum CourtSlotStatus {
   ENDED
   BLOCKED
   CANCELLED
+}
+
+/// 코트 매칭의 참가 승인 방식. AUTO는 성별·경기 유형 조건만 서버가 검증하고
+/// 사람 손을 거치지 않는다. OPERATOR는 운영자가 신청을 직접 검토한다.
+enum CourtSlotApprovalMode {
+  AUTO
+  OPERATOR
 }
 
 enum SlotStatusChangeActor {
@@ -530,6 +541,22 @@ model MatchApplication {
   decidedAt              DateTime?         @map("decided_at") @db.Timestamptz(6)
   withdrawnAt            DateTime?         @map("withdrawn_at") @db.Timestamptz(6)
   cancelledAt            DateTime?         @map("cancelled_at") @db.Timestamptz(6)
+  /// --- 코트 매칭 계좌이체 흐름 ---
+  /// 입금자명 뒤에 붙여 통장 내역과 대조하는 식별코드. 승인 시 서버가 만든다.
+  depositCode            String?           @map("deposit_code") @db.VarChar(8)
+  /// 승인 시 걸리는 입금 기한. 지나면 자동으로 EXPIRED_UNPAID가 된다.
+  paymentDueAt           DateTime?         @map("payment_due_at") @db.Timestamptz(6)
+  /// 참가자가 실제로 보낸 입금자명과 알린 시각.
+  depositorName          String?           @map("depositor_name") @db.VarChar(50)
+  depositClaimedAt       DateTime?         @map("deposit_claimed_at") @db.Timestamptz(6)
+  confirmedAt            DateTime?         @map("confirmed_at") @db.Timestamptz(6)
+  /// 환불받을 계좌. 취소가 실제로 일어난 뒤에만 참가자에게 받는다.
+  refundBank             String?           @map("refund_bank") @db.VarChar(50)
+  refundAccountNumber    String?           @map("refund_account_number") @db.VarChar(40)
+  refundAccountHolder    String?           @map("refund_account_holder") @db.VarChar(50)
+  refundRequestedAt      DateTime?         @map("refund_requested_at") @db.Timestamptz(6)
+  /// 운영자가 환불했다고 표시한 시각. 서비스가 송금을 확인한 것은 아니다.
+  refundCompletedAt      DateTime?         @map("refund_completed_at") @db.Timestamptz(6)
   createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -537,6 +564,7 @@ model MatchApplication {
   applicantUser User  @relation(fields: [applicantUserId], references: [id], onDelete: Restrict)
 
   @@unique([matchId, applicantUserId])
+  @@unique([matchId, depositCode])
   @@index([matchId, status, createdAt])
   @@index([applicantUserId, status, createdAt(sort: Desc)])
   @@map("match_applications")
@@ -738,6 +766,11 @@ model Court {
   address               String   @db.VarChar(255)
   normalizedVenueKey    String   @unique @map("normalized_venue_key") @db.VarChar(255)
   status                CourtStatus @default(ACTIVE)
+  /// 게스트 참가비를 받을 계좌. 코트 매칭을 공개할 때 Match로 값을 복사해 두므로,
+  /// 나중에 이 값을 바꿔도 이미 공개된 코트 매칭의 안내 계좌는 바뀌지 않는다.
+  settlementBank          String? @map("settlement_bank") @db.VarChar(50)
+  settlementAccountNumber String? @map("settlement_account_number") @db.VarChar(40)
+  settlementAccountHolder String? @map("settlement_account_holder") @db.VarChar(50)
   deactivatedAt         DateTime? @map("deactivated_at") @db.Timestamptz(6)
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -815,8 +848,17 @@ model CourtSlot {
   courtUnitId         String              @map("court_unit_id") @db.Uuid
   startsAt            DateTime            @map("starts_at") @db.Timestamptz(6)
   endsAt              DateTime            @map("ends_at") @db.Timestamptz(6)
+  /// 게스트 한 명이 내는 고정 참가비. 코트 총액이 아니라서 인원으로 나누지 않는다.
   priceKrw            Int                 @map("price_krw")
+  /// 참가자 정원. 운영자는 플레이어가 아니므로 이 수에 포함하지 않는다.
   maxParticipantCount Int                 @map("max_participant_count")
+  /// 이 인원을 못 채우면 시작 전에 자동 취소한다.
+  minParticipantCount Int                 @default(2) @map("min_participant_count")
+  gameType            MatchGameType?      @map("game_type")
+  /// 복식이면 남녀 정원의 합이 maxParticipantCount와 같아야 한다.
+  maleCapacity        Int?                @map("male_capacity")
+  femaleCapacity      Int?                @map("female_capacity")
+  approvalMode        CourtSlotApprovalMode @default(AUTO) @map("approval_mode")
   visibility          CourtSlotVisibility @default(PRIVATE)
   status              CourtSlotStatus     @default(DRAFT)
   publishedAt         DateTime?           @map("published_at") @db.Timestamptz(6)
