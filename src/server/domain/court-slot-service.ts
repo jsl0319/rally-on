@@ -2,6 +2,8 @@ import { Prisma } from "@/generated/prisma/client";
 import type { CourtSlotStatus, MatchStatus, PrismaClient } from "@/generated/prisma/client";
 
 import { DomainError } from "@/server/domain/profile-service";
+import { purposeLabels } from "@/server/domain/profile";
+import { getEstimatedFeePerPerson } from "@/server/domain/match";
 import { makeConversationReadOnly } from "@/server/domain/match-chat-service";
 
 import type {
@@ -38,6 +40,29 @@ const courtSlotInclude = {
 
 type CourtWithRelations = Prisma.CourtGetPayload<{ include: typeof courtInclude }>;
 type CourtSlotWithRelations = Prisma.CourtSlotGetPayload<{ include: typeof courtSlotInclude }>;
+
+/**
+ * CP01·CP02 공개 화면은 연결된 세션의 모집 요약까지 읽는다. 운영자 화면이 쓰는
+ * `courtSlotInclude`에는 이 정보를 넣지 않는다 — 운영자는 참가자 정보를 보지 않는다.
+ */
+const publicCourtSlotInclude = {
+  ...courtSlotInclude,
+  match: {
+    select: {
+      id: true,
+      hostUserId: true,
+      status: true,
+      title: true,
+      recruitCount: true,
+      partnerPreference: true,
+      host: { select: { nickname: true } },
+      purposes: { select: { purpose: true } },
+      _count: { select: { applications: { where: { status: "ACCEPTED" } } } },
+    },
+  },
+} satisfies Prisma.CourtSlotInclude;
+
+type PublicCourtSlotWithRelations = Prisma.CourtSlotGetPayload<{ include: typeof publicCourtSlotInclude }>;
 
 const slotStatusLabels: Record<CourtSlotStatus, string> = {
   DRAFT: "비공개 초안",
@@ -122,6 +147,30 @@ export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) 
     session,
     availableAction: canOpenSession ? "OPEN_SESSION" : slot.status === "ALLOCATED" && session ? "VIEW_SESSION" : "READ_ONLY",
     version: slot.version,
+  };
+}
+
+function toPublicCourtSlotView(slot: PublicCourtSlotWithRelations, now = new Date()) {
+  const base = toCourtSlotView(slot, now);
+  const match = slot.match;
+  const acceptedCount = match?._count.applications ?? 0;
+
+  return {
+    ...base,
+    durationMinutes: Math.round((slot.endsAt.getTime() - slot.startsAt.getTime()) / 60_000),
+    session: match && base.session
+      ? {
+          ...base.session,
+          title: match.title,
+          hostNickname: match.host.nickname,
+          recruitCount: match.recruitCount,
+          acceptedCount,
+          remainingSpots: Math.max(match.recruitCount - acceptedCount, 0),
+          beginnerWelcome: match.partnerPreference === "COMPLETE_BEGINNER_WELCOME",
+          estimatedFeePerPersonKrw: getEstimatedFeePerPerson(slot.priceKrw, match.recruitCount, "PARTNER_COURT"),
+          playPurposes: match.purposes.map(({ purpose }) => ({ code: purpose, label: purposeLabels[purpose] })),
+        }
+      : null,
   };
 }
 
@@ -595,11 +644,11 @@ export async function getPublicCourtSlots(prisma: PrismaClient, availableOnly: b
       courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
       ...(availableOnly ? { status: "AVAILABLE", startsAt: { gt: now } } : { endsAt: { gt: now } }),
     },
-    include: courtSlotInclude,
+    include: publicCourtSlotInclude,
     orderBy: [{ startsAt: "asc" }, { id: "asc" }],
     take: limit,
   });
-  return { items: slots.map((slot) => toCourtSlotView(slot, now)) };
+  return { items: slots.map((slot) => toPublicCourtSlotView(slot, now)) };
 }
 
 /** A public Slot is a session-supply record, never a direct court reservation. */
@@ -611,8 +660,8 @@ export async function getPublicCourtSlot(prisma: PrismaClient, slotId: string) {
       visibility: "PUBLIC",
       courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
     },
-    include: courtSlotInclude,
+    include: publicCourtSlotInclude,
   });
   if (!slot) throw new DomainError("PARTNER_SLOT_NOT_AVAILABLE", 404, "이 제휴 코트 시간은 확인할 수 없어요.");
-  return toCourtSlotView(slot, now);
+  return toPublicCourtSlotView(slot, now);
 }

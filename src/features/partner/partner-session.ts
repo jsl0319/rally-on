@@ -10,6 +10,7 @@ export type PublicCourtSlot = {
   totalCourtFeeKrw: number;
   maxParticipantCount: number;
   usageNote: string | null;
+  durationMinutes: number;
   court: {
     name: string;
     address: string;
@@ -17,7 +18,19 @@ export type PublicCourtSlot = {
     region: { code: string; name: string };
     image: CourtImageView;
   };
-  session: { matchId: string; status: string; statusLabel: string } | null;
+  session: {
+    matchId: string;
+    status: string;
+    statusLabel: string;
+    title: string;
+    hostNickname: string;
+    recruitCount: number;
+    acceptedCount: number;
+    remainingSpots: number;
+    beginnerWelcome: boolean;
+    estimatedFeePerPersonKrw: number | null;
+    playPurposes: Array<{ code: string; label: string }>;
+  } | null;
   availableAction: "OPEN_SESSION" | "VIEW_SESSION" | "READ_ONLY";
 };
 
@@ -37,6 +50,20 @@ export function formatPartnerSchedule(startsAt: string, endsAt: string) {
     timeZone: "Asia/Seoul",
   });
   return `${dateFormatter.format(date)} · ${timeFormatter.format(date)}–${timeFormatter.format(end)}`;
+}
+
+export function formatDuration(minutes: number) {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours && rest) return `${hours}시간 ${rest}분`;
+  if (hours) return `${hours}시간`;
+  return `${rest}분`;
+}
+
+/** 모집 중인 세션 카드의 남은 자리 문구. 마감·취소는 세션 상태 문구를 그대로 쓴다. */
+export function formatSessionCapacity(session: NonNullable<PublicCourtSlot["session"]>) {
+  if (session.status !== "OPEN") return session.statusLabel;
+  return session.remainingSpots > 0 ? `${session.remainingSpots}명 더 함께할 수 있어요` : "자리가 다 찼어요";
 }
 
 export function formatStatusChangedAt(value: string) {

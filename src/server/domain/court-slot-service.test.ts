@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { courtSlotCreateInputSchema, courtSlotUpdateInputSchema, courtSupplyIncidentInputSchema } from "./court-slot";
-import { blockCourtSlot, createCourt, createCourtSlot, getPublicCourtSlot, getPublicCourtSlots, publicCourtSlotListLimit, publishCourtSlot, reportCourtSupplyIncident, updateCourtSlot } from "./court-slot-service";
+import { blockCourtSlot, createCourt, createCourtSlot, getMyCourtSlots, getPublicCourtSlot, getPublicCourtSlots, publicCourtSlotListLimit, publishCourtSlot, reportCourtSupplyIncident, updateCourtSlot } from "./court-slot-service";
 
 const viewer = { id: "operator-user-id" };
 const futureStartsAt = new Date("2030-01-02T01:00:00.000Z");
@@ -173,6 +173,57 @@ describe("Court Partner time supply authorization and state transitions", () => 
     expect(where.status).toBeUndefined();
     expect(orderBy).toEqual([{ startsAt: "asc" }, { id: "asc" }]);
     expect(take).toBe(publicCourtSlotListLimit);
+  });
+
+  it("shows the linked session's recruiting summary on a public slot", async () => {
+    const allocatedSlot = {
+      ...ownedSlot("PUBLISH_APPROVED"),
+      visibility: "PUBLIC",
+      status: "ALLOCATED",
+      match: {
+        id: "match-id",
+        hostUserId: "host-user-id",
+        status: "OPEN",
+        title: "편하게 랠리해요",
+        recruitCount: 3,
+        partnerPreference: "COMPLETE_BEGINNER_WELCOME",
+        host: { nickname: "민지" },
+        purposes: [{ purpose: "RALLY_PRACTICE" }],
+        _count: { applications: 1 },
+      },
+    };
+    const prisma = {
+      courtSlot: { findFirst: vi.fn().mockResolvedValue(allocatedSlot) },
+    } as unknown as Parameters<typeof getPublicCourtSlot>[0];
+
+    await expect(getPublicCourtSlot(prisma, "slot-id")).resolves.toMatchObject({
+      availableAction: "VIEW_SESSION",
+      durationMinutes: 120,
+      session: {
+        matchId: "match-id",
+        title: "편하게 랠리해요",
+        hostNickname: "민지",
+        recruitCount: 3,
+        acceptedCount: 1,
+        remainingSpots: 2,
+        beginnerWelcome: true,
+        estimatedFeePerPersonKrw: 10_000,
+        playPurposes: [{ code: "RALLY_PRACTICE", label: "랠리" }],
+      },
+    });
+  });
+
+  it("keeps the linked session's recruiting summary out of the operator's own slot list", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const prisma = {
+      courtSlot: { findMany },
+      operatorSupplyRestriction: { findFirst: vi.fn().mockResolvedValue(null) },
+    } as unknown as Parameters<typeof getMyCourtSlots>[0];
+
+    await getMyCourtSlots(prisma, viewer);
+
+    const [{ include }] = findMany.mock.calls[0] as [{ include: { match: { select: Record<string, unknown> } } }];
+    expect(include.match.select).toEqual({ id: true, hostUserId: true, status: true });
   });
 
   it("only offers still-upcoming available times when a session host picks a slot", async () => {
