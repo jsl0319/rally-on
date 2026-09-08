@@ -5,13 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-import { ActionArea, ActionAreaButton, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, TextArea, TextField } from "@wanteddev/wds";
+import { ActionArea, ActionAreaButton, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, TextArea } from "@wanteddev/wds";
 
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { BackButton } from "@/components/navigation/back-button";
 import { Button } from "@/components/ui/button";
 import { CourtMedia } from "@/features/matches/court-media";
-import { bankNames } from "@/matches/bank-list";
 import { activeGameTypes, gameTypeLabels, type GameType } from "@/matches/game-type";
 import { needsGenderQuota } from "@/matches/recruitment";
 
@@ -41,9 +40,6 @@ type PartnerSessionForm = {
   playPurposes: string[];
   partnerPreference: string;
   introduction: string;
-  settlementBank: string;
-  settlementAccountNumber: string;
-  settlementAccountHolder: string;
 };
 
 type FormSetter = <Key extends keyof PartnerSessionForm>(key: Key, value: PartnerSessionForm[Key]) => void;
@@ -72,9 +68,6 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
     playPurposes: ["RALLY_PRACTICE"],
     partnerPreference: "COMPLETE_BEGINNER_WELCOME",
     introduction: "",
-    settlementBank: "",
-    settlementAccountNumber: "",
-    settlementAccountHolder: "",
   }));
 
   const load = useCallback(async () => {
@@ -143,9 +136,6 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
     if (form.splitRecruitment && form.maleRecruitCount + form.femaleRecruitCount !== form.recruitCount) return "남녀별 모집 인원의 합계를 확인해 주세요.";
     if (form.recruitCount < 1) return "추가 모집 인원은 1명 이상이어야 해요.";
     if (form.recruitCount > maxRecruitCount) return `현장 최대 ${slot.maxParticipantCount}명이라 추가 모집 인원은 ${maxRecruitCount}명까지 선택할 수 있어요.`;
-    const accountFields = [form.settlementBank.trim(), form.settlementAccountNumber.trim(), form.settlementAccountHolder.trim()];
-    if (accountFields.some(Boolean) && !accountFields.every(Boolean)) return "정산 정보를 입력하려면 은행, 계좌번호, 예금주를 모두 입력해 주세요.";
-    if (form.settlementAccountNumber.trim() && !/^(?=.*[0-9])[0-9-]{5,40}$/.test(form.settlementAccountNumber.trim())) return "계좌번호는 숫자와 하이픈으로 5~40자 입력해 주세요.";
     return null;
   };
 
@@ -171,9 +161,6 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
           playPurposes: form.playPurposes,
           partnerPreference: form.partnerPreference,
           introduction: form.introduction.trim() || null,
-          settlementAccount: form.settlementBank.trim()
-            ? { bank: form.settlementBank.trim(), accountNumber: form.settlementAccountNumber.trim(), accountHolder: form.settlementAccountHolder.trim() }
-            : null,
         }),
       });
       const body: unknown = await response.json();
@@ -257,23 +244,6 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
       <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">수락된 참가자와 서비스 내 채팅에서 당일 준비를 조율해요.</p>
     </FormPanel>
 
-    <FormPanel description="모집자와 수락된 참가자에게만 보여요. 입력할 경우 세 항목을 모두 채워 주세요." title="정산 정보 (선택)">
-      <div className="grid gap-4">
-        <FormField>
-          <FormLabel>은행</FormLabel>
-          <FormControl>
-            <select className="min-h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white px-3 text-sm" onChange={(event) => set("settlementBank", event.target.value)} value={form.settlementBank}>
-              <option value="">은행을 선택해 주세요</option>
-              {bankNames.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
-          </FormControl>
-        </FormField>
-        <FormField><FormLabel>계좌번호</FormLabel><FormControl><TextField autoComplete="off" inputMode="numeric" maxLength={40} onChange={(event) => set("settlementAccountNumber", event.target.value)} placeholder="숫자와 하이픈만 입력해 주세요" value={form.settlementAccountNumber} /></FormControl></FormField>
-        <FormField><FormLabel>예금주</FormLabel><FormControl><TextField autoComplete="off" maxLength={50} onChange={(event) => set("settlementAccountHolder", event.target.value)} placeholder="예금주 이름" value={form.settlementAccountHolder} /></FormControl></FormField>
-      </div>
-      <p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">참가자 간 송금을 위한 안내예요. Rally On은 계좌를 검증하거나 송금·입금 확인을 하지 않아요.</p>
-    </FormPanel>
-
     <section className="mt-6 rounded-2xl bg-[var(--tm-bg-subtle)] p-4 text-sm leading-6">
       <p className="font-semibold">게스트 참가비 {slot.guestFeeKrw.toLocaleString("ko-KR")}원</p>
       <p className="mt-1 text-[var(--tm-text-secondary)]">운영자가 정한 금액이라 바꿀 수 없어요. Rally On에서 결제하지 않고, 참가자와 직접 정산해요.</p>
@@ -332,7 +302,7 @@ function PartnerSessionPreviewSheet({ error, form, onClose, onSubmit, open, savi
                 {form.introduction ? <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{form.introduction}</p> : null}
               </div>
               {slot.usageNote ? <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{slot.usageNote}</p> : null}
-              {form.settlementBank.trim() ? <div className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] p-4 text-sm"><p className="font-bold">정산 정보 · 수락된 참가자에게만 공개</p><p className="mt-2 break-all">{form.settlementBank} {form.settlementAccountNumber} · {form.settlementAccountHolder}</p></div> : null}
+              
               <p className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">참가비는 Rally On에서 결제하지 않아요. 참가자와 직접 정산해요.</p>
             </div>
           </article>
