@@ -139,7 +139,6 @@ test("공개된 코트 시간은 하나의 코트 매칭으로 열고 신청·�
   const hostPage = await hostContext.newPage();
 
   await hostPage.goto(`/partner-sessions/${fixture.partnerSlotId}`);
-  await expect(hostPage.getByText("Rally On에서 준비한 코트", { exact: true })).toBeVisible();
   await expect(hostPage.getByText("E2E 준비된 테니스장")).toBeVisible();
   await expect(hostPage.getByRole("link", { name: "이 시간으로 코트 매칭 열기" })).toBeVisible();
   await hostPage.getByRole("link", { name: "이 시간으로 코트 매칭 열기" }).click();

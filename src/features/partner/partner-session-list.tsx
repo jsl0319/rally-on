@@ -68,7 +68,6 @@ function PublicSlotCard({ slot }: { slot: PublicCourtSlot }) {
     <Link className="block p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)]" href={`/partner-sessions/${slot.id}`}>
       <CourtMedia alt={`${slot.court.name} 코트 이미지`} className="aspect-[7/3] w-full" fallbackLabel="Rally On 기본 코트 이미지" image={slot.court.image} />
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-[var(--tm-bg-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--tm-action-primary)]">Rally On에서 준비한 코트</span>
         <span className="text-xs font-semibold text-[var(--tm-text-secondary)]">{session ? session.statusLabel : slot.statusLabel}</span>
         {recruiting?.beginnerWelcome ? <span className="rounded-full bg-[var(--tm-bg-highlight)] px-2.5 py-1 text-xs font-semibold text-[var(--tm-tennis-ball-muted)]">초보자 환영</span> : null}
       </div>

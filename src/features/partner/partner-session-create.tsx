@@ -213,7 +213,6 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
 
     <section className="mt-6 overflow-hidden rounded-3xl border border-[var(--tm-border-default)] bg-white p-4">
       <CourtMedia alt={`${slot.court.name} 코트 이미지`} className="aspect-[7/3] w-full" fallbackLabel="Rally On 기본 코트 이미지" image={slot.court.image} />
-      <p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">Rally On에서 준비한 코트예요</p>
       <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">🗓 {formatPartnerSchedule(slot.startsAt, slot.endsAt)} · {formatDuration(slot.durationMinutes)}<br />📍 {slot.court.name} · {slot.court.courtNumber}<br />전체 {slot.totalCourtFeeKrw.toLocaleString("ko-KR")}원 · 현장 최대 {slot.maxParticipantCount}명</p>
       {slot.usageNote ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-3 py-2 text-sm leading-5 text-[var(--tm-text-secondary)]">{slot.usageNote}</p> : null}
     </section>
@@ -321,7 +320,6 @@ function PartnerSessionPreviewSheet({ error, estimatedFee, form, onClose, onSubm
           <ModalDescription>열면 코트 매칭 목록에 보여지고, 참가 신청을 받을 수 있어요.</ModalDescription>
           <article className="mt-4 overflow-hidden rounded-3xl border border-[var(--tm-border-default)] bg-white shadow-[0_12px_30px_rgba(29,50,84,0.08)]">
             <div className="p-5">
-              <p className="inline-flex rounded-full bg-[var(--tm-bg-subtle)] px-3 py-1.5 text-xs font-bold text-[var(--tm-action-primary)]">Rally On에서 준비한 코트예요</p>
               <h2 className="mt-3 text-xl font-bold leading-7">{slot.court.name}</h2>
               <p className="mt-2 text-sm">{form.gameType ? gameTypeLabels[form.gameType] : ""}{form.splitRecruitment ? ` · 남자 ${form.maleRecruitCount}명 / 여자 ${form.femaleRecruitCount}명 모집` : " · 성별 무관"}</p>
               <dl className="mt-5 grid gap-4">
