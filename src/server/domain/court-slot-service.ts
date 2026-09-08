@@ -81,6 +81,29 @@ const sessionStatusLabels: Record<MatchStatus, string> = {
   CANCELLED: "세션이 취소됐어요",
 };
 
+/**
+ * 상태 칩 문구는 화면에 따라 나눈다. 스펙 §4.1은 일반 사용자 화면을 "코트 매칭" 언어로
+ * 통일하고, "세션" 같은 공급 관리 문구는 운영자 화면에서만 쓰도록 정한다. 위의 두 맵은
+ * 운영자 시간 관리 화면 전용이고, 아래 두 맵은 CP01·CP02 공개 화면 전용이다.
+ * 공개 화면에서 상태를 설명하는 문장은 카드·상세의 제목이 맡고, 칩은 짧은 상태만 보여 준다.
+ */
+const publicSlotStatusLabels: Record<CourtSlotStatus, string> = {
+  DRAFT: "비공개",
+  AVAILABLE: "열기 가능",
+  ALLOCATED: "모집 중",
+  ENDED: "이용 완료",
+  BLOCKED: "연결 중지",
+  CANCELLED: "취소됨",
+};
+
+const publicSessionStatusLabels: Record<MatchStatus, string> = {
+  OPEN: "모집 중",
+  CLOSED: "모집 마감",
+  COMPLETED: "이용 완료",
+  EXPIRED: "종료됨",
+  CANCELLED: "취소됨",
+};
+
 function optionalText(value: string | null | undefined) {
   return value?.trim() || null;
 }
@@ -157,10 +180,12 @@ function toPublicCourtSlotView(slot: PublicCourtSlotWithRelations, now = new Dat
 
   return {
     ...base,
+    statusLabel: publicSlotStatusLabels[slot.status],
     durationMinutes: Math.round((slot.endsAt.getTime() - slot.startsAt.getTime()) / 60_000),
     session: match && base.session
       ? {
           ...base.session,
+          statusLabel: publicSessionStatusLabels[match.status],
           title: match.title,
           hostNickname: match.host.nickname,
           recruitCount: match.recruitCount,

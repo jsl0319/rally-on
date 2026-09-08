@@ -153,7 +153,7 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
     return {
       source: match.courtSource,
       sourceLabel: "Rally On에서 준비한 코트예요",
-      participationNote: "참가 신청은 세션을 연 모집자에게 보내요.",
+      participationNote: "참가 신청은 코트 매칭을 연 모집자에게 보내요.",
       name: court?.name ?? null,
       address: court?.address ?? null,
       courtNumber: match.courtSlot?.courtUnit.name ?? null,
@@ -261,7 +261,7 @@ function toSupplyNoticeView(notice: { noticeCode: string; deliveredAt: Date; inc
   if (notice.noticeCode !== "COURT_SUPPLY_WITHDRAWN" || notice.incident.publicNoticeCode !== "COURT_SUPPLY_WITHDRAWN") return null;
   return {
     code: "COURT_SUPPLY_WITHDRAWN",
-    message: "코트 운영 사정으로 이 제휴 코트 세션이 취소됐어요.",
+    message: "코트 운영 사정으로 이 코트 매칭이 취소됐어요.",
     occurredAt: (notice.incident.withdrawnAt ?? notice.deliveredAt).toISOString(),
     delivery: "IN_APP",
   };
@@ -540,7 +540,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
           },
         });
         if (!slot || slot.visibility !== "PUBLIC" || slot.status !== "AVAILABLE" || slot.startsAt <= now || slot.courtUnit.court.status !== "ACTIVE" || slot.courtUnit.court.operatorApplication.status !== "PUBLISH_APPROVED") {
-          throw new DomainError("PARTNER_SLOT_NOT_AVAILABLE", 409, "이 코트 시간대는 더 이상 세션을 열 수 없어요.");
+          throw new DomainError("PARTNER_SLOT_NOT_AVAILABLE", 409, "이 코트 시간대로는 더 이상 코트 매칭을 열 수 없어요.");
         }
         if (input.recruitCount + 1 > slot.maxParticipantCount) {
           throw new DomainError("PARTNER_SLOT_CAPACITY_EXCEEDED", 409, "현장 최대 인원보다 많은 참가자를 모집할 수 없어요.");
@@ -550,7 +550,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
           select: { id: true },
         });
         if (restriction) {
-          throw new DomainError("OPERATOR_SUPPLY_RESTRICTED", 403, "운영상 확인이 끝날 때까지 이 코트 시간으로 새 세션을 열 수 없어요.");
+          throw new DomainError("OPERATOR_SUPPLY_RESTRICTED", 403, "운영상 확인이 끝날 때까지 이 코트 시간으로 새 코트 매칭을 열 수 없어요.");
         }
 
         const allocated = await transaction.courtSlot.updateMany({
@@ -558,7 +558,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
           data: { status: "ALLOCATED", statusChangedAt: now, version: { increment: 1 } },
         });
         if (allocated.count !== 1) {
-          throw new DomainError("PARTNER_SLOT_ALREADY_ALLOCATED", 409, "이 코트 시간대는 이미 다른 세션에 연결됐어요.");
+          throw new DomainError("PARTNER_SLOT_ALREADY_ALLOCATED", 409, "이 코트 시간대는 이미 다른 코트 매칭에 연결됐어요.");
         }
         await transaction.courtSlotStatusHistory.create({
           data: {

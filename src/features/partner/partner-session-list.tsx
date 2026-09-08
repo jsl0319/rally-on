@@ -42,7 +42,7 @@ export function PartnerSessionList() {
       </div>
     </header>
     <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-5 pt-6">
-      <div className="flex items-end justify-between gap-3"><div><h2 className="text-xl font-bold">다가오는 코트 매칭</h2><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">참가 신청은 세션을 연 모집자에게 보내요.</p></div></div>
+      <div className="flex items-end justify-between gap-3"><div><h2 className="text-xl font-bold">다가오는 코트 매칭</h2><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">참가 신청은 코트 매칭을 연 모집자에게 보내요.</p></div></div>
       {!slots && !error ? <div className="grid flex-1 place-items-center"><CourtRallyLoader className="max-w-[560px]" label="코트 매칭 시간을 준비하고 있어요." /></div> : null}
       {error ? <div className="mt-5 rounded-3xl bg-[var(--tm-status-error-bg)] p-5"><p className="font-semibold text-[var(--tm-status-error-text)]">불러오지 못했어요</p><p className="mt-2 text-sm leading-6 text-[var(--tm-status-error-text)]">{error}</p><Button onClick={() => void load()} size="medium" variant="secondary">다시 불러오기</Button></div> : null}
       {!error && slots?.length === 0 ? <EmptyState /> : null}

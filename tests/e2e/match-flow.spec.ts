@@ -145,7 +145,10 @@ test("공개된 코트 시간은 하나의 코트 매칭으로 열고 신청·�
   await hostPage.getByRole("link", { name: "이 시간으로 코트 매칭 열기" }).click();
   await expect(hostPage.getByRole("heading", { name: /함께 칠 메이트를/ })).toBeVisible();
   await expect(hostPage.getByLabel("매칭 제목")).toHaveCount(0);
-  await hostPage.getByRole("button", { name: "이 시간으로 코트 매칭 열기" }).click();
+  await hostPage.getByRole("button", { name: "기타", exact: true }).click();
+  await hostPage.getByRole("button", { name: "미리보기" }).click();
+  const partnerPreviewDialog = hostPage.getByRole("dialog", { name: "미리보기" });
+  await partnerPreviewDialog.getByRole("button", { name: "이 시간으로 코트 매칭 열기" }).click();
   await expect(hostPage).toHaveURL(/\/matches\/[0-9a-f-]{36}$/);
   await expect(hostPage.getByText("Rally On에서 준비한 코트예요")).toBeVisible();
   const matchId = new URL(hostPage.url()).pathname.split("/").at(-1);
