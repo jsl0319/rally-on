@@ -80,6 +80,9 @@ export async function resetE2eDatabase(): Promise<E2eFixture> {
       name: "E2E 준비된 테니스장",
       address: "서울시 E2E 마포구 2",
       normalizedVenueKey: "e2e-prepared-tennis-court",
+      settlementBank: "E2E은행",
+      settlementAccountNumber: "111-222-333",
+      settlementAccountHolder: "E2E테니스장",
     },
   });
   const courtUnit = await prisma.courtUnit.create({ data: { courtId: court.id, name: "1번 코트" } });
@@ -90,6 +93,11 @@ export async function resetE2eDatabase(): Promise<E2eFixture> {
       endsAt: partnerEndsAt,
       priceKrw: 36_000,
       maxParticipantCount: 2,
+      minParticipantCount: 2,
+      gameType: "MIXED_DOUBLES",
+      maleCapacity: 1,
+      femaleCapacity: 1,
+      approvalMode: "AUTO",
       visibility: "PUBLIC",
       status: "AVAILABLE",
       publishedAt: now,

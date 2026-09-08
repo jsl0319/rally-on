@@ -3,10 +3,12 @@ import type { CourtSlotStatus, MatchStatus, PrismaClient } from "@/generated/pri
 
 import { DomainError } from "@/server/domain/profile-service";
 import { purposeLabels } from "@/server/domain/profile";
+import { gameTypeLabels } from "@/matches/game-type";
 import { makeConversationReadOnly } from "@/server/domain/match-chat-service";
 
 import type {
   CourtCreateInput,
+  CourtSettlementAccountInput,
   CourtSlotCreateInput,
   CourtSlotListQuery,
   CourtSlotUpdateInput,
@@ -131,6 +133,10 @@ function toCourtView(court: CourtWithRelations) {
     region: { code: court.region.code, name: court.region.name },
     status: court.status,
     operatorApplicationStatus: court.operatorApplication.status,
+    // 운영자 본인 화면 전용. 참가자에게는 공개된 코트 매칭의 스냅샷으로만 보인다.
+    settlementAccount: court.settlementBank && court.settlementAccountNumber && court.settlementAccountHolder
+      ? { bank: court.settlementBank, accountNumber: court.settlementAccountNumber, accountHolder: court.settlementAccountHolder }
+      : null,
     units: court.units.map((unit) => ({ id: unit.id, name: unit.name })),
     createdAt: court.createdAt.toISOString(),
     updatedAt: court.updatedAt.toISOString(),
@@ -155,6 +161,12 @@ export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) 
     endsAt: slot.endsAt.toISOString(),
     guestFeeKrw: slot.priceKrw,
     maxParticipantCount: slot.maxParticipantCount,
+    minParticipantCount: slot.minParticipantCount,
+    gameType: slot.gameType ? { code: slot.gameType, label: gameTypeLabels[slot.gameType] } : null,
+    genderCapacity: slot.maleCapacity != null && slot.femaleCapacity != null
+      ? { male: slot.maleCapacity, female: slot.femaleCapacity }
+      : null,
+    approvalMode: slot.approvalMode,
     usageNote: slot.usageNote,
     court: {
       id: court.id,
@@ -249,6 +261,11 @@ function assertPublishAccess(slot: CourtSlotWithRelations) {
   if (!canPublish(slot.courtUnit.court.operatorApplication.status)) {
     throw new DomainError("OPERATOR_PUBLISH_APPROVAL_REQUIRED", 403, "공개하려면 운영자 공개 승인이 필요해요.");
   }
+  // 참가비를 계좌이체로 받으므로, 입금 계좌 없이 공개하면 참가자가 어디로 보낼지 알 수 없다.
+  const court = slot.courtUnit.court;
+  if (!court.settlementBank || !court.settlementAccountNumber || !court.settlementAccountHolder) {
+    throw new DomainError("OPERATOR_SETTLEMENT_ACCOUNT_REQUIRED", 409, "입금 계좌를 먼저 등록해 주세요.");
+  }
 }
 
 async function assertNoActiveSupplyRestriction(prisma: PrismaClient, operatorApplicationId: string) {
@@ -272,6 +289,26 @@ export async function getMyCourts(prisma: PrismaClient, viewer: { id: string }) 
     orderBy: { createdAt: "desc" },
   });
   return { items: courts.map(toCourtView) };
+}
+
+/** 시설당 한 벌인 입금 계좌를 저장한다. 이미 공개된 코트 매칭의 안내 계좌는 바뀌지 않는다. */
+export async function updateCourtSettlementAccount(
+  prisma: PrismaClient,
+  viewer: { id: string },
+  courtId: string,
+  input: CourtSettlementAccountInput,
+) {
+  await getOwnedCourt(prisma, viewer, courtId);
+  const court = await prisma.court.update({
+    where: { id: courtId },
+    data: {
+      settlementBank: input.bank,
+      settlementAccountNumber: input.accountNumber,
+      settlementAccountHolder: input.accountHolder,
+    },
+    include: courtInclude,
+  });
+  return toCourtView(court);
 }
 
 export async function createCourt(prisma: PrismaClient, viewer: { id: string }, input: CourtCreateInput) {
@@ -336,6 +373,11 @@ export async function createCourtSlot(prisma: PrismaClient, viewer: { id: string
           endsAt,
           priceKrw: input.priceKrw,
           maxParticipantCount: input.maxParticipantCount,
+          minParticipantCount: input.minParticipantCount,
+          gameType: input.gameType,
+          maleCapacity: input.maleCapacity ?? null,
+          femaleCapacity: input.femaleCapacity ?? null,
+          approvalMode: input.approvalMode,
           usageNote: optionalText(input.usageNote),
           statusChangedAt: now,
           statusHistory: {
@@ -430,6 +472,11 @@ export async function updateCourtSlot(
           endsAt,
           priceKrw: input.priceKrw,
           maxParticipantCount: input.maxParticipantCount,
+          minParticipantCount: input.minParticipantCount,
+          gameType: input.gameType,
+          maleCapacity: input.maleCapacity ?? null,
+          femaleCapacity: input.femaleCapacity ?? null,
+          approvalMode: input.approvalMode,
           usageNote: optionalText(input.usageNote),
           version: { increment: 1 },
         },

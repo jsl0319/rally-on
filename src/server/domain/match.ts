@@ -149,6 +149,9 @@ export const applicationStatusLabels: Record<ApplicationStatus, string> = {
   REJECTED: "이번에는 함께하기 어려워요",
   WITHDRAWN: "신청 철회",
   CANCELLED: "모집이 마감됐어요",
+  // 코트 매칭 전용. 계좌이체 흐름의 두 상태다(docs/03-2 §4.2).
+  CONFIRMED: "참가가 확정됐어요",
+  EXPIRED_UNPAID: "입금 기한이 지나 취소됐어요",
 };
 
 export function getApplicationStatusLabel(status: ApplicationStatus, matchStatus: MatchStatus) {
