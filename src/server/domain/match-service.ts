@@ -141,6 +141,7 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
       name: match.externalCourtName,
       address: match.externalCourtAddress,
       courtNumber: match.externalCourtNumber,
+      usageNote: null,
       image,
     };
   }
@@ -156,7 +157,10 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
       participationNote: "참가 신청은 코트 매칭을 연 모집자에게 보내요.",
       name: court?.name ?? null,
       address: court?.address ?? null,
+      // 운영자가 Slot에 적은 현장 이용 안내다. 참가 신청 전에 준비물·현장 규칙을 알 수 있어야 해서
+      // 코트 매칭 상세에서도 그대로 보여 준다(화면 명세 §11의 CP02 정보 순서 5번).
       courtNumber: match.courtSlot?.courtUnit.name ?? null,
+      usageNote: match.courtSlot?.usageNote ?? null,
       image: representativeImage && court
         ? { url: `/api/v1/partner-courts/${court.id}/image`, sourceLabel: "운영자 제공 사진", fallback: "TENNIS_COURT_ILLUSTRATION" as const }
         : { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const },
@@ -170,6 +174,7 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
     name: null,
     address: null,
     courtNumber: null,
+    usageNote: null,
     image: { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const },
   };
 }
