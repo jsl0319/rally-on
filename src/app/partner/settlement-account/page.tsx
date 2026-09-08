@@ -1,7 +1,7 @@
 import { OperatorSettlementAccount } from "@/features/partner/operator-settlement-account";
-import { requireActivePage } from "@/server/auth/require-onboarded-page";
+import { requireOperatorPage } from "@/server/auth/require-onboarded-page";
 
 export default async function OperatorSettlementAccountPage() {
-  await requireActivePage("/partner/settlement-account");
+  await requireOperatorPage("/partner/settlement-account");
   return <OperatorSettlementAccount />;
 }

@@ -1,7 +1,7 @@
 import { OperatorApplicationStatus } from "@/features/partner/operator-application-status";
-import { requireActivePage } from "@/server/auth/require-onboarded-page";
+import { requireOperatorPage } from "@/server/auth/require-onboarded-page";
 
 export default async function PartnerApplicationStatusPage() {
-  await requireActivePage("/partner/application");
+  await requireOperatorPage("/partner/application");
   return <OperatorApplicationStatus />;
 }
