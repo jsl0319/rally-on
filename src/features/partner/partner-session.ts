@@ -7,7 +7,7 @@ export type PublicCourtSlot = {
   statusChangedAt: string;
   startsAt: string;
   endsAt: string;
-  totalCourtFeeKrw: number;
+  guestFeeKrw: number;
   maxParticipantCount: number;
   usageNote: string | null;
   durationMinutes: number;
@@ -28,7 +28,6 @@ export type PublicCourtSlot = {
     acceptedCount: number;
     remainingSpots: number;
     beginnerWelcome: boolean;
-    estimatedFeePerPersonKrw: number | null;
     playPurposes: Array<{ code: string; label: string }>;
   } | null;
   availableAction: "OPEN_SESSION" | "VIEW_SESSION" | "READ_ONLY";

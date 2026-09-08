@@ -72,8 +72,6 @@ function hostCoordinationMessage(courtSource: HostedMatch["court"]["source"]) {
   const channel = "서비스 내 채팅";
   return courtSource === "COURT_TBD"
     ? `수락된 참가자와 ${channel}에서 코트와 비용을 조율해요.`
-    : courtSource === "PARTNER_COURT"
-      ? "Rally On에서 준비한 코트예요. 수락된 참가자와 당일 준비와 비용 정산 방법을 확인해요."
     : `수락된 참가자와 ${channel}에서 당일 준비와 비용 정산 방법을 확인해요.`;
 }
 

@@ -47,8 +47,6 @@ function acceptedCoordinationMessage(courtSource: SentApplication["match"]["cour
   const channel = "서비스 내 채팅";
   return courtSource === "COURT_TBD"
     ? `수락된 참가자끼리 ${channel}에서 코트와 비용을 조율해요.`
-    : courtSource === "PARTNER_COURT"
-      ? "Rally On에서 준비한 코트예요. 수락된 뒤 당일 준비와 비용 정산 방법을 확인해요."
     : `수락된 참가자끼리 ${channel}에서 당일 준비와 비용 정산 방법을 확인해요.`;
 }
 
@@ -119,7 +117,7 @@ function SentApplicationCard({ item, withdrawing, onWithdraw }: { item: SentAppl
       <h2 className="mt-4 text-lg font-bold">{item.match.title}</h2>
       <p className="mt-3 text-sm text-[var(--tm-text-muted)]">🗓 {schedule(item.match.startsAt)}</p>
       <p className="mt-1 text-sm text-[var(--tm-text-muted)]">📍 {item.match.courtName ?? "코트는 함께 정해요"}</p>
-      <p className="mt-3 text-sm font-semibold text-[var(--tm-action-primary)]">{item.match.courtSource === "COURT_TBD" ? "코트와 비용을 함께 정해요" : item.match.courtSource === "PARTNER_COURT" ? "Rally On에서 준비한 코트예요" : item.match.estimatedFeePerPersonKrw === null ? "예상 비용을 확인해 주세요" : `예상 1인 약 ${item.match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p>
+      <p className="mt-3 text-sm font-semibold text-[var(--tm-action-primary)]">{item.match.courtSource === "COURT_TBD" ? "코트와 비용을 함께 정해요" : item.match.estimatedFeePerPersonKrw === null ? "참가비를 확인해 주세요" : `게스트 참가비 ${item.match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p>
       {item.supplyNotice ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm font-semibold leading-6 text-[var(--tm-status-error-text)]">{item.supplyNotice.message}</p> : <p className="mt-4 border-t border-[var(--tm-border-subtle)] pt-3 text-sm font-medium leading-6 text-[var(--tm-text-muted)]">{nextStepMessage(item.status, item.match.status)}</p>}
       {item.message ? <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">“{item.message}”</p> : null}
     </Link>

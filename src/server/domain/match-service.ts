@@ -249,7 +249,7 @@ function toMatchCardView(match: MatchWithRelations, viewer: Viewer) {
     acceptedCount,
     remainingSpots: Math.max(match.recruitCount - acceptedCount, 0),
     estimatedTotalParticipants: match.recruitCount + 1,
-    estimatedFeePerPersonKrw: getEstimatedFeePerPerson(match.totalCourtFeeKrw, match.recruitCount, match.courtSource),
+    estimatedFeePerPersonKrw: getEstimatedFeePerPerson(match.totalCourtFeeKrw),
     recommendationReasons: recommendation.reasons,
     isHost: match.hostUserId === viewer.id,
   };
@@ -684,7 +684,7 @@ function toApplicationView(application: ApplicationWithRelations, supplyNotice: 
       courtName: application.match.courtSource === "PARTNER_COURT"
         ? application.match.courtSlot?.courtUnit.court.name ?? null
         : application.match.externalCourtName,
-      estimatedFeePerPersonKrw: getEstimatedFeePerPerson(application.match.totalCourtFeeKrw, application.match.recruitCount, application.match.courtSource),
+      estimatedFeePerPersonKrw: getEstimatedFeePerPerson(application.match.totalCourtFeeKrw),
     },
     createdAt: application.createdAt.toISOString(),
     decidedAt: application.decidedAt?.toISOString() ?? null,

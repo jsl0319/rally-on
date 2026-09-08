@@ -207,7 +207,6 @@ describe("Court Partner time supply authorization and state transitions", () => 
         acceptedCount: 1,
         remainingSpots: 2,
         beginnerWelcome: true,
-        estimatedFeePerPersonKrw: 10_000,
         playPurposes: [{ code: "RALLY_PRACTICE", label: "랠리" }],
       },
     });

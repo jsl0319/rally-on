@@ -73,9 +73,7 @@ function PublicSlotCard({ slot }: { slot: PublicCourtSlot }) {
       </div>
       <h3 className="mt-3 text-lg font-bold">{heading}</h3>
       {recruiting ? <p className="mt-1 text-sm text-[var(--tm-text-secondary)]">{recruiting.hostNickname}님이 같이 칠 메이트를 찾고 있어요.</p> : null}
-      <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">🗓 {formatPartnerSchedule(slot.startsAt, slot.endsAt)} · {formatDuration(slot.durationMinutes)}<br />📍 {slot.court.name} · {slot.court.courtNumber}<br />💳 {recruiting
-        ? `1인 약 ${(recruiting.estimatedFeePerPersonKrw ?? 0).toLocaleString("ko-KR")}원 · 예상 ${recruiting.recruitCount + 1}명 기준`
-        : `전체 ${slot.totalCourtFeeKrw.toLocaleString("ko-KR")}원 · 현장 최대 ${slot.maxParticipantCount}명`}</p>
+      <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">🗓 {formatPartnerSchedule(slot.startsAt, slot.endsAt)} · {formatDuration(slot.durationMinutes)}<br />📍 {slot.court.name} · {slot.court.courtNumber}<br />💳 게스트 참가비 {slot.guestFeeKrw.toLocaleString("ko-KR")}원 · 현장 최대 {slot.maxParticipantCount}명</p>
       {recruiting ? <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="rounded-lg bg-[var(--tm-bg-subtle)] px-2.5 py-1 text-xs font-bold text-[var(--tm-action-primary)]">{formatSessionCapacity(recruiting)}</span>
         {recruiting.playPurposes.map((purpose) => <span className="rounded-lg bg-[var(--tm-bg-highlight)] px-2.5 py-1 text-xs font-semibold text-[var(--tm-text-secondary)]" key={purpose.code}>{purpose.label}</span>)}

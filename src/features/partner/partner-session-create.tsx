@@ -203,7 +203,6 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
     </main>;
   }
 
-  const estimatedFee = Math.ceil(slot.totalCourtFeeKrw / (form.recruitCount + 1));
 
   return <main className="min-h-svh bg-[#F4F6FA] pb-36 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px] px-5 pt-6">
     <BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath={`/partner-sessions/${slot.id}`} />
@@ -213,7 +212,7 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
 
     <section className="mt-6 overflow-hidden rounded-3xl border border-[var(--tm-border-default)] bg-white p-4">
       <CourtMedia alt={`${slot.court.name} 코트 이미지`} className="aspect-[7/3] w-full" fallbackLabel="Rally On 기본 코트 이미지" image={slot.court.image} />
-      <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">🗓 {formatPartnerSchedule(slot.startsAt, slot.endsAt)} · {formatDuration(slot.durationMinutes)}<br />📍 {slot.court.name} · {slot.court.courtNumber}<br />전체 {slot.totalCourtFeeKrw.toLocaleString("ko-KR")}원 · 현장 최대 {slot.maxParticipantCount}명</p>
+      <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">🗓 {formatPartnerSchedule(slot.startsAt, slot.endsAt)} · {formatDuration(slot.durationMinutes)}<br />📍 {slot.court.name} · {slot.court.courtNumber}<br />게스트 참가비 {slot.guestFeeKrw.toLocaleString("ko-KR")}원 · 현장 최대 {slot.maxParticipantCount}명</p>
       {slot.usageNote ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-3 py-2 text-sm leading-5 text-[var(--tm-text-secondary)]">{slot.usageNote}</p> : null}
     </section>
 
@@ -276,8 +275,8 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
     </FormPanel>
 
     <section className="mt-6 rounded-2xl bg-[var(--tm-bg-subtle)] p-4 text-sm leading-6">
-      <p className="font-semibold">예상 1인 비용 약 {estimatedFee.toLocaleString("ko-KR")}원</p>
-      <p className="mt-1 text-[var(--tm-text-secondary)]">모집자를 포함한 예상 {form.recruitCount + 1}명 기준이에요. Rally On에서 결제하지 않아요.</p>
+      <p className="font-semibold">게스트 참가비 {slot.guestFeeKrw.toLocaleString("ko-KR")}원</p>
+      <p className="mt-1 text-[var(--tm-text-secondary)]">운영자가 정한 금액이라 바꿀 수 없어요. Rally On에서 결제하지 않고, 참가자와 직접 정산해요.</p>
     </section>
 
     {error ? <p className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}
@@ -288,7 +287,6 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
 
     <PartnerSessionPreviewSheet
       error={submitError}
-      estimatedFee={estimatedFee}
       form={form}
       onClose={() => setIsPreviewOpen(false)}
       onSubmit={() => void submit()}
@@ -300,9 +298,8 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
 }
 
 // 공개 직전에 실제로 보일 모습을 한 번 확인시킨다. 실제 개설은 이 시트의 CTA에서만 일어난다.
-function PartnerSessionPreviewSheet({ error, estimatedFee, form, onClose, onSubmit, open, saving, slot }: {
+function PartnerSessionPreviewSheet({ error, form, onClose, onSubmit, open, saving, slot }: {
   error: string;
-  estimatedFee: number;
   form: PartnerSessionForm;
   onClose: () => void;
   onSubmit: () => void;
@@ -326,7 +323,7 @@ function PartnerSessionPreviewSheet({ error, estimatedFee, form, onClose, onSubm
                 <PreviewItem icon={<CalendarBlank aria-hidden size={19} weight="fill" />} label="일시" value={`${formatPartnerSchedule(slot.startsAt, slot.endsAt)} · ${formatDuration(slot.durationMinutes)}`} />
                 <PreviewItem icon={<MapPin aria-hidden size={19} weight="fill" />} label="코트" value={[slot.court.name, slot.court.courtNumber, slot.court.address].filter(Boolean).join(" · ")} />
                 <PreviewItem icon={<UsersThree aria-hidden size={19} weight="fill" />} label="모집" value={`추가 ${form.recruitCount}명 · 현장 최대 ${slot.maxParticipantCount}명`} />
-                <PreviewItem icon={<CurrencyKrw aria-hidden size={19} weight="bold" />} label="예상 1인 비용" value={`약 ${estimatedFee.toLocaleString("ko-KR")}원 · 전체 ${slot.totalCourtFeeKrw.toLocaleString("ko-KR")}원`} />
+                <PreviewItem icon={<CurrencyKrw aria-hidden size={19} weight="bold" />} label="게스트 참가비" value={`${slot.guestFeeKrw.toLocaleString("ko-KR")}원`} />
               </dl>
               <div className="mt-5 border-t border-[var(--tm-border-subtle)] pt-4">
                 <p className="text-sm font-bold">함께하고 싶은 플레이</p>
@@ -336,7 +333,7 @@ function PartnerSessionPreviewSheet({ error, estimatedFee, form, onClose, onSubm
               </div>
               {slot.usageNote ? <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{slot.usageNote}</p> : null}
               {form.settlementBank.trim() ? <div className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] p-4 text-sm"><p className="font-bold">정산 정보 · 수락된 참가자에게만 공개</p><p className="mt-2 break-all">{form.settlementBank} {form.settlementAccountNumber} · {form.settlementAccountHolder}</p></div> : null}
-              <p className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">코트 비용은 Rally On에서 결제하지 않아요. 참가자와 직접 정산해요.</p>
+              <p className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">참가비는 Rally On에서 결제하지 않아요. 참가자와 직접 정산해요.</p>
             </div>
           </article>
           {error ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}

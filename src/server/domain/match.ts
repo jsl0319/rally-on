@@ -205,9 +205,9 @@ export function getRecommendation(
 // EXTERNAL_RESERVED 매칭은 모집자가 입력하는 금액 자체가 게스트 1인이 내는
 // 참가비라, 나누지 않고 그대로 돌려준다. PARTNER_COURT 매칭만 예약된 코트
 // 전체 비용을 인원 수(모집자 포함)로 나눠 1인 예상 비용을 계산한다.
-export function getEstimatedFeePerPerson(totalCourtFeeKrw: number | null, recruitCount: number, courtSource: "EXTERNAL_RESERVED" | "PARTNER_COURT" | "COURT_TBD") {
-  if (totalCourtFeeKrw === null) return null;
-  if (courtSource === "PARTNER_COURT") return Math.ceil(totalCourtFeeKrw / (recruitCount + 1));
+// 제휴 코트 매칭도 게스트 한 명이 내는 고정 참가비만 쓴다. 코트 총액을 인원으로 나누던
+// 계산은 없앴고, 두 코트 출처 모두 저장된 금액을 그대로 1인 참가비로 본다.
+export function getEstimatedFeePerPerson(totalCourtFeeKrw: number | null) {
   return totalCourtFeeKrw;
 }
 

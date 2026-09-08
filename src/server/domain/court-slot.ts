@@ -12,7 +12,8 @@ export const courtSlotCreateInputSchema = z.object({
   courtUnitName: z.string().trim().min(1, "코트 면 이름을 입력해 주세요.").max(50, "코트 면 이름은 50자 이하여야 해요."),
   startsAt: isoDateTimeSchema,
   endsAt: isoDateTimeSchema,
-  priceKrw: z.number().int().min(0, "코트 전체 비용은 0원 이상이어야 해요."),
+  // 게스트 한 명이 내는 고정 참가비다. 코트 한 면의 총액이 아니라서 인원으로 나누지 않는다.
+  priceKrw: z.number().int().min(0, "게스트 참가비는 0원 이상이어야 해요.").max(1_000_000, "게스트 참가비는 100만원 이하로 입력해 주세요."),
   maxParticipantCount: z.number().int().min(2, "현장 최대 인원은 2명 이상이어야 해요."),
   usageNote: z.string().trim().max(500, "이용 안내는 500자 이하여야 해요.").nullable().optional(),
 }).superRefine((input, context) => {

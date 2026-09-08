@@ -3,7 +3,6 @@ import type { CourtSlotStatus, MatchStatus, PrismaClient } from "@/generated/pri
 
 import { DomainError } from "@/server/domain/profile-service";
 import { purposeLabels } from "@/server/domain/profile";
-import { getEstimatedFeePerPerson } from "@/server/domain/match";
 import { makeConversationReadOnly } from "@/server/domain/match-chat-service";
 
 import type {
@@ -154,7 +153,7 @@ export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) 
     statusChangedAt: slot.statusChangedAt.toISOString(),
     startsAt: slot.startsAt.toISOString(),
     endsAt: slot.endsAt.toISOString(),
-    totalCourtFeeKrw: slot.priceKrw,
+    guestFeeKrw: slot.priceKrw,
     maxParticipantCount: slot.maxParticipantCount,
     usageNote: slot.usageNote,
     court: {
@@ -192,7 +191,6 @@ function toPublicCourtSlotView(slot: PublicCourtSlotWithRelations, now = new Dat
           acceptedCount,
           remainingSpots: Math.max(match.recruitCount - acceptedCount, 0),
           beginnerWelcome: match.partnerPreference === "COMPLETE_BEGINNER_WELCOME",
-          estimatedFeePerPersonKrw: getEstimatedFeePerPerson(slot.priceKrw, match.recruitCount, "PARTNER_COURT"),
           playPurposes: match.purposes.map(({ purpose }) => ({ code: purpose, label: purposeLabels[purpose] })),
         }
       : null,

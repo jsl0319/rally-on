@@ -35,12 +35,8 @@ describe("M3 match discovery rules", () => {
     expect(isDiscoverableMatch({ ...base, startsAt: new Date("2028-01-01T01:00:00.000Z") })).toBe(false);
   });
 
-  it("rounds the expected individual fee up to a won for a partner court's shared total", () => {
-    expect(getEstimatedFeePerPerson(40_000, 2, "PARTNER_COURT")).toBe(13_334);
-  });
-
-  it("treats an external-reserved match's amount as the guest fee itself, unsplit", () => {
-    expect(getEstimatedFeePerPerson(40_000, 2, "EXTERNAL_RESERVED")).toBe(40_000);
+  it("treats the stored amount as the fixed guest fee for both court sources", () => {
+    expect(getEstimatedFeePerPerson(40_000)).toBe(40_000);
   });
 });
 
@@ -105,7 +101,7 @@ describe("M4 match creation input", () => {
   });
 
   it("keeps the null fee calculation for historical court-undecided records", () => {
-    expect(getEstimatedFeePerPerson(null, 2, "COURT_TBD")).toBeNull();
+    expect(getEstimatedFeePerPerson(null)).toBeNull();
   });
 
   it("rejects an invalid court source or time range while keeping contact in the Match chat", () => {
