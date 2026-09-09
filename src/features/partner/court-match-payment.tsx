@@ -77,6 +77,6 @@ export function CourtMatchPayment({ participation, onRefresh }: { participation:
     </div> : null}
     {error ? <p role="alert" className="mt-3 text-sm text-rose-600">{error}</p> : null}
     {notice ? <p role="status" className="mt-3 text-sm text-blue-700">{notice}</p> : null}
-    <div className="mt-4 flex items-center justify-between gap-3 text-sm"><button className="min-h-11 font-semibold text-blue-600" disabled={busy} onClick={() => { void onRefresh().catch(() => setError("상태를 새로 불러오지 못했어요.")); }}>상태 새로고침</button><Link href="/support/inquiry" className="font-semibold text-slate-500">입금·환불 문의</Link></div>
+    <div className="mt-4 flex items-center justify-between gap-3 text-sm"><button className="min-h-11 font-semibold text-blue-600" disabled={busy} onClick={() => { void onRefresh().catch(() => setError("상태를 새로 불러오지 못했어요.")); }}>상태 새로고침</button><Link href={`/support/inquiry?matchId=${encodeURIComponent(participation.id)}`} className="font-semibold text-slate-500">입금·환불 문의</Link></div>
   </div>;
 }

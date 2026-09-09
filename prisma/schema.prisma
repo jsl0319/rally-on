@@ -437,13 +437,18 @@ enum SupportInquiryStatus {
 model SupportInquiry {
   id        String               @id @default(uuid()) @db.Uuid
   userId    String               @map("user_id") @db.Uuid
+  /// 어느 매칭에 대한 문의인지. 코트 매칭의 입금·환불 문의는 건을 특정할 수 있어야
+  /// 운영자에게 되묻지 않고 처리할 수 있다. 일반 문의는 비어 있다.
+  matchId   String?              @map("match_id") @db.Uuid
   message   String               @db.VarChar(1000)
   status    SupportInquiryStatus @default(OPEN)
   createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user  User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  match Match? @relation(fields: [matchId], references: [id], onDelete: Restrict)
 
   @@index([userId, createdAt(sort: Desc)])
+  @@index([matchId, createdAt(sort: Desc)])
   @@map("support_inquiries")
 }
 
@@ -498,6 +503,7 @@ model Match {
   supplyIncidents CourtSupplyIncident[]
   supplyNoticeRecipients MatchSupplyNoticeRecipient[]
   conversation MatchConversation?
+  supportInquiries SupportInquiry[]
 
   @@unique([hostUserId, clientRequestId])
   @@index([status, startsAt])

@@ -1,12 +1,14 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { BackButton } from "@/components/navigation/back-button";
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 
-type Inquiry = { id: string; message: string; status: "OPEN" | "ANSWERED"; statusLabel: string; createdAt: string };
+type InquiryMatch = { title: string; startsAt: string } | null;
+type Inquiry = { id: string; message: string; status: "OPEN" | "ANSWERED"; statusLabel: string; createdAt: string; match: InquiryMatch };
 
 function apiMessage(body: unknown, fallback: string) {
   if (typeof body === "object" && body !== null && "error" in body && typeof body.error === "object" && body.error !== null && "message" in body.error && typeof body.error.message === "string") return body.error.message;
@@ -18,6 +20,8 @@ function formatDate(value: string) {
 }
 
 export function MSupportInquiry() {
+  // 코트 매칭 화면에서 넘어오면 어느 건인지 함께 보낸다. 운영자에게 되묻지 않아도 된다.
+  const matchId = useSearchParams().get("matchId");
   const [items, setItems] = useState<Inquiry[] | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -47,7 +51,7 @@ export function MSupportInquiry() {
     setSubmitError("");
     setSubmitted(false);
     try {
-      const response = await fetch("/api/v1/support-inquiries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) });
+      const response = await fetch("/api/v1/support-inquiries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message, matchId }) });
       const body: unknown = await response.json();
       if (!response.ok) throw new Error(apiMessage(body, "문의를 보내지 못했어요."));
       setMessage("");
@@ -67,6 +71,7 @@ export function MSupportInquiry() {
       <BackButton ariaLabel="마이로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/my" />
       <h1 className="mt-4 text-2xl font-bold">1:1 문의</h1>
       <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">궁금한 점이나 불편한 점을 남겨주시면 확인 후 도와드릴게요.</p>
+      {matchId ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-text-secondary)]">방금 보던 매칭에 대한 문의로 접수돼요. 어떤 건인지 따로 적지 않으셔도 돼요.</p> : null}
 
       <section className="mt-5 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)]">
         <label className="block text-sm font-semibold" htmlFor="support-message">문의 내용</label>
@@ -91,6 +96,7 @@ export function MSupportInquiry() {
             <span className={`inline-flex min-h-6 items-center rounded-full px-2.5 text-xs font-semibold ${item.status === "ANSWERED" ? "bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "bg-[var(--tm-bg-subtle-muted)] text-[var(--tm-text-secondary)]"}`}>{item.statusLabel}</span>
             <span className="text-xs text-[var(--tm-text-muted)]">{formatDate(item.createdAt)}</span>
           </div>
+          {item.match ? <p className="mt-2 text-xs font-semibold text-[var(--tm-action-primary)]">{item.match.title} · {formatDate(item.match.startsAt)}</p> : null}
           <p className="mt-2 whitespace-pre-line text-sm leading-6">{item.message}</p>
         </li>)}
       </ul>}
