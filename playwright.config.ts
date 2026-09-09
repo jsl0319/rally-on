@@ -1,6 +1,13 @@
+import { config } from "dotenv";
 import { defineConfig } from "@playwright/test";
 
 import { E2E_AUTH_SECRET, E2E_BASE_URL, requireE2eDatabaseUrl } from "./tests/e2e/e2e-environment";
+
+// README는 `E2E_DATABASE_URL`을 .env.local에 두라고 안내하는데, 이 설정 파일이
+// 그것을 읽지 않아 셸에 직접 export하지 않으면 무조건 실패했다. prisma.config.ts와
+// 같은 순서로 로드한다.
+config({ path: ".env.local" });
+config();
 
 const e2eDatabaseUrl = requireE2eDatabaseUrl();
 

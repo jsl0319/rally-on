@@ -135,13 +135,29 @@ E2E는 실제 카카오 계정이나 운영 DB를 사용하지 않습니다. 별
 E2E_DATABASE_URL=postgresql://tennis_mate:tennis_mate@localhost:5432/tennis_mate_e2e?schema=public
 ```
 
-먼저 전용 DB에 migration을 적용하고 Chromium을 설치합니다.
+로컬에 DB가 없으면 저장소의 compose로 띄우고 e2e 전용 DB를 하나 만듭니다.
+
+```bash
+docker compose up -d postgres
+docker compose exec postgres psql -U tennis_mate -d tennis_mate \
+  -c 'CREATE DATABASE tennis_mate_e2e OWNER tennis_mate;'
+```
+
+그다음 전용 DB에 migration을 적용하고 Chromium을 설치합니다. 아래 명령의
+`$E2E_DATABASE_URL`은 셸 변수이므로, `.env.local`에만 적어 뒀다면 이 줄에서는
+값을 직접 넣거나 먼저 `export` 해야 합니다.
 
 ```bash
 DATABASE_URL="$E2E_DATABASE_URL" DATABASE_URL_UNPOOLED="$E2E_DATABASE_URL" npm run db:migrate:deploy
 npm run e2e:install
 npm run e2e
 ```
+
+`npm run e2e` 자체는 `.env.local`을 읽으므로 셸 변수가 없어도 됩니다.
+
+> **주의:** 테스트는 시작할 때 이 DB의 `users`·`regions`를 `TRUNCATE ... CASCADE`
+> 합니다. `E2E_DATABASE_URL`에 개발·운영 DB를 넣으면 데이터가 지워집니다. DB 이름에
+> `e2e`가 없으면 실행을 막지만, 값을 넣기 전에 한 번 더 확인해 주세요.
 
 `npm run e2e`는 로컬 `127.0.0.1:3100`에서 앱을 실행하고, 390×844 기준의 테스트
 계정 두 개로 신청·수락·채팅 권한과 하단 메뉴 프레임을 확인합니다.
