@@ -241,6 +241,35 @@ describe("Court Partner time supply authorization and state transitions", () => 
     });
   });
 
+  it("counts what the operator has to act on, and only refunds it can actually send", async () => {
+    const linkedSlot = {
+      ...ownedSlot("PUBLISH_APPROVED"),
+      visibility: "PUBLIC",
+      status: "AVAILABLE",
+      match: { id: "match-id", hostUserId: "operator-user-id", status: "OPEN" },
+    };
+    const findMany = vi.fn().mockResolvedValue([linkedSlot]);
+    const applications = vi.fn().mockResolvedValue([
+      { matchId: "match-id", status: "PENDING", depositClaimedAt: null, confirmedAt: null, refundRequestedAt: null, refundCompletedAt: null },
+      // 입금했다고 알린 건만 운영자가 확인할 수 있다.
+      { matchId: "match-id", status: "ACCEPTED", depositClaimedAt: new Date(), confirmedAt: null, refundRequestedAt: null, refundCompletedAt: null },
+      { matchId: "match-id", status: "ACCEPTED", depositClaimedAt: null, confirmedAt: null, refundRequestedAt: null, refundCompletedAt: null },
+      { matchId: "match-id", status: "CONFIRMED", depositClaimedAt: new Date(), confirmedAt: new Date(), refundRequestedAt: null, refundCompletedAt: null },
+      // 환불 대기지만 계좌를 아직 안 넣었으면 운영자가 보낼 수 없다.
+      { matchId: "match-id", status: "CANCELLED", depositClaimedAt: new Date(), confirmedAt: new Date(), refundRequestedAt: null, refundCompletedAt: null },
+      { matchId: "match-id", status: "CANCELLED", depositClaimedAt: new Date(), confirmedAt: new Date(), refundRequestedAt: new Date(), refundCompletedAt: null },
+    ]);
+    const prisma = {
+      courtSlot: { findMany },
+      matchApplication: { findMany: applications },
+      operatorSupplyRestriction: { findFirst: vi.fn().mockResolvedValue(null) },
+    } as unknown as Parameters<typeof getMyCourtSlots>[0];
+
+    const result = await getMyCourtSlots(prisma, viewer);
+
+    expect(result.items[0].actions).toEqual({ pendingApproval: 1, depositToConfirm: 1, refundToComplete: 1, confirmed: 1 });
+  });
+
   it("keeps a blocked slot read-only even though a session is still linked", async () => {
     // 운영자가 공개를 중지했거나 시간이 끝났으면 상세로 보내지 않는다(03-1 §7.1).
     const blockedSlot = {

@@ -4,6 +4,7 @@ import type { CourtSlotStatus, MatchStatus, PrismaClient } from "@/generated/pri
 import { DomainError } from "@/server/domain/profile-service";
 import { purposeLabels } from "@/server/domain/profile";
 import { gameTypeLabels } from "@/matches/game-type";
+import { isAwaitingRefund } from "./court-match";
 import { makeConversationReadOnly } from "@/server/domain/match-chat-service";
 import { getApplicationDeadline, seatHoldingStatuses } from "./court-match";
 
@@ -403,6 +404,31 @@ export async function createCourtSlot(prisma: PrismaClient, viewer: { id: string
   }
 }
 
+/**
+ * 운영자가 지금 처리해야 할 건수. 참가자 쪽 `보낸 신청` 배지와 대칭되는 자리다.
+ * 이 값이 없으면 운영자는 알림을 놓쳤을 때 코트 매칭을 하나씩 열어봐야 한다.
+ */
+async function getOperatorActionCounts(prisma: PrismaClient, matchIds: string[]) {
+  const counts = new Map<string, { pendingApproval: number; depositToConfirm: number; refundToComplete: number; confirmed: number }>();
+  if (matchIds.length === 0) return counts;
+
+  const applications = await prisma.matchApplication.findMany({
+    where: { matchId: { in: matchIds } },
+    select: { matchId: true, status: true, depositClaimedAt: true, confirmedAt: true, refundRequestedAt: true, refundCompletedAt: true },
+  });
+  for (const application of applications) {
+    const entry = counts.get(application.matchId)
+      ?? { pendingApproval: 0, depositToConfirm: 0, refundToComplete: 0, confirmed: 0 };
+    if (application.status === "PENDING") entry.pendingApproval += 1;
+    if (application.status === "ACCEPTED" && application.depositClaimedAt) entry.depositToConfirm += 1;
+    if (application.status === "CONFIRMED") entry.confirmed += 1;
+    // 환불 대기 중이면서 참가자가 계좌까지 넣은 건만 운영자가 지금 처리할 수 있다.
+    if (isAwaitingRefund(application) && application.refundRequestedAt) entry.refundToComplete += 1;
+    counts.set(application.matchId, entry);
+  }
+  return counts;
+}
+
 export async function getMyCourtSlots(prisma: PrismaClient, viewer: { id: string }, query: CourtSlotListQuery = {}) {
   const [slots, restriction] = await Promise.all([
     prisma.courtSlot.findMany({
@@ -420,8 +446,16 @@ export async function getMyCourtSlots(prisma: PrismaClient, viewer: { id: string
     }),
   ]);
   const now = new Date();
+  const actionCounts = await getOperatorActionCounts(
+    prisma,
+    slots.map((slot) => slot.match?.id).filter((id): id is string => Boolean(id)),
+  );
   return {
-    items: slots.map((slot) => toCourtSlotView(slot, now)),
+    items: slots.map((slot) => ({
+      ...toCourtSlotView(slot, now),
+      actions: (slot.match && actionCounts.get(slot.match.id))
+        || { pendingApproval: 0, depositToConfirm: 0, refundToComplete: 0, confirmed: 0 },
+    })),
     supplyRestriction: restriction
       ? { active: true, triggeredAt: restriction.triggeredAt.toISOString(), reasonCode: restriction.reasonCode }
       : { active: false },
