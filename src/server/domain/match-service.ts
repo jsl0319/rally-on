@@ -156,7 +156,7 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
     return {
       source: match.courtSource,
       sourceLabel: "Rally On에서 준비한 코트예요",
-      participationNote: "참가 신청은 코트 매칭을 연 모집자에게 보내요.",
+      participationNote: "참가 신청은 코트 매칭을 연 운영자에게 보내요.",
       name: court?.name ?? null,
       address: court?.address ?? null,
       // 운영자가 Slot에 적은 현장 이용 안내다. 참가 신청 전에 준비물·현장 규칙을 알 수 있어야 해서

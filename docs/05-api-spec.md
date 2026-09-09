@@ -340,7 +340,7 @@ CourtSupplyIncidentStatus = REQUESTED | WITHDRAWN | REVIEWED | REJECTED
 
 모든 Match 응답의 `court.image`는 `url`, `sourceLabel`, `fallback`을 제공한다. 사진이 없으면 `url`과 `sourceLabel`은 `null`이며 클라이언트는 `TENNIS_COURT_ILLUSTRATION`을 표시한다. `url`은 비공개 객체 URL이 아니라 인증·권한을 확인하는 같은 출처의 사진 읽기 API다. 외부 예약 사진의 `sourceLabel`은 `모집자 제공 사진`, 제휴 코트 사진의 값은 `운영자 제공 사진`이다. 사진은 예약 검증이나 Rally On 보증을 뜻하지 않는다.
 
-`PARTNER_COURT` 응답에서는 `court.sourceLabel`이 `Rally On에서 준비한 코트예요`이고, `court.participationNote`가 `참가 신청은 세션을 연 모집자에게 보내요.`다. Match 응답에는 `courtSlotId`와 운영자 내부 식별자를 응답하지 않으며 코트명·주소·시각·전체 비용은 연결 Slot에서 서버가 조합한다. 공개 Slot 목록 응답은 별도 `PublicCourtSlotView`만 사용한다.
+`PARTNER_COURT` 응답에서는 `court.sourceLabel`이 `Rally On에서 준비한 코트예요`이고, `court.participationNote`가 `참가 신청은 코트 매칭을 연 운영자에게 보내요.`다. 두 값은 응답에 남아 있지만 매칭 상세 화면은 출처 배지를 그리지 않는다(`6479506`). `/matches/{id}`도 코트 매칭이면 `/partner-sessions/{slotId}`로 넘긴다. Match 응답에는 `courtSlotId`와 운영자 내부 식별자를 응답하지 않으며 코트명·주소·시각·전체 비용은 연결 Slot에서 서버가 조합한다. 공개 Slot 목록 응답은 별도 `PublicCourtSlotView`만 사용한다.
 
 ```json
 {
