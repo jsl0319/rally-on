@@ -1471,6 +1471,7 @@ GET  /api/v1/partner-session-slots/{slotId}
 
 POST /api/v1/court-matches/{matchId}/applications             참가 신청
 POST /api/v1/court-match-applications/{id}/decision           운영자 승인·거절
+POST /api/v1/court-match-applications/{id}/cancel              참가자 참가 취소
 POST /api/v1/court-match-applications/{id}/deposit            참가자 입금 알림
 POST /api/v1/court-match-applications/{id}/confirm            운영자 입금 확인·확정
 PUT  /api/v1/court-match-applications/{id}/refund-account     참가자 환불 계좌
@@ -1484,6 +1485,14 @@ PUT  /api/v1/operator/courts/{courtId}/settlement-account     운영자 입금 �
 > (`POST /api/v1/matches` with `courtSource=PARTNER_COURT`)는 폐기됐고, 서버가
 > `COURT_MATCH_APPLICATION_PATH`로 막는다. 코트 매칭은 운영자가 시간을 공개할 때
 > 서버가 함께 만든다. 자세한 규칙은 `03-2-court-match-operator-hosted-redesign.md`.
+
+`POST /court-match-applications/{id}/cancel`은 본인의 신청만 취소한다. 본문은 없다.
+입금 확인 전이면 `WITHDRAWN`이 되고 돌려줄 금액이 없다. 확정된 참가는 `CANCELLED`가
+되며 응답의 `refundAmountKrw`가 환불 대상 금액이다. 금액은 매칭 시작일 기준으로
+이틀 전까지 전액, 하루 전 절반, 당일 0원이며 한국 시간 날짜로 계산한다. 취소는 신청
+마감(시작 30분 전) 이후에도 받고 시작 시각 이후에는 `COURT_MATCH_ALREADY_STARTED`로
+거절한다. 자리는 항상 반환하며, 정원이 차서 마감됐던 매칭은 신청 마감 전에 한해 다시
+모집 중으로 돌아간다.
 >
 > 코트 매칭은 `GET /api/v1/matches` 목록과 추천에서도 제외된다. `매칭`과 `코트 매칭`은
 > 서로 다른 메뉴이며 섞이지 않는다.
