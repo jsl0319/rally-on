@@ -19,6 +19,7 @@ import { getCourtMatchParticipation, getOperatorCourtMatch } from "@/server/doma
 import { reportCourtSupplyIncident } from "@/server/domain/court-slot-service";
 import { acceptApplication, cancelMatch } from "@/server/domain/match-service";
 import { getProfile } from "@/server/domain/profile-service";
+import { createSupportInquiry, listMySupportInquiries } from "@/server/domain/support-service";
 
 import { requireE2eDatabaseUrl } from "../e2e/e2e-environment";
 
@@ -561,6 +562,34 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
 
     await expect(cancelCourtMatchApplication(prisma, { id: applicant.id }, applied.id))
       .rejects.toMatchObject({ code: "COURT_MATCH_ALREADY_STARTED" });
+  });
+
+
+  // ── 문의의 매칭 참조 ─────────────────────────────────────────
+
+  it("코트 매칭에서 보낸 문의는 어느 건인지 함께 남는다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const applicant = await makeUser("참가자", "FEMALE");
+    const { matchId } = await makeCourtMatch(operator.id);
+    await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
+
+    await createSupportInquiry(prisma, applicant.id, { message: "입금했는데 확정이 안 됐어요. 확인 부탁드려요.", matchId });
+    const mine = await listMySupportInquiries(prisma, applicant.id);
+    expect(mine.items[0].match).toMatchObject({ title: "DB 테니스장" });
+
+    // 운영자도 자기가 연 매칭이면 붙는다.
+    await createSupportInquiry(prisma, operator.id, { message: "참가자가 입금했다는데 통장에 없어요.", matchId });
+    expect((await listMySupportInquiries(prisma, operator.id)).items[0].match).not.toBeNull();
+  });
+
+  it("남의 매칭 번호를 적어 보내도 문의에 붙지 않는다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const outsider = await makeUser("제3자", "MALE");
+    const { matchId } = await makeCourtMatch(operator.id);
+
+    await createSupportInquiry(prisma, outsider.id, { message: "이 매칭 참가자 연락처를 알려 주세요.", matchId });
+    const mine = await listMySupportInquiries(prisma, outsider.id);
+    expect(mine.items[0].match).toBeNull();
   });
 
   // ── §7 실제 동시 실행 ─────────────────────────────────────────
