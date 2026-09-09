@@ -112,7 +112,7 @@ function toProfileView(profile: ProfileWithRelations | null) {
   };
 }
 
-function toProfileSnapshot(profile: ProfileWithRelations) {
+export function toProfileSnapshot(profile: ProfileWithRelations) {
   return {
     schemaVersion: 1,
     profileVersion: profile.version,
@@ -183,9 +183,9 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
 async function reconcileStartedMatch(transaction: MatchTransaction, matchId: string, now = new Date()) {
   const match = await transaction.match.findUnique({
     where: { id: matchId },
-    select: { id: true, status: true, startsAt: true, applications: { select: { status: true } } },
+    select: { id: true, status: true, courtSource: true, startsAt: true, applications: { select: { status: true } } },
   });
-  if (!match || match.status !== "OPEN" || match.startsAt > now) return match?.status ?? null;
+  if (!match || match.courtSource === "PARTNER_COURT" || match.status !== "OPEN" || match.startsAt > now) return match?.status ?? null;
 
   const hasAcceptedApplicant = match.applications.some((application) => application.status === "ACCEPTED");
   const nextStatus = hasAcceptedApplicant ? "CLOSED" : "EXPIRED";
@@ -208,7 +208,7 @@ async function reconcileStartedMatch(transaction: MatchTransaction, matchId: str
 
 export async function reconcileStartedMatches(prisma: PrismaClient, now = new Date()) {
   const matches = await prisma.match.findMany({
-    where: { status: "OPEN", startsAt: { lte: now } },
+    where: { courtSource: { not: "PARTNER_COURT" }, status: "OPEN", startsAt: { lte: now } },
     select: { id: true },
   });
   const statuses = await Promise.all(matches.map(({ id }) => prisma.$transaction((transaction) => reconcileStartedMatch(transaction, id, now))));
@@ -301,7 +301,7 @@ export async function getOnboardedViewer(prisma: PrismaClient, user: { id: strin
 }
 
 function filterDiscoverable(matches: MatchWithRelations[], now: Date) {
-  return matches.filter((match) => match.courtSource !== "COURT_TBD" && isDiscoverableMatch({
+  return matches.filter((match) => match.courtSource === "EXTERNAL_RESERVED" && isDiscoverableMatch({
     status: match.status,
     startsAt: match.startsAt,
     recruitCount: match.recruitCount,
@@ -313,7 +313,7 @@ function filterDiscoverable(matches: MatchWithRelations[], now: Date) {
 export async function getRecommendedMatches(prisma: PrismaClient, viewer: Viewer, limit: number) {
   const now = new Date();
   const matches = await prisma.match.findMany({
-    where: { status: "OPEN", startsAt: { gt: now }, NOT: { hostUserId: viewer.id } },
+    where: { courtSource: "EXTERNAL_RESERVED", status: "OPEN", startsAt: { gt: now }, NOT: { hostUserId: viewer.id } },
     include: matchInclude,
   });
 
@@ -350,7 +350,7 @@ export async function getMatches(
   const baseWhere = {
     status: "OPEN",
     startsAt: { gt: input.startsFrom, ...(dateFilterEnd ? { lt: dateFilterEnd } : {}) },
-    courtSource: { not: "COURT_TBD" },
+    courtSource: "EXTERNAL_RESERVED",
     NOT: [
       { applications: { some: { applicantUserId: viewer.id } } },
     ],
@@ -534,77 +534,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
   try {
     const created = await prisma.$transaction(async (transaction) => {
       if (input.courtSource === "PARTNER_COURT") {
-        const now = new Date();
-        const slot = await transaction.courtSlot.findUnique({
-          where: { id: input.courtSlotId },
-          include: {
-            courtUnit: {
-              include: {
-                court: { include: { operatorApplication: { select: { id: true, status: true } } } },
-              },
-            },
-          },
-        });
-        if (!slot || slot.visibility !== "PUBLIC" || slot.status !== "AVAILABLE" || slot.startsAt <= now || slot.courtUnit.court.status !== "ACTIVE" || slot.courtUnit.court.operatorApplication.status !== "PUBLISH_APPROVED") {
-          throw new DomainError("PARTNER_SLOT_NOT_AVAILABLE", 409, "이 코트 시간대로는 더 이상 코트 매칭을 열 수 없어요.");
-        }
-        if (input.recruitCount + 1 > slot.maxParticipantCount) {
-          throw new DomainError("PARTNER_SLOT_CAPACITY_EXCEEDED", 409, "현장 최대 인원보다 많은 참가자를 모집할 수 없어요.");
-        }
-        const restriction = await transaction.operatorSupplyRestriction.findFirst({
-          where: { operatorApplicationId: slot.courtUnit.court.operatorApplication.id, clearedAt: null },
-          select: { id: true },
-        });
-        if (restriction) {
-          throw new DomainError("OPERATOR_SUPPLY_RESTRICTED", 403, "운영상 확인이 끝날 때까지 이 코트 시간으로 새 코트 매칭을 열 수 없어요.");
-        }
-
-        const allocated = await transaction.courtSlot.updateMany({
-          where: { id: slot.id, visibility: "PUBLIC", status: "AVAILABLE", startsAt: { gt: now } },
-          data: { status: "ALLOCATED", statusChangedAt: now, version: { increment: 1 } },
-        });
-        if (allocated.count !== 1) {
-          throw new DomainError("PARTNER_SLOT_ALREADY_ALLOCATED", 409, "이 코트 시간대는 이미 다른 코트 매칭에 연결됐어요.");
-        }
-        await transaction.courtSlotStatusHistory.create({
-          data: {
-            courtSlotId: slot.id,
-            fromStatus: "AVAILABLE",
-            toStatus: "ALLOCATED",
-            actor: "SESSION_HOST",
-            actorUserId: viewer.id,
-            reasonCode: "PARTNER_SESSION_CREATED",
-          },
-        });
-
-        return transaction.match.create({
-          data: {
-            hostUserId: viewer.id,
-            clientRequestId: input.clientRequestId,
-            title: input.title ?? slot.courtUnit.court.name.slice(0, 80),
-            startsAt: slot.startsAt,
-            endsAt: slot.endsAt,
-            courtSource: "PARTNER_COURT",
-            courtSlotId: slot.id,
-            externalCourtName: null,
-            externalCourtAddress: null,
-            externalCourtNumber: null,
-            externalCourtImageUploadId: null,
-            recruitCount: input.recruitCount,
-            partnerPreference: input.partnerPreference,
-            totalCourtFeeKrw: slot.priceKrw,
-            additionalCostNote: null,
-            introduction: optionalText(input.introduction),
-            maleRecruitCount: input.maleRecruitCount ?? null,
-            femaleRecruitCount: input.femaleRecruitCount ?? null,
-            gameType: input.gameType ?? null,
-            settlementBank: optionalText(input.settlementAccount?.bank),
-            settlementAccountNumber: optionalText(input.settlementAccount?.accountNumber),
-            settlementAccountHolder: optionalText(input.settlementAccount?.accountHolder),
-            purposes: { create: input.playPurposes.map((purpose) => ({ purpose })) },
-          },
-          select: { id: true },
-        });
+        throw new DomainError("COURT_MATCH_OPERATOR_ONLY", 409, "코트 매칭은 운영자가 공개해요. 코트 매칭 목록에서 참가해 주세요.");
       }
 
       const imageUploadId = input.externalCourt.imageUploadId ?? null;

@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getPrisma, reconcileStartedMatches, reconcileExpiredConversations } = vi.hoisted(() => ({
+const { getPrisma, reconcileStartedMatches, reconcileExpiredConversations, reconcileCourtMatches } = vi.hoisted(() => ({
   getPrisma: vi.fn(),
   reconcileStartedMatches: vi.fn(),
   reconcileExpiredConversations: vi.fn(),
+  reconcileCourtMatches: vi.fn(),
 }));
 
 vi.mock("@/server/db/prisma", () => ({ getPrisma }));
 vi.mock("@/server/domain/match-service", () => ({ reconcileStartedMatches }));
 vi.mock("@/server/domain/match-chat-service", () => ({ reconcileExpiredConversations }));
+vi.mock("@/server/domain/court-match-service", () => ({ reconcileCourtMatches }));
 
 import { GET } from "./route";
 
@@ -17,6 +19,7 @@ describe("match lifecycle cron endpoint", () => {
     getPrisma.mockReset();
     reconcileStartedMatches.mockReset();
     reconcileExpiredConversations.mockReset();
+    reconcileCourtMatches.mockReset().mockResolvedValue({ checked: 2, expired: 1, cancelled: 0 });
   });
 
   afterEach(() => {
@@ -47,7 +50,9 @@ describe("match lifecycle cron endpoint", () => {
     }));
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ status: "ok", checked: 3, closed: 1, expired: 2, conversations: { checked: 4, readOnly: 1 } });
+    await expect(response.json()).resolves.toEqual({ status: "ok", checked: 3, closed: 1, expired: 2, conversations: { checked: 4, readOnly: 1 }, courtMatches: { checked: 2, expired: 1, cancelled: 0 } });
+    expect(reconcileCourtMatches).toHaveBeenCalledWith(prisma);
+    expect(reconcileCourtMatches.mock.invocationCallOrder[0]).toBeLessThan(reconcileStartedMatches.mock.invocationCallOrder[0]);
     expect(reconcileStartedMatches).toHaveBeenCalledWith(prisma);
     expect(reconcileExpiredConversations).toHaveBeenCalledWith(prisma);
     infoSpy.mockRestore();

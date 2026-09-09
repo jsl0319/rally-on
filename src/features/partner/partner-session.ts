@@ -9,6 +9,10 @@ export type PublicCourtSlot = {
   endsAt: string;
   guestFeeKrw: number;
   maxParticipantCount: number;
+  minParticipantCount: number;
+  gameType: { code: string; label: string } | null;
+  genderCapacity: { male: number; female: number } | null;
+  approvalMode: "AUTO" | "OPERATOR";
   usageNote: string | null;
   durationMinutes: number;
   court: {
@@ -30,7 +34,7 @@ export type PublicCourtSlot = {
     beginnerWelcome: boolean;
     playPurposes: Array<{ code: string; label: string }>;
   } | null;
-  availableAction: "OPEN_SESSION" | "VIEW_SESSION" | "READ_ONLY";
+  availableAction: "APPLY" | "VIEW_SESSION" | "READ_ONLY";
 };
 
 export function formatPartnerSchedule(startsAt: string, endsAt: string) {

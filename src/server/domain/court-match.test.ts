@@ -43,7 +43,9 @@ describe("코트 매칭 기한 계산", () => {
   });
 });
 
-const viewer = { id: "applicant-user-id", profile: { gender: "MALE" as const } };
+// 서비스는 전체 테니스 프로필을 받지만 이 테스트가 보는 것은 성별뿐이다.
+type Viewer = Parameters<typeof applyToCourtMatch>[1];
+const viewer = { id: "applicant-user-id", profile: { gender: "MALE" } } as unknown as Viewer;
 
 function courtMatch(overrides: Record<string, unknown> = {}) {
   return {

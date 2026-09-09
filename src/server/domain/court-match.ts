@@ -67,6 +67,10 @@ export const courtMatchDecisionInputSchema = z.object({
 
 export type CourtMatchDecisionInput = z.infer<typeof courtMatchDecisionInputSchema>;
 
+export const courtMatchApplicationInputSchema = z.object({
+  message: z.string().trim().max(200, "자기소개는 200자까지 입력해 주세요.").optional(),
+});
+
 /** 환불 대기는 별도 상태가 아니라 이 조건의 조합이다(§4.2). */
 export function isAwaitingRefund(application: { status: string; confirmedAt: Date | null; refundCompletedAt: Date | null }) {
   return application.status === "CANCELLED" && application.confirmedAt !== null && application.refundCompletedAt === null;

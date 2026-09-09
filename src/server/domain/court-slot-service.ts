@@ -5,6 +5,7 @@ import { DomainError } from "@/server/domain/profile-service";
 import { purposeLabels } from "@/server/domain/profile";
 import { gameTypeLabels } from "@/matches/game-type";
 import { makeConversationReadOnly } from "@/server/domain/match-chat-service";
+import { getApplicationDeadline, seatHoldingStatuses } from "./court-match";
 
 import type {
   CourtCreateInput,
@@ -58,7 +59,7 @@ const publicCourtSlotInclude = {
       partnerPreference: true,
       host: { select: { nickname: true } },
       purposes: { select: { purpose: true } },
-      _count: { select: { applications: { where: { status: "ACCEPTED" } } } },
+      _count: { select: { applications: { where: { status: { in: [...seatHoldingStatuses] } } } } },
     },
   },
 } satisfies Prisma.CourtSlotInclude;
@@ -67,7 +68,7 @@ type PublicCourtSlotWithRelations = Prisma.CourtSlotGetPayload<{ include: typeof
 
 const slotStatusLabels: Record<CourtSlotStatus, string> = {
   DRAFT: "비공개 초안",
-  AVAILABLE: "세션 열기 가능",
+  AVAILABLE: "공개·모집 중",
   ALLOCATED: "세션 모집 중",
   ENDED: "종료됨",
   BLOCKED: "운영자가 중지했어요",
@@ -90,7 +91,7 @@ const sessionStatusLabels: Record<MatchStatus, string> = {
  */
 const publicSlotStatusLabels: Record<CourtSlotStatus, string> = {
   DRAFT: "비공개",
-  AVAILABLE: "열기 가능",
+  AVAILABLE: "모집 중",
   ALLOCATED: "모집 중",
   ENDED: "이용 완료",
   BLOCKED: "연결 중지",
@@ -144,7 +145,7 @@ function toCourtView(court: CourtWithRelations) {
 }
 
 export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) {
-  const canOpenSession = slot.status === "AVAILABLE" && slot.startsAt > now;
+  const canApply = slot.status === "AVAILABLE" && slot.match?.status === "OPEN" && getApplicationDeadline(slot.startsAt) > now;
   const session = slot.match
     ? { matchId: slot.match.id, status: slot.match.status, statusLabel: sessionStatusLabels[slot.match.status] }
     : null;
@@ -179,7 +180,7 @@ export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) 
         : { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const },
     },
     session,
-    availableAction: canOpenSession ? "OPEN_SESSION" : slot.status === "ALLOCATED" && session ? "VIEW_SESSION" : "READ_ONLY",
+    availableAction: canApply ? "APPLY" as const : session ? "VIEW_SESSION" as const : "READ_ONLY" as const,
     version: slot.version,
   };
 }
@@ -738,6 +739,7 @@ export async function getPublicCourtSlots(prisma: PrismaClient, availableOnly: b
   const slots = await prisma.courtSlot.findMany({
     where: {
       visibility: "PUBLIC",
+      match: { is: { courtSource: "PARTNER_COURT" } },
       courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
       ...(availableOnly ? { status: "AVAILABLE", startsAt: { gt: now } } : { endsAt: { gt: now } }),
     },
@@ -749,13 +751,16 @@ export async function getPublicCourtSlots(prisma: PrismaClient, availableOnly: b
 }
 
 /** A public Slot is a session-supply record, never a direct court reservation. */
-export async function getPublicCourtSlot(prisma: PrismaClient, slotId: string) {
+export async function getPublicCourtSlot(prisma: PrismaClient, slotId: string, viewerId?: string) {
   const now = new Date();
   const slot = await prisma.courtSlot.findFirst({
     where: {
       id: slotId,
       visibility: "PUBLIC",
-      courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
+      OR: [
+        { courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } } },
+        ...(viewerId ? [{ match: { is: { OR: [{ hostUserId: viewerId }, { applications: { some: { applicantUserId: viewerId } } }] } } }] : []),
+      ],
     },
     include: publicCourtSlotInclude,
   });
