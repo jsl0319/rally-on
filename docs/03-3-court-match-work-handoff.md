@@ -44,7 +44,7 @@
 | 3. 참가·승인·입금·확정·자동취소 **서버** | 완료 |
 | 4. **화면 전체** | **미착수 ← 여기부터** |
 
-`dac9d4d`(마이 페이지 개편) 이후 코트 매칭 관련 커밋 17개. 전부 로컬이고 push는 안 됐다.
+`dac9d4d`(마이 페이지 개편) 이후 커밋 18개. 마이그레이션 적용과 push 모두 끝났고 `origin/main`과 동기화돼 있다. 받는 쪽은 `git pull`만 하면 된다.
 
 ### 확정된 규칙
 
@@ -189,19 +189,33 @@ POST /api/v1/court-match-applications/{id}/refund        운영자 환불 완료
 
 ---
 
-## 7. 작업 환경 (GPT에게는 해당 없을 수 있음)
+## 7. 시작하기
 
-내 환경은 사용자 맥 안의 격리된 리눅스 VM이라 제약이 있었다. **GPT가 정상 macOS
-터미널이면 아래는 무시해도 된다.**
+```
+git pull
+npm run check     # lint + typecheck + test + build
+```
 
-- Prisma CLI가 엔진을 못 받아 `validate`/`migrate`/`generate`를 못 돌렸다.
-  마이그레이션은 사용자가 맥에서 직접 적용했다
-- vitest·next dev/build도 못 돌렸다. 검증은 `npx tsc --noEmit` + `npx eslint`까지만
-- **그래서 `npm run test`와 `npm run e2e`는 이번 작업분에 대해 한 번도 실행되지 않았다.**
-  새로 넣은 `src/server/domain/court-match.test.ts`부터 돌려보길 권한다
-- `git push`도 못 했다. 커밋 17개가 로컬에만 있다
+`lint`와 `typecheck`는 통과가 확인됐다. `test`와 `build`는 아래 사유로 확인되지 않았다.
 
-**마지막 마이그레이션 2개 적용 여부를 먼저 확인할 것:**
-`20260908140000_court_match_operator_hosted`(적용됨),
-`20260909100000_court_match_notifications`(사용자 실행 필요 — 이걸 안 하면
-`notification-service.ts`에 `NotificationType` 타입 에러가 뜬다).
+마이그레이션 2개(`20260908140000_court_match_operator_hosted`,
+`20260909100000_court_match_notifications`)는 적용 완료됐고 Prisma Client도
+재생성돼 있다. 스키마를 더 건드리면 `db:migrate:deploy` 다음 `db:generate`를
+잊지 말 것(둘은 별개 작업이라 마이그레이션만 돌리면 Client가 옛 컬럼을 참조한다).
+
+### 검증 공백 — 중요
+
+내 작업 환경은 사용자 맥 안의 격리된 리눅스 VM이라 **vitest와 next build/dev를
+실행할 수 없었다.** 검증은 `npx tsc --noEmit`과 `npx eslint`까지만 했다.
+
+**그래서 이번 코트 매칭 작업분은 `npm run test`도 `npm run e2e`도, 브라우저 확인도
+한 번도 거치지 않았다.** 특히 아래 셋을 먼저 돌려 보길 권한다.
+
+1. `src/server/domain/court-match.test.ts` — 이번에 새로 넣은 것. 기한 계산, 정원
+   기준, 승인 방식 분기, 신청 마감을 덮는다
+2. `src/server/domain/court-slot-service.test.ts` — 스키마 필드가 늘면서 픽스처를
+   손봤다
+3. `/partner`, `/partner/slots/new`, `/partner/settlement-account` — 운영자 화면은
+   브라우저로 한 번도 못 봤다
+
+GPT가 정상 macOS 터미널이면 이 제약은 없을 것이다.
