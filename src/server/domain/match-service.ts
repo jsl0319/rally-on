@@ -8,6 +8,7 @@ import { DomainError } from "@/server/domain/profile-service";
 import { addAcceptedMemberToConversation, makeConversationReadOnly } from "@/server/domain/match-chat-service";
 import { recordApplicationNotification } from "@/server/domain/notification-service";
 
+import { isAwaitingRefund } from "./court-match";
 import {
   getAcceptedCount,
   getApplicationStatusLabel,
@@ -616,12 +617,27 @@ function toApplicationView(application: ApplicationWithRelations, supplyNotice: 
         ? application.match.courtSlot?.courtUnit.court.name ?? null
         : application.match.externalCourtName,
       estimatedFeePerPersonKrw: getEstimatedFeePerPerson(application.match.totalCourtFeeKrw),
+      // 코트 매칭은 상세가 전용 주소에 있다. 활동 화면이 곧장 그쪽으로 보낼 수 있게 한다.
+      courtSlotId: application.match.courtSlotId,
     },
+    // 코트 매칭은 승인만으로 끝나지 않는다. 지금 무엇을 해야 하는지 활동 화면에서
+    // 바로 알 수 있도록 계좌이체 흐름의 상태를 함께 준다(docs/03-2 §3.1, §3.9).
+    courtMatch: application.match.courtSource === "PARTNER_COURT"
+      ? {
+          depositCode: application.depositCode,
+          paymentDueAt: application.paymentDueAt?.toISOString() ?? null,
+          depositClaimedAt: application.depositClaimedAt?.toISOString() ?? null,
+          confirmedAt: application.confirmedAt?.toISOString() ?? null,
+          awaitingRefund: isAwaitingRefund(application),
+          refundRequested: application.refundRequestedAt !== null,
+          refundCompletedAt: application.refundCompletedAt?.toISOString() ?? null,
+        }
+      : null,
     createdAt: application.createdAt.toISOString(),
     decidedAt: application.decidedAt?.toISOString() ?? null,
     withdrawnAt: application.withdrawnAt?.toISOString() ?? null,
     cancelledAt: application.cancelledAt?.toISOString() ?? null,
-    contact: application.status === "ACCEPTED"
+    contact: application.status === "ACCEPTED" || application.status === "CONFIRMED"
       ? { conversationStatus: application.match.conversation?.status ?? "NOT_CREATED", href: application.match.conversation ? `/chats/${application.match.id}` : null, label: "채팅방 열기" }
       : null,
     supplyNotice,

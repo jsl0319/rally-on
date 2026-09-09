@@ -15,7 +15,16 @@ type SentApplication = {
   status: string;
   statusLabel: string;
   message: string | null;
-  match: { id: string; title: string; status: string; startsAt: string; courtSource: "EXTERNAL_RESERVED" | "COURT_TBD" | "PARTNER_COURT"; courtName: string | null; estimatedFeePerPersonKrw: number | null };
+  match: { id: string; title: string; status: string; startsAt: string; courtSource: "EXTERNAL_RESERVED" | "COURT_TBD" | "PARTNER_COURT"; courtName: string | null; estimatedFeePerPersonKrw: number | null; courtSlotId: string | null };
+  courtMatch: {
+    depositCode: string | null;
+    paymentDueAt: string | null;
+    depositClaimedAt: string | null;
+    confirmedAt: string | null;
+    awaitingRefund: boolean;
+    refundRequested: boolean;
+    refundCompletedAt: string | null;
+  } | null;
   contact: { href: string | null; label: string; conversationStatus: "OPEN" | "READ_ONLY" | "ARCHIVED" | "NOT_CREATED" } | null;
   supplyNotice: { code: "COURT_SUPPLY_WITHDRAWN"; message: string; occurredAt: string; delivery: "IN_APP" } | null;
   createdAt: string;
@@ -27,6 +36,28 @@ function schedule(startsAt: string) {
 
 function appliedDate(createdAt: string) {
   return `신청한 ${new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", timeZone: "Asia/Seoul" }).format(new Date(createdAt))}`;
+}
+
+/** 코트 매칭은 승인만으로 끝나지 않는다. 지금 무엇을 해야 하는지 한 줄로 알려 준다. */
+function courtMatchNextStep(item: SentApplication) {
+  const courtMatch = item.courtMatch;
+  if (!courtMatch) return null;
+  if (courtMatch.awaitingRefund) {
+    return courtMatch.refundCompletedAt
+      ? "운영자가 환불 완료로 표시했어요. 실제 입금은 통장에서 확인해 주세요."
+      : courtMatch.refundRequested
+        ? "환불 계좌를 받았어요. 운영자가 환불하면 알려 드릴게요."
+        : "환불받을 계좌를 입력해 주세요.";
+  }
+  if (item.status === "CONFIRMED") return "참가가 확정됐어요. 당일 안내를 확인해 주세요.";
+  if (item.status === "EXPIRED_UNPAID") return "입금 기한이 지나 자리가 반환됐어요.";
+  if (item.status === "ACCEPTED") {
+    return courtMatch.depositClaimedAt
+      ? "입금 알림을 보냈어요. 운영자가 통장을 확인하면 확정돼요."
+      : `참가비를 보내고 알려 주세요.${courtMatch.depositCode ? ` 입금자명 뒤에 ${courtMatch.depositCode}를 붙여 주세요.` : ""}`;
+  }
+  if (item.status === "PENDING") return "운영자가 신청을 확인하고 있어요.";
+  return null;
 }
 
 function nextStepMessage(status: string, matchStatus: string) {
@@ -45,6 +76,7 @@ function nextStepMessage(status: string, matchStatus: string) {
 
 function acceptedCoordinationMessage(courtSource: SentApplication["match"]["courtSource"]) {
   const channel = "서비스 내 채팅";
+  if (courtSource === "PARTNER_COURT") return `참가비는 운영자에게 직접 보내요. ${channel}에서는 당일 준비만 확인해요.`;
   return courtSource === "COURT_TBD"
     ? `수락된 참가자끼리 ${channel}에서 코트와 비용을 조율해요.`
     : `수락된 참가자끼리 ${channel}에서 당일 준비와 비용 정산 방법을 확인해요.`;
@@ -110,18 +142,21 @@ function EmptySentApplications() {
 }
 
 function SentApplicationCard({ item, withdrawing, onWithdraw }: { item: SentApplication; withdrawing: boolean; onWithdraw: () => void }) {
-  const active = item.status === "PENDING" || item.status === "ACCEPTED";
+  const active = item.status === "PENDING" || item.status === "ACCEPTED" || item.status === "CONFIRMED";
   return <article className="rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)]">
-    <Link className="block transition-colors hover:text-[var(--tm-action-primary)]" href={`/matches/${item.match.id}?returnTo=${encodeURIComponent("/activity/sent")}`}>
+    <Link className="block transition-colors hover:text-[var(--tm-action-primary)]" href={item.match.courtSlotId ? `/partner-sessions/${item.match.courtSlotId}` : `/matches/${item.match.id}?returnTo=${encodeURIComponent("/activity/sent")}`}>
       <div className="flex items-start justify-between gap-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${active ? "bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "bg-[var(--tm-bg-subtle-muted)] text-[var(--tm-text-secondary)]"}`}>{item.statusLabel}</span><span className="text-xs text-[var(--tm-text-secondary)]">{appliedDate(item.createdAt)}</span></div>
       <h2 className="mt-4 text-lg font-bold">{item.match.title}</h2>
       <p className="mt-3 text-sm text-[var(--tm-text-muted)]">🗓 {schedule(item.match.startsAt)}</p>
       <p className="mt-1 text-sm text-[var(--tm-text-muted)]">📍 {item.match.courtName ?? "코트는 함께 정해요"}</p>
       <p className="mt-3 text-sm font-semibold text-[var(--tm-action-primary)]">{item.match.courtSource === "COURT_TBD" ? "코트와 비용을 함께 정해요" : item.match.estimatedFeePerPersonKrw === null ? "참가비를 확인해 주세요" : `게스트 참가비 ${item.match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p>
-      {item.supplyNotice ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm font-semibold leading-6 text-[var(--tm-status-error-text)]">{item.supplyNotice.message}</p> : <p className="mt-4 border-t border-[var(--tm-border-subtle)] pt-3 text-sm font-medium leading-6 text-[var(--tm-text-muted)]">{nextStepMessage(item.status, item.match.status)}</p>}
+      {item.supplyNotice ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm font-semibold leading-6 text-[var(--tm-status-error-text)]">{item.supplyNotice.message}</p> : <p className="mt-4 border-t border-[var(--tm-border-subtle)] pt-3 text-sm font-medium leading-6 text-[var(--tm-text-muted)]">{courtMatchNextStep(item) ?? nextStepMessage(item.status, item.match.status)}</p>}
       {item.message ? <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">“{item.message}”</p> : null}
     </Link>
     {item.contact ? <><p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">{acceptedCoordinationMessage(item.match.courtSource)}</p><ContactButton contact={item.contact} /></> : null}
+    {item.courtMatch && item.match.courtSlotId && (item.status === "ACCEPTED" || item.courtMatch.awaitingRefund) && !item.courtMatch.refundCompletedAt
+      ? <Button as={Link} className="mt-3" fullWidth href={`/partner-sessions/${item.match.courtSlotId}`} size="medium">{item.courtMatch.awaitingRefund ? "환불 계좌 입력하기" : item.courtMatch.depositClaimedAt ? "입금 안내 다시 보기" : "입금 안내 보기"}</Button>
+      : null}
     {item.status === "PENDING" ? <Button className="mt-3" disabled={withdrawing} fullWidth onClick={onWithdraw} size="medium" variant="neutral">신청 철회</Button> : null}
   </article>;
 }
