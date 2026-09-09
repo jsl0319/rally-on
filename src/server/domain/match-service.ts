@@ -731,6 +731,7 @@ export async function getReceivedApplications(prisma: PrismaClient, viewer: View
   await prisma.$transaction((transaction) => reconcileStartedMatch(transaction, matchId));
   const match = await prisma.match.findUnique({ where: { id: matchId }, include: matchInclude });
   if (!match || match.hostUserId !== viewer.id) throw new DomainError("MATCH_NOT_FOUND", 404, "매칭을 찾을 수 없어요.");
+  assertNotCourtMatch(match.courtSource, "코트 매칭은 참가자 관리 화면에서 확인해 주세요.");
 
   const applications = await prisma.matchApplication.findMany({
     where: { matchId, ...(statuses.length > 0 ? { status: { in: statuses } } : {}) },
@@ -758,13 +759,23 @@ export async function getReceivedApplications(prisma: PrismaClient, viewer: View
   };
 }
 
+/**
+ * 코트 매칭은 승인이 곧 확정이 아니다. 승인 시 입금 코드·기한을 발급하고 입금이
+ * 확인돼야 확정된다. 일반 매칭용 수락·거절·취소 경로를 코트 매칭에 쓰면 그 단계가
+ * 통째로 건너뛰어진다. 운영자가 코트 매칭의 호스트라 권한 검사만으로는 막히지 않는다.
+ */
+function assertNotCourtMatch(courtSource: string, message: string) {
+  if (courtSource === "PARTNER_COURT") throw new DomainError("COURT_MATCH_PATH_REQUIRED", 409, message);
+}
+
 export async function acceptApplication(prisma: PrismaClient, viewer: Viewer, applicationId: string, input: MatchApplicationDecisionInput) {
   return prisma.$transaction(async (transaction) => {
     const application = await transaction.matchApplication.findUnique({
       where: { id: applicationId },
-      include: { match: { select: { id: true, hostUserId: true, title: true, status: true, startsAt: true, recruitCount: true, maleRecruitCount: true, femaleRecruitCount: true, version: true } } },
+      include: { match: { select: { id: true, hostUserId: true, title: true, status: true, startsAt: true, recruitCount: true, maleRecruitCount: true, femaleRecruitCount: true, version: true, courtSource: true } } },
     });
     if (!application || application.match.hostUserId !== viewer.id) throw new DomainError("MATCH_HOST_REQUIRED", 403, "이 매칭의 모집자만 신청을 검토할 수 있어요.");
+    assertNotCourtMatch(application.match.courtSource, "코트 매칭은 참가자 관리 화면에서 승인하고 입금을 확인해요.");
     await reconcileStartedMatch(transaction, application.match.id);
     const refreshedMatch = await transaction.match.findUnique({ where: { id: application.match.id }, select: { status: true, startsAt: true, version: true } });
     if (!refreshedMatch) throw new DomainError("MATCH_NOT_FOUND", 404, "매칭을 찾을 수 없어요.");
@@ -835,9 +846,10 @@ export async function rejectApplication(prisma: PrismaClient, viewer: Viewer, ap
   return prisma.$transaction(async (transaction) => {
     const application = await transaction.matchApplication.findUnique({
       where: { id: applicationId },
-      include: { match: { select: { id: true, hostUserId: true, title: true } } },
+      include: { match: { select: { id: true, hostUserId: true, title: true, courtSource: true } } },
     });
     if (!application || application.match.hostUserId !== viewer.id) throw new DomainError("MATCH_HOST_REQUIRED", 403, "이 매칭의 모집자만 신청을 검토할 수 있어요.");
+    assertNotCourtMatch(application.match.courtSource, "코트 매칭은 참가자 관리 화면에서 승인하고 입금을 확인해요.");
     await reconcileStartedMatch(transaction, application.match.id);
     const refreshedMatch = await transaction.match.findUnique({ where: { id: application.match.id }, select: { status: true, startsAt: true } });
     if (!refreshedMatch) throw new DomainError("MATCH_NOT_FOUND", 404, "매칭을 찾을 수 없어요.");
@@ -890,6 +902,8 @@ export async function cancelMatch(prisma: PrismaClient, viewer: Viewer, matchId:
       select: { id: true, hostUserId: true, status: true, startsAt: true, version: true, courtSource: true },
     });
     if (!match || match.hostUserId !== viewer.id) throw new DomainError("MATCH_HOST_REQUIRED", 403, "이 매칭의 모집자만 취소할 수 있어요.");
+    // 코트 매칭 취소는 입금한 참가자의 환불 대기까지 만들어야 한다. 운영상 문제 접수만이 그 일을 한다.
+    assertNotCourtMatch(match.courtSource, "코트 매칭은 시간 관리의 운영상 문제 접수로 취소해 주세요.");
     if (match.version !== input.expectedVersion) throw new DomainError("VERSION_CONFLICT", 409, "다른 변경사항이 있어 매칭 정보를 다시 불러와 주세요.");
     if ((match.status !== "OPEN" && match.status !== "CLOSED") || match.startsAt <= new Date()) {
       throw new DomainError("MATCH_STATE_CONFLICT", 409, "시작 전 모집 중이거나 마감된 매칭만 취소할 수 있어요.");
@@ -927,7 +941,8 @@ export async function closeMatch(prisma: PrismaClient, viewer: Viewer, matchId: 
     if (!match || match.hostUserId !== viewer.id) throw new DomainError("MATCH_HOST_REQUIRED", 403, "이 매칭의 모집자만 모집을 마감할 수 있어요.");
     if (match.version !== input.expectedVersion) throw new DomainError("VERSION_CONFLICT", 409, "다른 변경사항이 있어 매칭 정보를 다시 불러와 주세요.");
     if (match.status !== "OPEN" || match.startsAt <= new Date()) throw new DomainError("MATCH_STATE_CONFLICT", 409, "시작 전 모집 중인 매칭만 마감할 수 있어요.");
-    const acceptedCount = await transaction.matchApplication.count({ where: { matchId: match.id, status: "ACCEPTED" } });
+    // 코트 매칭에서 자리를 채운 참가자는 CONFIRMED다. ACCEPTED만 세면 마감이 막힌다.
+    const acceptedCount = await transaction.matchApplication.count({ where: { matchId: match.id, status: { in: ["ACCEPTED", "CONFIRMED"] } } });
     if (acceptedCount < 1) throw new DomainError("MATCH_CANNOT_CLOSE", 409, "한 명 이상 수락한 뒤 모집을 마감할 수 있어요.");
     const closedAt = new Date();
     const updated = await transaction.match.updateMany({

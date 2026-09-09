@@ -257,6 +257,51 @@ describe("match service operation safeguards", () => {
     }));
   });
 
+  it("keeps the general accept path away from court match applications", async () => {
+    // 코트 매칭은 승인 시 입금 코드·기한을 발급해야 한다. 일반 수락 경로를 쓰면
+    // 그 단계가 통째로 건너뛰어진다. 운영자가 호스트라 권한 검사로는 막히지 않는다.
+    const transaction = {
+      matchApplication: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "application-id",
+          status: "PENDING",
+          applicantUserId: "applicant-id",
+          match: { id: "match-id", hostUserId: viewer.id, title: "코트 매칭", status: "OPEN", startsAt: new Date("2030-01-01T00:00:00.000Z"), recruitCount: 4, maleRecruitCount: null, femaleRecruitCount: null, version: 1, courtSource: "PARTNER_COURT" },
+        }),
+        updateMany: vi.fn(),
+      },
+      match: { findUnique: vi.fn(), updateMany: vi.fn() },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof acceptApplication>[0];
+
+    await expect(acceptApplication(prisma, viewer, "application-id", { expectedMatchVersion: 1 })).rejects.toMatchObject({
+      code: "COURT_MATCH_PATH_REQUIRED",
+      status: 409,
+    });
+    expect(transaction.matchApplication.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("keeps the general cancel path away from court matches", async () => {
+    // 코트 매칭 취소는 입금한 참가자의 환불 대기까지 만들어야 한다.
+    const transaction = {
+      match: {
+        findUnique: vi.fn().mockResolvedValue({ id: "match-id", hostUserId: viewer.id, status: "OPEN", startsAt: new Date("2030-01-01T00:00:00.000Z"), version: 1, courtSource: "PARTNER_COURT" }),
+        updateMany: vi.fn(),
+      },
+      matchApplication: { updateMany: vi.fn(), findMany: vi.fn() },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof cancelMatch>[0];
+
+    await expect(cancelMatch(prisma, viewer, "match-id", { expectedVersion: 1 })).rejects.toMatchObject({
+      code: "COURT_MATCH_PATH_REQUIRED",
+    });
+    expect(transaction.match.updateMany).not.toHaveBeenCalled();
+  });
+
   it("no longer lets a member open a partner court match", async () => {
     // 코트 매칭은 운영자가 시간을 공개할 때 서버가 만든다. 일반 회원이 슬롯을 골라
     // 매칭을 여는 경로는 폐기됐다(docs/03-2).
