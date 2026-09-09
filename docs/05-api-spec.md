@@ -1466,18 +1466,45 @@ POST /api/internal/courts/{courtId}/deactivate
 일반 참가자는 기존 Match 목록·상세·참가 신청 API를 사용한다. 제휴 코트 세션은 `courtSource=PARTNER_COURT` 필터로 조회한다. 공개 Slot에는 안전한 상태·코트·시간·비용·이용 안내만 반환하고, 운영자 내부 메모·연락처·사업자 정보·상태 변경 사유 원문은 반환하지 않는다.
 
 ```text
-GET  /api/v1/matches?courtSource=PARTNER_COURT
-GET  /api/v1/matches/{matchId}
-POST /api/v1/matches/{matchId}/applications
 GET  /api/v1/partner-session-slots
 GET  /api/v1/partner-session-slots/{slotId}
-GET  /api/v1/partner-session-slots/available
-POST /api/v1/matches  (courtSource=PARTNER_COURT, courtSlotId)
+
+POST /api/v1/court-matches/{matchId}/applications             참가 신청
+POST /api/v1/court-match-applications/{id}/decision           운영자 승인·거절
+POST /api/v1/court-match-applications/{id}/deposit            참가자 입금 알림
+POST /api/v1/court-match-applications/{id}/confirm            운영자 입금 확인·확정
+PUT  /api/v1/court-match-applications/{id}/refund-account     참가자 환불 계좌
+POST /api/v1/court-match-applications/{id}/refund             운영자 환불 완료 표시
+GET  /api/v1/operator/court-matches/{matchId}                 운영자 신청 목록
+
+PUT  /api/v1/operator/courts/{courtId}/settlement-account     운영자 입금 계좌
 ```
 
-`GET /partner-session-slots`는 인증된 일반 회원에게 `PUBLIC` Slot의 읽기 전용 상태를 반환한다. 상태별 행동은 `AVAILABLE`의 세션 개설, `ALLOCATED`의 연결 세션 상세 이동, 그 외 상태의 읽기 전용뿐이다. 이 API는 코트 예약 탐색 API가 아니며 운영자 연락처·예약 승인 CTA·결제 정보를 제공하지 않는다.
+> 코트 매칭은 **운영자가 주최한다.** 일반 회원이 Slot을 골라 매칭을 여는 경로
+> (`POST /api/v1/matches` with `courtSource=PARTNER_COURT`)는 폐기됐고, 서버가
+> `COURT_MATCH_APPLICATION_PATH`로 막는다. 코트 매칭은 운영자가 시간을 공개할 때
+> 서버가 함께 만든다. 자세한 규칙은 `03-2-court-match-operator-hosted-redesign.md`.
+>
+> 코트 매칭은 `GET /api/v1/matches` 목록과 추천에서도 제외된다. `매칭`과 `코트 매칭`은
+> 서로 다른 메뉴이며 섞이지 않는다.
 
-`GET /partner-session-slots/{slotId}`는 목록 카드에서 진입하는 상세용으로, 온보딩을 마친 일반 회원에게 해당 `PUBLIC` Slot 하나의 동일한 안전한 표시 필드를 반환한다. `PRIVATE` Slot 또는 형식이 잘못된 식별자는 존재 여부를 구분하지 않고 `404 PARTNER_SLOT_NOT_AVAILABLE` 또는 입력 오류로 처리한다. 상태별 행동·권한은 목록과 같으며, 운영자 연락처·내부 메모·예약 승인·결제 정보는 반환하지 않는다.
+계좌이체 흐름의 상태는 `MatchApplication`에 있다. `PENDING`(운영자 승인 대기) →
+`ACCEPTED`(자리 확보·입금 대기) → `CONFIRMED`(입금 확인 완료). 기한을 넘기면
+`EXPIRED_UNPAID`다. 환불 대기는 별도 상태가 아니라 `CANCELLED`이면서 `confirmedAt`이
+있고 `refundCompletedAt`이 비어 있는 상태다.
+
+정원은 `ACCEPTED + CONFIRMED`로 세고, 자동 취소 판정은 `CONFIRMED`만 센다. 기준이
+다르다는 점에 주의한다.
+
+`GET /operator/court-matches/{matchId}`는 코트 매칭을 연 운영자에게만 신청 목록을
+반환한다. 기본 필드는 닉네임·성별·신청 시각·입금/환불 정보이고, Slot의 `approvalMode`가
+`OPERATOR`일 때만 테니스 프로필 스냅샷과 신청 메시지를 추가로 포함한다. 운영자 입금
+계좌는 참가자에게 공개하지 않고, 승인된 참가자에게만 코트 매칭 공개 시점의 스냅샷으로
+전달한다.
+
+`GET /partner-session-slots`는 인증된 일반 회원에게 아직 끝나지 않은 `PUBLIC` Slot을 시간순으로 반환한다. 공개된 Slot에는 운영자가 연 코트 매칭이 붙어 있고, 상태별 행동은 참가 신청 또는 읽기 전용뿐이다. 이 API는 코트 예약 탐색 API가 아니며 운영자 연락처·결제 정보를 제공하지 않는다.
+
+`GET /partner-session-slots/{slotId}`는 코트 매칭 상세의 정본 주소(`/partner-sessions/{slotId}`)가 쓴다. 온보딩을 마친 일반 회원에게 해당 `PUBLIC` Slot의 표시 필드와, 연결된 코트 매칭에 대한 본인의 참가 상태(`participation`)를 함께 반환한다. `PRIVATE` Slot 또는 형식이 잘못된 식별자는 존재 여부를 구분하지 않고 `404 PARTNER_SLOT_NOT_AVAILABLE` 또는 입력 오류로 처리한다. 상태별 행동·권한은 목록과 같으며, 운영자 연락처·내부 메모·예약 승인·결제 정보는 반환하지 않는다.
 
 예시 `PublicCourtSlotView`:
 
