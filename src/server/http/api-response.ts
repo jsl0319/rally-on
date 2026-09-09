@@ -35,6 +35,13 @@ export function handleApiError(error: unknown) {
     return apiError(error.status, error.code, error.message);
   }
 
+  // 본문이 비어 있거나 중간에 끊긴 요청에서 `request.json()`이 SyntaxError를 던진다.
+  // 브라우저 탭을 닫는 순간 전송되던 요청이 대표적이다. 서버 잘못이 아니므로
+  // 500이 아니라 400으로 답하고, 오류 로그도 남기지 않는다.
+  if (error instanceof SyntaxError && /JSON/i.test(error.message)) {
+    return apiError(400, "INVALID_REQUEST_BODY", "요청 내용을 읽지 못했어요. 다시 시도해 주세요.");
+  }
+
   if (error instanceof ZodError) {
     return apiError(
       422,
