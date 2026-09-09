@@ -547,7 +547,13 @@ async function transitionSlot(
   } else {
     const canBlockCancelledSession = slot.status === "ALLOCATED" && slot.match?.status === "CANCELLED";
     if (slot.status !== "AVAILABLE" && !canBlockCancelledSession) {
-      throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "세션 열기 가능 상태 또는 취소된 세션 연결 시간대만 중지할 수 있어요.");
+      throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "공개 중인 시간 또는 취소된 코트 매칭이 연결된 시간만 중지할 수 있어요.");
+    }
+    // 공개 중지는 슬롯만 막고 연결 Match는 건드리지 않는다. 살아 있는 코트 매칭에
+    // 쓰면 참가자는 취소 안내도 환불도 받지 못한 채 남는다. 그 경우는 운영상 문제
+    // 접수로만 처리한다(docs/03-2 §3.9, 03-1 §9.4).
+    if (slot.match && (slot.match.status === "OPEN" || slot.match.status === "CLOSED")) {
+      throw new DomainError("COURT_MATCH_IN_PROGRESS", 409, "참가자가 있는 코트 매칭이에요. 공개 중지 대신 운영상 문제 접수로 취소해 주세요.");
     }
   }
 
@@ -676,8 +682,10 @@ export async function reportCourtSupplyIncident(
   input: CourtSupplyIncidentInput,
 ) {
   const slot = await getOwnedCourtSlot(prisma, viewer, slotId);
-  if (slot.status !== "ALLOCATED" || !slot.match || slot.version !== input.expectedVersion) {
-    throw new DomainError("COURT_SUPPLY_INCIDENT_NOT_ALLOWED", 409, "연결된 세션에서만 운영상 문제를 접수할 수 있어요.");
+  // 운영자 주최 모델에서 공개된 코트 매칭은 `AVAILABLE`이다. `ALLOCATED`는 옛 기록에만 남는다.
+  const hasLinkedMatch = slot.status === "AVAILABLE" || slot.status === "ALLOCATED";
+  if (!hasLinkedMatch || !slot.match || slot.version !== input.expectedVersion) {
+    throw new DomainError("COURT_SUPPLY_INCIDENT_NOT_ALLOWED", 409, "연결된 코트 매칭에서만 운영상 문제를 접수할 수 있어요.");
   }
 
   const now = new Date();
@@ -701,7 +709,7 @@ export async function reportCourtSupplyIncident(
     }
 
     const cancelledSlot = await transaction.courtSlot.updateMany({
-      where: { id: slot.id, status: "ALLOCATED", version: input.expectedVersion },
+      where: { id: slot.id, status: slot.status, version: input.expectedVersion },
       data: { status: "CANCELLED", statusChangedAt: now, version: { increment: 1 } },
     });
     if (cancelledSlot.count !== 1) throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "다른 변경사항이 있어 시간대를 다시 확인해 주세요.");
@@ -713,7 +721,7 @@ export async function reportCourtSupplyIncident(
     if (cancelledMatch.count !== 1) throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "연결된 세션 상태를 다시 확인해 주세요.");
 
     await transaction.matchApplication.updateMany({
-      where: { matchId: slot.match!.id, status: { in: ["PENDING", "ACCEPTED"] } },
+      where: { matchId: slot.match!.id, status: { in: ["PENDING", "ACCEPTED", "CONFIRMED"] } },
       data: { status: "CANCELLED", cancelledAt: now },
     });
     await makeConversationReadOnly(transaction, slot.match!.id, "코트 운영 사정으로 매칭이 취소되어 이 채팅방은 읽기 전용이에요.", now);
@@ -733,7 +741,7 @@ export async function reportCourtSupplyIncident(
     await transaction.courtSlotStatusHistory.create({
       data: {
         courtSlotId: slot.id,
-        fromStatus: "ALLOCATED",
+        fromStatus: slot.status,
         toStatus: "CANCELLED",
         actor: "OPERATOR",
         actorUserId: viewer.id,

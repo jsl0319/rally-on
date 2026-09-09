@@ -392,6 +392,69 @@ describe("Court Partner time supply authorization and state transitions", () => 
     }));
   });
 
+  it("does not let an operator quietly block a published court match that has participants", async () => {
+    // 공개 중지는 슬롯만 막는다. 살아 있는 코트 매칭에 쓰면 참가자가 취소 안내도
+    // 환불도 못 받은 채 남는다.
+    const publishedSlot = {
+      ...ownedSlot("PUBLISH_APPROVED"),
+      visibility: "PUBLIC",
+      status: "AVAILABLE",
+      match: { id: "match-id", hostUserId: "operator-user-id", status: "OPEN" },
+    };
+    const prisma = {
+      courtSlot: { findFirst: vi.fn().mockResolvedValue(publishedSlot) },
+      operatorSupplyRestriction: { findFirst: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(),
+    } as unknown as Parameters<typeof blockCourtSlot>[0];
+
+    await expect(blockCourtSlot(prisma, viewer, "slot-id")).rejects.toMatchObject({
+      code: "COURT_MATCH_IN_PROGRESS",
+      status: 409,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("withdraws supply from a published court match and leaves paid participants awaiting a refund", async () => {
+    const publishedSlot = {
+      ...ownedSlot("PUBLISH_APPROVED"),
+      visibility: "PUBLIC",
+      status: "AVAILABLE",
+      version: 3,
+      match: { id: "match-id", hostUserId: "operator-user-id", status: "OPEN" },
+    };
+    const transaction = {
+      courtSlot: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      match: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      matchApplication: {
+        updateMany: vi.fn().mockResolvedValue({ count: 2 }),
+        findMany: vi.fn().mockResolvedValue([{ applicantUserId: "applicant-id" }]),
+      },
+      matchConversation: { findUnique: vi.fn().mockResolvedValue(null) },
+      courtSupplyIncident: { create: vi.fn().mockResolvedValue({ id: "incident-id" }), count: vi.fn().mockResolvedValue(0) },
+      courtSlotStatusHistory: { create: vi.fn() },
+      matchSupplyNoticeRecipient: { createMany: vi.fn() },
+      operatorSupplyRestriction: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn() },
+    };
+    const prisma = {
+      courtSlot: { findFirst: vi.fn().mockResolvedValue(publishedSlot) },
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof reportCourtSupplyIncident>[0];
+
+    await expect(reportCourtSupplyIncident(prisma, viewer, "slot-id", courtSupplyIncidentInputSchema.parse({
+      code: "FACILITY_CLOSED",
+      expectedVersion: 3,
+    }))).resolves.toMatchObject({ impact: "CANCEL_MATCH" });
+
+    // 입금까지 마친 참가자도 취소해야 환불 대기로 잡힌다.
+    expect(transaction.matchApplication.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: { in: ["PENDING", "ACCEPTED", "CONFIRMED"] } }),
+    }));
+    // 공개된 코트 매칭은 AVAILABLE에서 취소된다.
+    expect(transaction.courtSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: "AVAILABLE", version: 3 }),
+    }));
+  });
+
   it("does not let an operator block an allocated slot while its session is still active", async () => {
     const allocatedSlot = {
       ...ownedSlot("PUBLISH_APPROVED"),
