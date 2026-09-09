@@ -65,13 +65,14 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   await hostPage.getByLabel("시작 시간").fill("10:00");
   await hostPage.getByLabel("종료 시간").fill("13:30");
   await expect(hostPage.getByLabel("매칭 제목")).toHaveCount(0);
-  await hostPage.getByRole("button", { name: "랠리", exact: true }).click();
+  await hostPage.getByRole("button", { name: "기타", exact: true }).click();
+  await hostPage.getByRole("button", { name: /스트로크 연습/ }).click();
   await hostPage.getByLabel("은행", { exact: true }).fill("테스트은행");
   await hostPage.getByLabel("계좌번호", { exact: true }).fill("123-456-789");
   await hostPage.getByLabel("예금주", { exact: true }).fill("테스트모집자");
   await hostPage.getByLabel("매칭 소개글", { exact: true }).fill("편하게 함께 연습해요.");
   await expect(hostPage.getByRole("button", { name: "자동으로 소개 만들기" })).toHaveCount(0);
-  await hostPage.getByLabel("전체 코트 비용").fill("24000");
+  await hostPage.getByLabel("게스트 참가비용").fill("24000");
   await hostPage.getByRole("button", { name: "미리보기" }).click();
   const previewDialog = hostPage.getByRole("dialog", { name: "미리보기" });
   await previewDialog.getByRole("button", { name: "매칭 공개하기" }).click();
