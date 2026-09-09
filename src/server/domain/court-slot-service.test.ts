@@ -151,7 +151,17 @@ describe("Court Partner time supply authorization and state transitions", () => 
       ...ownedSlot("PUBLISH_APPROVED"),
       visibility: "PUBLIC",
       status: "AVAILABLE",
-      match: { id: "match-id", hostUserId: "operator-user-id", status: "OPEN" },
+      match: {
+        id: "match-id",
+        hostUserId: "operator-user-id",
+        status: "OPEN",
+        title: "마포 테니스파크 2번 코트",
+        recruitCount: 4,
+        partnerPreference: "COMPLETE_BEGINNER_WELCOME",
+        host: { nickname: "마포테니스파크" },
+        purposes: [],
+        _count: { applications: 0 },
+      },
     };
     const prisma = {
       courtSlot: { findFirst: vi.fn().mockResolvedValue(publicSlot) },
@@ -198,7 +208,7 @@ describe("Court Partner time supply authorization and state transitions", () => 
     const allocatedSlot = {
       ...ownedSlot("PUBLISH_APPROVED"),
       visibility: "PUBLIC",
-      status: "ALLOCATED",
+      status: "AVAILABLE",
       match: {
         id: "match-id",
         hostUserId: "host-user-id",
@@ -216,7 +226,7 @@ describe("Court Partner time supply authorization and state transitions", () => 
     } as unknown as Parameters<typeof getPublicCourtSlot>[0];
 
     await expect(getPublicCourtSlot(prisma, "slot-id")).resolves.toMatchObject({
-      availableAction: "VIEW_SESSION",
+      availableAction: "APPLY",
       durationMinutes: 120,
       session: {
         matchId: "match-id",
@@ -229,6 +239,31 @@ describe("Court Partner time supply authorization and state transitions", () => 
         playPurposes: [{ code: "RALLY_PRACTICE", label: "랠리" }],
       },
     });
+  });
+
+  it("keeps a blocked slot read-only even though a session is still linked", async () => {
+    // 운영자가 공개를 중지했거나 시간이 끝났으면 상세로 보내지 않는다(03-1 §7.1).
+    const blockedSlot = {
+      ...ownedSlot("PUBLISH_APPROVED"),
+      visibility: "PUBLIC",
+      status: "BLOCKED",
+      match: {
+        id: "match-id",
+        hostUserId: "operator-user-id",
+        status: "CANCELLED",
+        title: "마포 테니스파크 2번 코트",
+        recruitCount: 4,
+        partnerPreference: "COMPLETE_BEGINNER_WELCOME",
+        host: { nickname: "마포테니스파크" },
+        purposes: [],
+        _count: { applications: 0 },
+      },
+    };
+    const prisma = {
+      courtSlot: { findFirst: vi.fn().mockResolvedValue(blockedSlot) },
+    } as unknown as Parameters<typeof getPublicCourtSlot>[0];
+
+    await expect(getPublicCourtSlot(prisma, "slot-id")).resolves.toMatchObject({ availableAction: "READ_ONLY" });
   });
 
   it("keeps the linked session's recruiting summary out of the operator's own slot list", async () => {
