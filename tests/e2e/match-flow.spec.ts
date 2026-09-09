@@ -1,5 +1,5 @@
 import { encode } from "next-auth/jwt";
-import { expect, test, type BrowserContext } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 import { E2E_AUTH_SECRET, E2E_BASE_URL } from "./e2e-environment";
 import { disconnectE2eDatabase, e2eUsers, resetE2eDatabase, type E2eFixture } from "./fixtures";
@@ -12,6 +12,43 @@ async function signInAs(context: BrowserContext, userId: string) {
     maxAge: 60 * 60,
   });
   await context.addCookies([{ name: "authjs.session-token", value, url: E2E_BASE_URL, httpOnly: true, sameSite: "Lax" }]);
+}
+
+/**
+ * 매칭 날짜·시간은 텍스트 입력이 아니라 바텀시트 휠 피커로 고른다.
+ * 휠은 스크롤이 멈춘 뒤에야 선택을 확정하므로, 여러 칸을 한 번에 움직이면
+ * 스냅과 겹쳐 값이 어긋난다. 한 칸씩 누르고 확정을 기다리며 목표까지 좁힌다.
+ */
+async function pickSchedule(page: Page, label: string, value: string) {
+  await page.getByRole("button", { name: label, exact: true }).click();
+  const sheet = page.getByRole("dialog", { name: label });
+  const spin = async (wheel: string, expected: string) => {
+    const list = sheet.getByRole("listbox", { name: wheel, exact: true });
+    const options = (await list.getByRole("option").allTextContents()).map((text) => text.trim());
+    const target = options.indexOf(expected);
+    if (target < 0) throw new Error(`${wheel} 휠에 ${expected} 항목이 없어요.`);
+    await list.focus();
+    for (let attempt = 0; attempt <= options.length; attempt += 1) {
+      const current = ((await list.getByRole("option", { selected: true }).textContent()) ?? "").trim();
+      if (current === expected) return;
+      await list.press(options.indexOf(current) < target ? "ArrowDown" : "ArrowUp");
+      await page.waitForTimeout(140);
+    }
+    throw new Error(`${wheel} 휠을 ${expected}로 맞추지 못했어요.`);
+  };
+  if (value.includes("-")) {
+    const [year, month, day] = value.split("-").map(Number);
+    await spin("연도", `${year}년`);
+    await spin("월", `${month}월`);
+    await spin("일", `${day}일`);
+  } else {
+    const [hour, minute] = value.split(":").map(Number);
+    await spin("오전·오후", hour < 12 ? "오전" : "오후");
+    await spin("시", String(hour % 12 || 12).padStart(2, "0"));
+    await spin("분", String(minute).padStart(2, "0"));
+  }
+  await sheet.getByRole("button", { name: "완료", exact: true }).click();
+  await expect(sheet).toHaveCount(0);
 }
 
 let fixture: E2eFixture;
@@ -61,23 +98,27 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   await manualEntryDialog.getByLabel("코트장 주소").fill("서울시 E2E 마포구 1");
   await manualEntryDialog.getByRole("button", { name: "입력 완료" }).click();
   const startsOn = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString().slice(0, 10);
-  await hostPage.getByLabel("매칭 날짜").fill(startsOn);
-  await hostPage.getByLabel("시작 시간").fill("10:00");
-  await hostPage.getByLabel("종료 시간").fill("13:30");
+  await pickSchedule(hostPage, "매칭 날짜", startsOn);
+  await pickSchedule(hostPage, "시작 시간", "10:00");
+  await pickSchedule(hostPage, "종료 시간", "13:30");
   await expect(hostPage.getByLabel("매칭 제목")).toHaveCount(0);
   await hostPage.getByRole("button", { name: "기타", exact: true }).click();
   await hostPage.getByRole("button", { name: /스트로크 연습/ }).click();
-  await hostPage.getByLabel("은행", { exact: true }).fill("테스트은행");
+  // 은행은 자유 입력이 아니라 은행 목록에서 고르는 select다.
+  await hostPage.getByLabel("은행", { exact: true }).selectOption("KB국민은행");
   await hostPage.getByLabel("계좌번호", { exact: true }).fill("123-456-789");
   await hostPage.getByLabel("예금주", { exact: true }).fill("테스트모집자");
-  await hostPage.getByLabel("매칭 소개글", { exact: true }).fill("편하게 함께 연습해요.");
+  // 필수 항목의 접근성 이름에는 "*"가 붙는다("매칭 소개글 *"). exact로 찾으면 안 잡힌다.
+  await hostPage.getByLabel("매칭 소개글").fill("편하게 함께 연습해요.");
   await expect(hostPage.getByRole("button", { name: "자동으로 소개 만들기" })).toHaveCount(0);
   await hostPage.getByLabel("게스트 참가비용").fill("24000");
   await hostPage.getByRole("button", { name: "미리보기" }).click();
   const previewDialog = hostPage.getByRole("dialog", { name: "미리보기" });
+  // 직접 예약 코트임을 알리는 문구는 미리보기 시트에 있다. 매칭 상세의 출처 배지는
+  // 6479506에서 의도적으로 뺐으므로 상세에서 찾으면 안 된다.
+  await expect(previewDialog.getByText("모집자가 코트를 예약했어요")).toBeVisible();
   await previewDialog.getByRole("button", { name: "매칭 공개하기" }).click();
   await expect(hostPage).toHaveURL(/\/matches\/[0-9a-f-]{36}$/);
-  await expect(hostPage.getByText("모집자가 코트를 예약했어요")).toBeVisible();
   const matchId = new URL(hostPage.url()).pathname.split("/").at(-1);
   if (!matchId) throw new Error("생성된 Match ID를 확인하지 못했어요.");
 
@@ -89,8 +130,9 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   await expect(applicantPage.getByRole("heading", { name: "E2E 테니스장" })).toBeVisible();
   await expect(applicantPage.getByRole("heading", { name: "정산 정보" })).toHaveCount(0);
   await applicantPage.getByRole("button", { name: "같이 치기" }).click();
-  await applicantPage.getByLabel(/모집자에게 한마디/).fill("천천히 랠리하며 함께 연습하고 싶어요.");
-  await applicantPage.getByRole("button", { name: "신청하기", exact: true }).click();
+  const applyDialog = applicantPage.getByRole("dialog", { name: "참가 신청" });
+  await applyDialog.getByLabel(/모집자에게 보낼 자기소개/).fill("천천히 랠리하며 함께 연습하고 싶어요.");
+  await applyDialog.getByRole("button", { name: "참가 신청", exact: true }).click();
   await expect(applicantPage.getByRole("heading", { name: "신청을 보냈어요" })).toBeVisible();
 
   await hostPage.goto(`/activity/received/${matchId}`);
@@ -175,7 +217,13 @@ test("공개된 코트 매칭은 신청·입금 알림·운영자 확정·채팅
   await expect(applicantPage.getByText("운영자가 입금을 확인했어요", { exact: false })).toBeVisible();
   await applicantPage.getByRole("link", { name: "채팅방 열기" }).click();
   await applicantPage.getByLabel("메시지").fill("코트 매칭 E2E 메시지");
-  await applicantPage.getByRole("button", { name: "보내기" }).click();
+  // 채팅은 서버 응답 전에 임시 말풍선을 먼저 그린다. 화면에 보이는 것만 확인하고
+  // 상대 화면으로 넘어가면 저장 전에 조회해 간헐적으로 실패한다.
+  const [courtMessageResponse] = await Promise.all([
+    applicantPage.waitForResponse((response) => response.url().includes(`/api/v1/matches/${fixture.partnerMatchId}/conversation/messages`) && response.request().method() === "POST"),
+    applicantPage.getByRole("button", { name: "보내기" }).click(),
+  ]);
+  expect(courtMessageResponse.ok()).toBeTruthy();
   await expect(applicantPage.getByText("코트 매칭 E2E 메시지")).toBeVisible();
   await operatorPage.goto(`/chats/${fixture.partnerMatchId}`);
   await expect(operatorPage.getByText("코트 매칭 E2E 메시지")).toBeVisible();
@@ -247,4 +295,25 @@ test("과거 코트 미정 매칭은 비공개·신청 불가이지만 기존 �
   await applicantContext.close();
   await outsiderContext.close();
   await hostContext.close();
+});
+
+test("본문이 비어 있는 요청에는 서버 오류가 아니라 400으로 답한다", async ({ browser }) => {
+  // 브라우저가 탭을 닫는 순간 전송되던 요청은 본문이 끊긴 채 도착한다.
+  // 그때 500 INTERNAL_ERROR가 나가면 서버 잘못처럼 보이고 오류 로그도 쌓인다.
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  await signInAs(context, e2eUsers.applicant.id);
+  const page = await context.newPage();
+  await page.goto("/");
+
+  const result = await page.evaluate(async (matchId) => {
+    const response = await fetch(`/api/v1/court-matches/${matchId}/applications`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const body = await response.json() as { error?: { code?: string } };
+    return { status: response.status, code: body.error?.code ?? null };
+  }, fixture.partnerMatchId);
+  expect(result).toEqual({ status: 400, code: "INVALID_REQUEST_BODY" });
+
+  await context.close();
 });
