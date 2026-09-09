@@ -24,6 +24,7 @@ describe("M3 match discovery rules", () => {
     const adjacent = getRecommendation(viewer, { ...viewer, rallyLevel: "COMFORTABLE_RALLY" }, { partnerPreference: "SIMILAR_LEVEL", playPurposes: [] });
     const distant = getRecommendation(viewer, { ...viewer, rallyLevel: "STANDARD_RALLY" }, { partnerPreference: "SIMILAR_LEVEL", playPurposes: [] });
     expect(adjacent.score).toBe(35);
+    expect(adjacent.reasons).toContainEqual({ code: "NEAR_RALLY_LEVEL", label: "랠리 수준이 비슷해요." });
     expect(distant.score).toBe(10);
   });
 

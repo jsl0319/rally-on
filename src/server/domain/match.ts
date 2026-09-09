@@ -184,7 +184,7 @@ export function getRecommendation(
     reasons.push({ code: "SAME_RALLY_LEVEL", label: "랠리 수준이 비슷해요." });
   } else if (rallyDistance === 1) {
     score += 25;
-    reasons.push({ code: "NEAR_RALLY_LEVEL", label: "랠리 수준이 가까워요." });
+    reasons.push({ code: "NEAR_RALLY_LEVEL", label: "랠리 수준이 비슷해요." });
   }
 
   const sharedPurpose = viewer.playPurposes.find((purpose) => match.playPurposes.includes(purpose));

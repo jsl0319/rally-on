@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionArea, ActionAreaButton, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalHeading, ModalNavigation, ModalSummary } from "@wanteddev/wds";
+import { ActionArea, ActionAreaButton, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalNavigation } from "@wanteddev/wds";
 import Link from "next/link";
 import { CalendarBlank, MapPin, Users, TennisBall, Hash, UserCircle } from "@phosphor-icons/react";
 import { displayCourtImage, matchSchedule, MatchBadge, PlayPurposeBadge } from "./match-presentation";
@@ -46,11 +46,6 @@ type Detail = {
   supplyNotice: { code: "COURT_SUPPLY_WITHDRAWN"; message: string; occurredAt: string; delivery: "IN_APP" } | null;
   viewer: { relation: "NONE" | "HOST" | "APPLICANT"; canApply: boolean; applyBlockedReason: string | null; applicationId: string | null; applicationStatus: "PENDING" | "ACCEPTED" | "REJECTED" | "WITHDRAWN" | "CANCELLED" | null; tennisProfile: ProfileSummary | null };
 };
-
-function schedule(startsAt: string, endsAt: string) {
-  const formatter = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Seoul" });
-  return `${formatter.format(new Date(startsAt))}–${new Intl.DateTimeFormat("ko-KR", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Seoul" }).format(new Date(endsAt))}`;
-}
 
 function blockedMessage(reason: string | null) {
   return ({ OWN_MATCH: "내가 만든 매칭이에요.", ALREADY_APPLIED: "이미 신청한 매칭이에요.", MATCH_NOT_OPEN: "모집이 마감됐어요.", MATCH_STARTED: "이미 시작된 일정이에요.", NO_REMAINING_SPOTS: "남은 자리가 없어요.", PROFILE_GENDER_REQUIRED: "프로필에서 성별을 입력한 뒤 신청해 주세요.", GENDER_QUOTA_FULL: "해당 성별의 모집 인원이 모두 찼어요." } as Record<string, string>)[reason ?? ""] ?? "신청 가능 여부를 확인해 주세요.";
@@ -177,35 +172,37 @@ function ContactAction({ contact }: { contact: NonNullable<Detail["contact"]> })
 }
 
 function ApplicationSheet({ detail, message, applyError, alreadyApplied, isSubmitting, onClose, onMessageChange, onSubmit }: { detail: Detail; message: string; applyError: string; alreadyApplied: boolean; isSubmitting: boolean; onClose: () => void; onMessageChange: (value: string) => void; onSubmit: () => void }) {
-  const profile = detail.viewer.tennisProfile;
-  return <Modal open onOpenChange={(next) => { if (!next) onClose(); }}>
+  const date = matchSchedule(detail.startsAt, detail.endsAt);
+  return <Modal open onOpenChange={(next) => { if (!next && !isSubmitting) onClose(); }}>
     <ModalContainer variant="bottom" size="large">
-      <ModalNavigation trailingContent={<ModalClose aria-label="신청 창 닫기" />} />
+      <ModalNavigation trailingContent={<ModalClose aria-label="신청 창 닫기" disabled={isSubmitting} />}>
+        참가 신청
+      </ModalNavigation>
       <ModalContent>
         <ModalContentItem>
-          <ModalSummary>같이 치기 신청</ModalSummary>
-          <ModalHeading>신청 전에 한 번만 확인해요</ModalHeading>
+          <div className="pb-2 pt-1">
+            <p className="break-words text-lg font-bold leading-7 tracking-tight">{detail.court.name ?? "코트 미정"}</p>
+            <p className="mt-3 flex items-start gap-2 text-sm leading-6 text-slate-600"><CalendarBlank size={18} className="mt-0.5 shrink-0" aria-hidden /><span className="flex flex-wrap gap-x-2 tabular-nums"><span>{date.day}</span><span>{date.time}</span></span></p>
+            {detail.court.address ? <p className="mt-1.5 flex items-start gap-2 text-sm leading-6 text-slate-500"><MapPin size={18} className="mt-0.5 shrink-0" aria-hidden /><span className="break-words">{detail.court.address}</span></p> : null}
+            <div className="mt-4 flex items-center justify-between gap-4 border-t border-slate-100 pt-4 text-sm">
+              <span className="text-slate-500">참가비 <span className="text-xs">· 별도 정산</span></span>
+              <span className="font-semibold tabular-nums">{detail.estimatedFeePerPersonKrw === null ? "미정" : `${detail.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</span>
+            </div>
+          </div>
         </ModalContentItem>
         <ModalContentItem>
-          <div className="space-y-3"><SummaryCard title="일정과 장소"><p>{schedule(detail.startsAt, detail.endsAt)}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">{detail.court.name ?? "코트는 함께 정해요"}</p></SummaryCard><SummaryCard title="게스트 참가비용"><p>{detail.estimatedFeePerPersonKrw === null ? "코트를 정한 뒤 함께 확인해요" : `${detail.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">비용은 참가자끼리 별도로 정산해요.</p></SummaryCard><SummaryCard title="내 테니스 프로필"><p>{profile?.experienceLabel ?? "테니스 프로필"} · {profile?.rallyLevelLabel ?? ""}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">{profile?.playPurposes.map((purpose) => purpose.label).join(" · ") ?? ""}</p></SummaryCard></div>
-        </ModalContentItem>
-        <ModalContentItem>
-          <label className="block text-sm font-semibold" htmlFor="application-message">모집자에게 한마디 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></label>
-          <textarea className="mt-2 min-h-24 w-full resize-none rounded-2xl border border-[var(--tm-border-default)] bg-white p-3 text-sm leading-6 outline-none placeholder:text-[var(--tm-text-placeholder)] focus:border-[var(--tm-action-primary)] focus:ring-2 focus:ring-[var(--tm-action-primary)]" id="application-message" maxLength={200} onChange={(event) => onMessageChange(event.target.value)} placeholder="예: 천천히 랠리하며 같이 연습하고 싶어요." value={message} />
-          <p className="mt-1 text-right text-xs text-[var(--tm-text-secondary)]">{message.length}/200</p>
-          {applyError ? <div className="mt-3 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]"><p>{applyError}</p>{alreadyApplied ? <Link className="mt-2 inline-block font-semibold underline" href="/activity/sent">신청 내역 보기</Link> : null}</div> : null}
+          <label className="block text-base font-semibold" htmlFor="application-message">모집자에게 보낼 자기소개 <span className="ml-1 text-sm font-normal text-slate-400">선택</span></label>
+          <textarea className="mt-3 block min-h-40 w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-7 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-60" id="application-message" aria-describedby="application-message-count" autoComplete="off" disabled={isSubmitting} maxLength={200} onChange={(event) => onMessageChange(event.target.value)} placeholder="테니스 경험이나 함께하고 싶은 플레이를 간단히 적어 주세요." value={message} />
+          <p id="application-message-count" className="mt-2 text-right text-xs tabular-nums text-slate-400">{message.length}/200</p>
+          {applyError ? <div role="alert" className="mt-3 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]"><p>{applyError}</p>{alreadyApplied ? <Link className="mt-2 inline-block font-semibold underline" href="/activity/sent">신청 내역 보기</Link> : null}</div> : null}
         </ModalContentItem>
       </ModalContent>
       <ActionArea variant="neutral">
-        <ActionAreaButton buttonColor="assistive" disabled={isSubmitting} onClick={onClose} variant="alternative">생각해볼게요</ActionAreaButton>
-        <ActionAreaButton disabled={isSubmitting} loading={isSubmitting} onClick={onSubmit} variant="main">신청하기</ActionAreaButton>
+        <ActionAreaButton buttonColor="assistive" disabled={isSubmitting} onClick={onClose} variant="alternative">취소</ActionAreaButton>
+        <ActionAreaButton disabled={isSubmitting} loading={isSubmitting} onClick={onSubmit} variant="main">참가 신청</ActionAreaButton>
       </ActionArea>
     </ModalContainer>
   </Modal>;
-}
-
-function SummaryCard({ children, title }: { children: React.ReactNode; title: string }) {
-  return <section className="rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 py-3"><h3 className="text-xs font-semibold text-[var(--tm-text-secondary)]">{title}</h3><div className="mt-1.5 text-sm font-semibold leading-6 text-[var(--tm-text-primary)]">{children}</div></section>;
 }
 
 function ApplicationSuccess({ title }: { title: string }) {

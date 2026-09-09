@@ -1801,3 +1801,5 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 - 키 없음·API 오류·시간 초과·잘못된 응답: 503 `DIRECTIONS_UNAVAILABLE`.
 - 키와 외부 API 응답 본문은 클라이언트와 로그에 노출하지 않는다. 지도/좌표를 DB에 추가 저장하지 않는다.
 - 공식 계약: https://developers.kakao.com/docs/ko/local/dev-guide#address-coord 및 https://apis.map.kakao.com/web/guide/#routeurl
+
+- 랠리 추천 사유 `SAME_RALLY_LEVEL`과 `NEAR_RALLY_LEVEL`의 사용자 표시 label은 모두 `랠리 수준이 비슷해요.`다. 내부 점수와 코드는 유지한다.

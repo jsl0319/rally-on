@@ -122,6 +122,7 @@ function toProfileSnapshot(profile: ProfileWithRelations) {
 }
 
 function getRecommendationForMatch(match: MatchWithRelations, viewer: Viewer) {
+  if (match.hostUserId === viewer.id) return { score: 0, reasons: [] };
   return getRecommendation(toRecommendationProfile(viewer.profile), toHostProfile(match.host.tennisProfile), {
     partnerPreference: match.partnerPreference,
     playPurposes: match.purposes.map(({ purpose }) => purpose),

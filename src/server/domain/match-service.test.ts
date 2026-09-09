@@ -469,7 +469,13 @@ describe("match service operation safeguards", () => {
 
     const result = await getMatches(prisma, viewer, { startsFrom: new Date("2029-01-01T00:00:00.000Z"), limit: 20 });
 
-    expect(result.items[0]).toMatchObject({ isHost: true });
+    expect(result.items[0]).toMatchObject({ isHost: true, recommendationReasons: [] });
+  });
+
+  it("keeps profile-based rally recommendations for other hosts", async () => {
+    const prisma = { match: { findMany: vi.fn().mockResolvedValue([makeMatch({ hostUserId: "other-user-id" })]) } } as unknown as Parameters<typeof getMatches>[0];
+    const result = await getMatches(prisma, viewer, { startsFrom: new Date("2029-01-01T00:00:00.000Z"), limit: 20 });
+    expect(result.items[0].recommendationReasons).toContainEqual({ code: "SAME_RALLY_LEVEL", label: "랠리 수준이 비슷해요." });
   });
 
   it("narrows the discovery query to the selected KST calendar date", async () => {
