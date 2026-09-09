@@ -43,9 +43,20 @@ describe("코트 매칭 기한 계산", () => {
   });
 });
 
-// 서비스는 전체 테니스 프로필을 받지만 이 테스트가 보는 것은 성별뿐이다.
+// 운영자 승인 방식이면 신청 당시 프로필 스냅샷을 남기므로, 프로필 전체가 있어야 한다.
 type Viewer = Parameters<typeof applyToCourtMatch>[1];
-const viewer = { id: "applicant-user-id", profile: { gender: "MALE" } } as unknown as Viewer;
+const viewer = {
+  id: "applicant-user-id",
+  profile: {
+    gender: "MALE",
+    experienceRange: "MONTHS_6_TO_12",
+    rallyLevel: "SHORT_RALLY",
+    gameExperience: "KNOWS_RULES",
+    purposes: [{ purpose: "RALLY_PRACTICE" }],
+    version: 1,
+    updatedAt: new Date("2030-01-01T00:00:00.000Z"),
+  },
+} as unknown as Viewer;
 
 function courtMatch(overrides: Record<string, unknown> = {}) {
   return {
@@ -58,13 +69,22 @@ function courtMatch(overrides: Record<string, unknown> = {}) {
     recruitCount: 4,
     maleRecruitCount: null,
     femaleRecruitCount: null,
-    courtSlot: { id: "slot-id", approvalMode: "AUTO", minParticipantCount: 2 },
+    courtSlot: {
+      id: "slot-id",
+      status: "AVAILABLE",
+      approvalMode: "AUTO",
+      minParticipantCount: 2,
+      // 서비스는 이 코트 매칭이 실제로 그 시설 운영자의 것인지 다시 확인한다.
+      courtUnit: { court: { status: "ACTIVE", operatorApplication: { applicantUserId: "operator-user-id", status: "PUBLISH_APPROVED" } } },
+    },
     ...overrides,
   };
 }
 
 function transactionFor(match: ReturnType<typeof courtMatch>, seatCount: number) {
   return {
+    // 동시 신청을 막기 위해 Match 행을 잠근 뒤 읽는다.
+    $queryRaw: vi.fn().mockResolvedValue([{ id: "match-id" }]),
     match: { findUnique: vi.fn().mockResolvedValue(match) },
     matchApplication: {
       findUnique: vi.fn().mockResolvedValue(null),
@@ -98,7 +118,7 @@ describe("코트 매칭 참가 신청", () => {
   });
 
   it("운영자 승인 방식이면 검토 대기로 남기고 운영자에게 알린다", async () => {
-    const transaction = transactionFor(courtMatch({ courtSlot: { id: "slot-id", approvalMode: "OPERATOR", minParticipantCount: 2 } }), 1);
+    const transaction = transactionFor(courtMatch({ courtSlot: { ...courtMatch().courtSlot, approvalMode: "OPERATOR" } }), 1);
 
     await expect(applyToCourtMatch(prismaFor(transaction), viewer, "match-id")).resolves.toMatchObject({
       status: "PENDING",

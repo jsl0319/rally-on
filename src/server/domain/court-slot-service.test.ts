@@ -146,14 +146,20 @@ describe("Court Partner time supply authorization and state transitions", () => 
   });
 
   it("returns only a public slot with its safe court image fallback and supply action", async () => {
-    const publicSlot = { ...ownedSlot("PUBLISH_APPROVED"), visibility: "PUBLIC", status: "AVAILABLE" };
+    // 공개된 시간에는 운영자가 연 코트 매칭이 붙어 있다. 공개 = 모집 시작이다.
+    const publicSlot = {
+      ...ownedSlot("PUBLISH_APPROVED"),
+      visibility: "PUBLIC",
+      status: "AVAILABLE",
+      match: { id: "match-id", hostUserId: "operator-user-id", status: "OPEN" },
+    };
     const prisma = {
       courtSlot: { findFirst: vi.fn().mockResolvedValue(publicSlot) },
     } as unknown as Parameters<typeof getPublicCourtSlot>[0];
 
     await expect(getPublicCourtSlot(prisma, "slot-id")).resolves.toMatchObject({
       id: "slot-id",
-      availableAction: "OPEN_SESSION",
+      availableAction: "APPLY",
       court: { image: { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" } },
     });
     expect(prisma.courtSlot.findFirst).toHaveBeenCalledWith(expect.objectContaining({

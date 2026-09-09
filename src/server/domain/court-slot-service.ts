@@ -180,7 +180,7 @@ export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) 
         : { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const },
     },
     session,
-    availableAction: canApply ? "APPLY" as const : session ? "VIEW_SESSION" as const : "READ_ONLY" as const,
+    availableAction: canApply ? "APPLY" as const : slot.status === "AVAILABLE" && session ? "VIEW_SESSION" as const : "READ_ONLY" as const,
     version: slot.version,
   };
 }

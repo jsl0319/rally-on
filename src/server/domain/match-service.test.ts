@@ -257,197 +257,31 @@ describe("match service operation safeguards", () => {
     }));
   });
 
-  it("derives partner court match fields from one available public slot and allocates it atomically", async () => {
-    const partnerSlotId = "e3e70682-c209-4cac-a29f-6fbed82c07ce";
+  it("no longer lets a member open a partner court match", async () => {
+    // 코트 매칭은 운영자가 시간을 공개할 때 서버가 만든다. 일반 회원이 슬롯을 골라
+    // 매칭을 여는 경로는 폐기됐다(docs/03-2).
     const partnerInput = matchCreateInputSchema.parse({
       clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07cf",
       courtSource: "PARTNER_COURT",
-      courtSlotId: partnerSlotId,
-      title: "제휴 코트에서 랠리해요",
+      courtSlotId: "e3e70682-c209-4cac-a29f-6fbed82c07ce",
       recruitCount: 2,
       playPurposes: ["RALLY_PRACTICE"],
-      partnerPreference: "SIMILAR_LEVEL",
+      partnerPreference: "COMPLETE_BEGINNER_WELCOME",
     });
-    const courtSlot = {
-      id: partnerSlotId,
-      visibility: "PUBLIC",
-      status: "AVAILABLE",
-      startsAt: futureStartsAt,
-      endsAt: futureEndsAt,
-      priceKrw: 40_000,
-      maxParticipantCount: 3,
-      courtUnit: {
-        name: "2번 코트",
-        court: { regionCode: "SEOUL-001", status: "ACTIVE", operatorApplication: { id: "operator-application-id", status: "PUBLISH_APPROVED" } },
-      },
-    };
-    const createdMatch = makeMatch({
-      id: "partner-match-id",
-      clientRequestId: partnerInput.clientRequestId,
-      courtSource: "PARTNER_COURT",
-      courtSlotId: courtSlot.id,
-      totalCourtFeeKrw: courtSlot.priceKrw,
-      courtSlot: {
-        id: courtSlot.id,
-        courtUnit: { name: courtSlot.courtUnit.name, court: { name: "마포 테니스파크", address: "서울 마포구", regionCode: "SEOUL-001", status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
-      },
-    });
-    const transaction = {
-      courtSlot: {
-        findUnique: vi.fn().mockResolvedValue(courtSlot),
-        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-      },
-      courtSlotStatusHistory: { create: vi.fn().mockResolvedValue({ id: "history-id" }) },
-      operatorSupplyRestriction: { findFirst: vi.fn().mockResolvedValue(null) },
-      match: {
-        create: vi.fn().mockResolvedValue({ id: createdMatch.id }),
-        findUnique: vi.fn().mockResolvedValue({ id: createdMatch.id, status: "OPEN", startsAt: futureStartsAt, applications: [] }),
-      },
-      matchApplication: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
-    };
-    const findUnique = vi.fn()
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(createdMatch);
-    const prisma = {
-      match: { findUnique },
-      matchSupplyNoticeRecipient: { findFirst: vi.fn().mockResolvedValue(null) },
-      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
-    } as unknown as Parameters<typeof createMatch>[0];
-
-    await expect(createMatch(prisma, viewer, partnerInput)).resolves.toMatchObject({ created: true, match: { id: createdMatch.id } });
-    expect(transaction.courtSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ id: partnerSlotId, status: "AVAILABLE", visibility: "PUBLIC" }),
-      data: expect.objectContaining({ status: "ALLOCATED" }),
-    }));
-    expect(transaction.match.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        courtSource: "PARTNER_COURT",
-        courtSlotId: partnerSlotId,
-        startsAt: futureStartsAt,
-        endsAt: futureEndsAt,
-        totalCourtFeeKrw: 40_000,
-      }),
-    }));
-    expect(transaction.courtSlotStatusHistory.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ actor: "SESSION_HOST", toStatus: "ALLOCATED" }),
-    }));
-  });
-
-  it("does not allocate a partner slot when the participant limit would be exceeded", async () => {
-    const partnerSlotId = "e3e70682-c209-4cac-a29f-6fbed82c07ce";
-    const partnerInput = matchCreateInputSchema.parse({
-      clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07cf",
-      courtSource: "PARTNER_COURT",
-      courtSlotId: partnerSlotId,
-      title: "제휴 코트에서 랠리해요",
-      recruitCount: 2,
-      playPurposes: ["RALLY_PRACTICE"],
-      partnerPreference: "SIMILAR_LEVEL",
-    });
-    const transaction = {
-      courtSlot: {
-        findUnique: vi.fn().mockResolvedValue({
-          id: partnerSlotId,
-          visibility: "PUBLIC",
-          status: "AVAILABLE",
-          startsAt: futureStartsAt,
-          endsAt: futureEndsAt,
-          priceKrw: 40_000,
-          maxParticipantCount: 2,
-          courtUnit: { court: { regionCode: "SEOUL-001", status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
-        }),
-        updateMany: vi.fn(),
-      },
-      match: { create: vi.fn() },
-    };
-    const prisma = {
-      match: { findUnique: vi.fn().mockResolvedValue(null) },
-      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
-    } as unknown as Parameters<typeof createMatch>[0];
-
-    await expect(createMatch(prisma, viewer, partnerInput)).rejects.toMatchObject({ code: "PARTNER_SLOT_CAPACITY_EXCEEDED", status: 409 });
-    expect(transaction.courtSlot.updateMany).not.toHaveBeenCalled();
-    expect(transaction.match.create).not.toHaveBeenCalled();
-  });
-
-  it("does not allocate a partner session from an inactive court", async () => {
-    const partnerInput = matchCreateInputSchema.parse({
-      clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07aa",
-      courtSource: "PARTNER_COURT",
-      courtSlotId: "e3e70682-c209-4cac-a29f-6fbed82c07ab",
-      title: "제휴 코트에서 랠리해요",
-      recruitCount: 1,
-      playPurposes: ["RALLY_PRACTICE"],
-      partnerPreference: "SIMILAR_LEVEL",
-    });
-    const transaction = {
-      courtSlot: {
-        findUnique: vi.fn().mockResolvedValue({
-          id: "e3e70682-c209-4cac-a29f-6fbed82c07ab",
-          visibility: "PUBLIC",
-          status: "AVAILABLE",
-          startsAt: futureStartsAt,
-          endsAt: futureEndsAt,
-          priceKrw: 40_000,
-          maxParticipantCount: 3,
-          courtUnit: { court: { regionCode: "SEOUL-001", status: "INACTIVE", operatorApplication: { id: "operator-application-id", status: "PUBLISH_APPROVED" } } },
-        }),
-        updateMany: vi.fn(),
-      },
-      match: { create: vi.fn() },
-    };
-    const prisma = {
-      match: { findUnique: vi.fn().mockResolvedValue(null) },
-      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
-    } as unknown as Parameters<typeof createMatch>[0];
-
-    await expect(createMatch(prisma, viewer, partnerInput)).rejects.toMatchObject({ code: "PARTNER_SLOT_NOT_AVAILABLE", status: 409 });
-    expect(transaction.courtSlot.updateMany).not.toHaveBeenCalled();
-    expect(transaction.match.create).not.toHaveBeenCalled();
-  });
-
-  it("rejects a competing partner session after another request conditionally allocates the same slot", async () => {
-    const partnerSlotId = "e3e70682-c209-4cac-a29f-6fbed82c07ce";
-    const partnerInput = matchCreateInputSchema.parse({
-      clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07cf",
-      courtSource: "PARTNER_COURT",
-      courtSlotId: partnerSlotId,
-      title: "제휴 코트에서 랠리해요",
-      recruitCount: 2,
-      playPurposes: ["RALLY_PRACTICE"],
-      partnerPreference: "SIMILAR_LEVEL",
-    });
-    const transaction = {
-      courtSlot: {
-        findUnique: vi.fn().mockResolvedValue({
-          id: partnerSlotId,
-          visibility: "PUBLIC",
-          status: "AVAILABLE",
-          startsAt: futureStartsAt,
-          endsAt: futureEndsAt,
-          priceKrw: 40_000,
-          maxParticipantCount: 3,
-          courtUnit: { court: { regionCode: "SEOUL-001", status: "ACTIVE", operatorApplication: { id: "operator-application-id", status: "PUBLISH_APPROVED" } } },
-        }),
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-      },
-      operatorSupplyRestriction: { findFirst: vi.fn().mockResolvedValue(null) },
-      courtSlotStatusHistory: { create: vi.fn() },
-      match: { create: vi.fn() },
-    };
+    const transaction = { match: { create: vi.fn() } };
     const prisma = {
       match: { findUnique: vi.fn().mockResolvedValue(null) },
       $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
     } as unknown as Parameters<typeof createMatch>[0];
 
     await expect(createMatch(prisma, viewer, partnerInput)).rejects.toMatchObject({
-      code: "PARTNER_SLOT_ALREADY_ALLOCATED",
+      code: "COURT_MATCH_OPERATOR_ONLY",
       status: 409,
     });
     expect(transaction.match.create).not.toHaveBeenCalled();
   });
 
-  it("asks the database to exclude the viewer's prior applications and historical court-undecided matches from discovery, but keeps the viewer's own hosted matches", async () => {
+  it("limits discovery to directly reserved matches and excludes the viewer's prior applications, but keeps the viewer's own hosted matches", async () => {
     const findMany = vi.fn().mockResolvedValue([makeMatch({ id: "other-match-id", hostUserId: "other-user-id", host: { id: "other-user-id", nickname: "다른모집자", tennisProfile: viewer.profile } })]);
     const prisma = { match: { findMany } } as unknown as Parameters<typeof getMatches>[0];
 
@@ -455,7 +289,8 @@ describe("match service operation safeguards", () => {
 
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
-        courtSource: { not: "COURT_TBD" },
+        // 코트 매칭은 별도 메뉴다. 매칭 탭 목록과 추천에 섞이지 않는다.
+        courtSource: "EXTERNAL_RESERVED",
         NOT: [
           { applications: { some: { applicantUserId: viewer.id } } },
         ],
