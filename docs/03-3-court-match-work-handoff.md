@@ -27,12 +27,34 @@
 | --- | --- |
 | 1. 데이터 모델 | **완료** (`74c028d`). 마이그레이션 로컬 적용 확인됨 |
 | 2. 운영자 입력(조건·계좌) | **완료** (`0483eec`, `361852f`) |
-| 3. 참가·승인·입금·확정·자동취소 | **미착수 ← 다음 작업** |
-| 4. 코트 매칭 탭 화면 재작성 | 미착수 |
+| 3. 참가·승인·입금·확정·자동취소 | **서버 완료.** 화면 미착수 |
+| 4. 코트 매칭 탭 화면 재작성 | 미착수 ← 다음 작업 |
 
-## 3. 다음 작업 (3번)
+## 3. 3번 서버 로직 — 구현 완료
 
-서버 로직이 핵심이고 분량이 가장 크다. 확정된 규칙:
+`src/server/domain/court-match{,-service}.ts`에 전용 도메인으로 넣었다. 일반 매칭과
+주최자·확정 조건이 달라 `match-service.ts`를 키우지 않고 분리했다. 기존
+`createApplication`은 `PARTNER_COURT` Match를 `COURT_MATCH_APPLICATION_PATH`로 막는다.
+
+API:
+
+| 경로 | 하는 일 |
+| --- | --- |
+| `POST /api/v1/court-matches/{matchId}/applications` | 참가 신청 |
+| `POST /api/v1/court-match-applications/{id}/decision` | 운영자 승인·거절 |
+| `POST /api/v1/court-match-applications/{id}/deposit` | 참가자 입금 알림 |
+| `POST /api/v1/court-match-applications/{id}/confirm` | 운영자 입금 확인·확정 |
+| `PUT /api/v1/court-match-applications/{id}/refund-account` | 참가자 환불 계좌 |
+| `POST /api/v1/court-match-applications/{id}/refund` | 운영자 환불 완료 표시 |
+
+자동 정리는 `reconcileCourtMatches`가 하고 기존 `/api/cron/reconcile-matches`에 붙였다.
+코트 매칭 정리를 먼저 돌린다 — 기한 만료로 자리가 풀린 결과가 뒤의 보정에 반영돼야 한다.
+
+**남은 것: 화면.** 참가자 쪽(신청·입금자명 입력·환불 계좌)과 운영자 쪽(신청 목록·
+승인·입금 확인·환불 표시)이 모두 없다. 운영자 화면 경로는 서버가 알림 링크에
+`/partner/court-matches/{matchId}`를 쓰고 있으니 그 경로로 만들면 된다.
+
+구현에 반영된 규칙:
 
 - **공개 시 Match 생성.** 운영자가 Slot을 공개하면 `hostUserId = 운영자`인
   `PARTNER_COURT` Match를 같은 트랜잭션에서 만든다. Court의 계좌 3필드를 Match의

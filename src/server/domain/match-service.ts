@@ -720,6 +720,8 @@ export async function createApplication(prisma: PrismaClient, viewer: Viewer, ma
       if (!match) throw new DomainError("MATCH_NOT_FOUND", 404, "매칭을 찾을 수 없어요.");
       if (match.hostUserId === viewer.id) throw new DomainError("OWN_MATCH_APPLICATION_NOT_ALLOWED", 409, "내가 만든 매칭에는 신청할 수 없어요.");
       if (match.courtSource === "COURT_TBD") throw new DomainError("LEGACY_MATCH_NOT_JOINABLE", 409, "코트 미정 매칭은 새 신청을 받지 않아요.");
+      // 코트 매칭은 승인·입금·확정 규칙이 달라 전용 흐름(court-match-service)이 처리한다.
+      if (match.courtSource === "PARTNER_COURT") throw new DomainError("COURT_MATCH_APPLICATION_PATH", 409, "코트 매칭은 코트 매칭 화면에서 신청해 주세요.");
       if (match.status === "CANCELLED") throw new DomainError("MATCH_CANCELLED", 409, "취소된 매칭에는 신청할 수 없어요.");
       if (match.status !== "OPEN") throw new DomainError("MATCH_ALREADY_CLOSED", 409, "모집이 마감된 매칭이에요.");
       if (match.startsAt <= new Date()) throw new DomainError("MATCH_ALREADY_ENDED", 409, "이미 시작된 일정에는 신청할 수 없어요.");

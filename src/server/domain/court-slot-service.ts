@@ -552,6 +552,33 @@ async function transitionSlot(
             : "SLOT_BLOCKED_BY_OPERATOR",
       },
     });
+
+    // 공개하는 순간 모집이 시작된다. 운영자가 호스트인 코트 매칭을 같은 트랜잭션에서
+    // 만들고, 시설 계좌를 여기로 복사해 스냅샷을 남긴다. 이후 시설 계좌가 바뀌어도
+    // 참가자가 안내받은 계좌 기록은 흔들리지 않는다(docs/03-2 §4.2).
+    if (nextStatus === "AVAILABLE" && !slot.match) {
+      const court = slot.courtUnit.court;
+      await transaction.match.create({
+        data: {
+          hostUserId: viewer.id,
+          clientRequestId: slot.id,
+          title: `${court.name} ${slot.courtUnit.name}`.slice(0, 80),
+          startsAt: slot.startsAt,
+          endsAt: slot.endsAt,
+          courtSource: "PARTNER_COURT",
+          courtSlotId: slot.id,
+          recruitCount: slot.maxParticipantCount,
+          maleRecruitCount: slot.maleCapacity,
+          femaleRecruitCount: slot.femaleCapacity,
+          gameType: slot.gameType,
+          partnerPreference: "COMPLETE_BEGINNER_WELCOME",
+          totalCourtFeeKrw: slot.priceKrw,
+          settlementBank: court.settlementBank,
+          settlementAccountNumber: court.settlementAccountNumber,
+          settlementAccountHolder: court.settlementAccountHolder,
+        },
+      });
+    }
     return transaction.courtSlot.findUniqueOrThrow({ where: { id: slot.id }, include: courtSlotInclude });
   });
   return toCourtSlotView(result, now);

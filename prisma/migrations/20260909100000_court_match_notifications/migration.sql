@@ -1,0 +1,8 @@
+-- 코트 매칭 계좌이체 흐름의 인앱 안내 종류.
+-- 참고: docs/03-2-court-match-operator-hosted-redesign.md
+ALTER TYPE "NotificationType" ADD VALUE 'COURT_MATCH_DEPOSIT_REQUIRED';
+ALTER TYPE "NotificationType" ADD VALUE 'COURT_MATCH_DEPOSIT_CLAIMED';
+ALTER TYPE "NotificationType" ADD VALUE 'COURT_MATCH_CONFIRMED';
+ALTER TYPE "NotificationType" ADD VALUE 'COURT_MATCH_DEPOSIT_EXPIRED';
+ALTER TYPE "NotificationType" ADD VALUE 'COURT_MATCH_CANCELLED';
+ALTER TYPE "NotificationType" ADD VALUE 'COURT_MATCH_REFUND_COMPLETED';
