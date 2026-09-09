@@ -4,10 +4,10 @@ import { PrismaClient } from "@/generated/prisma/client";
 import { requireE2eDatabaseUrl } from "./e2e-environment";
 
 export const e2eUsers = {
-  host: { id: "20000000-0000-4000-8000-000000000001", nickname: "E2E모집자" },
-  applicant: { id: "20000000-0000-4000-8000-000000000002", nickname: "E2E참가자" },
-  outsider: { id: "20000000-0000-4000-8000-000000000003", nickname: "E2E외부인" },
-  operator: { id: "20000000-0000-4000-8000-000000000004", nickname: "E2E운영자" },
+  host: { id: "20000000-0000-4000-8000-000000000001", nickname: "E2E모집자", gender: "MALE" },
+  applicant: { id: "20000000-0000-4000-8000-000000000002", nickname: "E2E참가자", gender: "FEMALE" },
+  outsider: { id: "20000000-0000-4000-8000-000000000003", nickname: "E2E외부인", gender: "MALE" },
+  operator: { id: "20000000-0000-4000-8000-000000000004", nickname: "E2E운영자", gender: "MALE" },
 } as const;
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: requireE2eDatabaseUrl() }) });
@@ -16,11 +16,12 @@ export type E2eFixture = {
   matchTitle: string;
   partnerMatchTitle: string;
   partnerSlotId: string;
+  partnerMatchId: string;
   legacyMatchId: string;
   legacyMatchTitle: string;
 };
 
-async function createOnboardedUser({ id, nickname }: { id: string; nickname: string }) {
+async function createOnboardedUser({ id, nickname, gender }: { id: string; nickname: string; gender: "MALE" | "FEMALE" }) {
   return prisma.user.create({
     data: {
       id,
@@ -32,6 +33,7 @@ async function createOnboardedUser({ id, nickname }: { id: string; nickname: str
           experienceRange: "MONTHS_6_TO_12",
           rallyLevel: "SHORT_RALLY",
           gameExperience: "KNOWS_RULES",
+          gender,
           purposes: { create: { purpose: "RALLY_PRACTICE" } },
         },
       },
@@ -106,6 +108,27 @@ export async function resetE2eDatabase(): Promise<E2eFixture> {
     },
   });
 
+  const partnerMatch = await prisma.match.create({
+    data: {
+      hostUserId: e2eUsers.operator.id,
+      clientRequestId: partnerSlot.id,
+      title: partnerMatchTitle,
+      startsAt: partnerStartsAt,
+      endsAt: partnerEndsAt,
+      courtSource: "PARTNER_COURT",
+      courtSlotId: partnerSlot.id,
+      recruitCount: 2,
+      maleRecruitCount: 1,
+      femaleRecruitCount: 1,
+      gameType: "MIXED_DOUBLES",
+      partnerPreference: "COMPLETE_BEGINNER_WELCOME",
+      totalCourtFeeKrw: 36_000,
+      settlementBank: "E2E은행",
+      settlementAccountNumber: "111-222-333",
+      settlementAccountHolder: "E2E테니스장",
+    },
+  });
+
   const legacyStartsAt = new Date(now.getTime() - 2 * 60 * 60 * 1000);
   const legacyEndsAt = new Date(now.getTime() - 60 * 60 * 1000);
   const legacyMatch = await prisma.match.create({
@@ -145,7 +168,7 @@ export async function resetE2eDatabase(): Promise<E2eFixture> {
     },
   });
 
-  return { matchTitle, partnerMatchTitle, partnerSlotId: partnerSlot.id, legacyMatchId: legacyMatch.id, legacyMatchTitle };
+  return { matchTitle, partnerMatchTitle, partnerSlotId: partnerSlot.id, partnerMatchId: partnerMatch.id, legacyMatchId: legacyMatch.id, legacyMatchTitle };
 }
 
 export async function disconnectE2eDatabase() {
