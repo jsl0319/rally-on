@@ -82,7 +82,7 @@ function ConversationCard({ item }: { item: ConversationListItem }) {
 }
 
 function EmptyChatList({ role }: { role: ChatRole }) {
-  return <section className="mt-16 text-center"><div aria-hidden="true" className="mx-auto grid size-24 place-items-center rounded-full bg-[var(--tm-bg-subtle)] text-4xl">💬</div><h2 className="mt-6 text-xl font-bold">아직 채팅할 매칭이 없어요</h2><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{role === "HOST" ? "매칭을 만들고 참가자가 수락되면 여기에서 준비를 조율할 수 있어요." : "신청이 수락되면 여기에서 모집자와 준비를 조율할 수 있어요."}</p><Button as={Link} className="mt-6" href="/" size="medium">매칭 찾아보기</Button></section>;
+  return <section className="mt-16 text-center"><div aria-hidden="true" className="mx-auto grid size-24 place-items-center rounded-full bg-[var(--tm-bg-subtle)] text-4xl">💬</div><h2 className="mt-6 text-xl font-bold">아직 채팅할 매칭이 없어요</h2><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{role === "HOST" ? "매칭을 만들고 참가자가 수락되면 여기에서 준비를 조율할 수 있어요." : "참가가 확정되면 여기에서 준비를 조율할 수 있어요."}</p><Button as={Link} className="mt-6" href="/" size="medium">매칭 찾아보기</Button></section>;
 }
 
 function LoadError({ error, onRetry }: { error: string; onRetry: () => void }) {

@@ -67,6 +67,14 @@ async function lockApplicationMatch(transaction: Transaction, applicationId: str
   if (application) await lockCourtMatch(transaction, application.matchId);
 }
 
+/**
+ * 코트 매칭 상세의 정본 주소는 슬롯 쪽이다. `/matches/{id}`로 보내면 리다이렉트로
+ * 한 번 더 튄다. 옛 기록처럼 슬롯이 없으면 기존 주소로 떨어뜨린다.
+ */
+function courtMatchHref(match: CourtMatch) {
+  return match.courtSlot ? `/partner-sessions/${match.courtSlot.id}` : `/matches/${match.id}`;
+}
+
 function assertAccepting(match: CourtMatch, now: Date) {
   const court = match.courtSlot?.courtUnit.court;
   if (!court || court.operatorApplication.applicantUserId !== match.hostUserId || court.status !== "ACTIVE" || court.operatorApplication.status !== "PUBLISH_APPROVED" || match.courtSlot?.status !== "AVAILABLE") {
@@ -192,7 +200,7 @@ export async function applyToCourtMatch(
       recipientUserId: viewer.id,
       type: "COURT_MATCH_DEPOSIT_REQUIRED",
       matchTitle: match.title,
-      href: `/matches/${matchId}`,
+      href: courtMatchHref(match),
     });
     return { id: created.id, status: "ACCEPTED" as const, depositCode, paymentDueAt: paymentDueAt.toISOString() };
   });
@@ -242,7 +250,7 @@ export async function decideCourtMatchApplication(
       recipientUserId: application.applicantUserId,
       type: "COURT_MATCH_DEPOSIT_REQUIRED",
       matchTitle: match.title,
-      href: `/matches/${match.id}`,
+      href: courtMatchHref(match),
     });
     return { id: applicationId, status: "ACCEPTED" as const, depositCode, paymentDueAt: paymentDueAt.toISOString() };
   });
@@ -318,7 +326,7 @@ export async function confirmCourtMatchDeposit(prisma: PrismaClient, operator: {
       recipientUserId: application.applicantUserId,
       type: "COURT_MATCH_CONFIRMED",
       matchTitle: match.title,
-      href: `/matches/${match.id}`,
+      href: courtMatchHref(match),
     });
 
     // 정원이 다 차면 모집을 닫고 남은 대기 신청을 정리한다.

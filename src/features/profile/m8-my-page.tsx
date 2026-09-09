@@ -45,6 +45,23 @@ async function fetchJsonSafe<T>(url: string): Promise<T | null> {
   }
 }
 
+type SentApplicationSummary = {
+  status: string;
+  courtMatch: { depositClaimedAt: string | null; awaitingRefund: boolean; refundRequested: boolean } | null;
+};
+
+/**
+ * 배지는 "내가 손대야 할 신청" 수다. 일반 매칭은 모집자의 검토를 기다리는 것뿐이지만,
+ * 코트 매칭은 승인 뒤에 입금이, 취소 뒤에 환불 계좌 입력이 남는다.
+ */
+function needsMyAction(application: SentApplicationSummary) {
+  if (application.status === "PENDING") return true;
+  const courtMatch = application.courtMatch;
+  if (!courtMatch) return false;
+  if (courtMatch.awaitingRefund) return !courtMatch.refundRequested;
+  return application.status === "ACCEPTED" && !courtMatch.depositClaimedAt;
+}
+
 export function M8MyPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState("");
@@ -66,11 +83,11 @@ export function M8MyPage() {
 
       const [notifications, sentApplications, hostedMatches] = await Promise.all([
         fetchJsonSafe<{ unreadCount: number }>("/api/v1/me/notifications"),
-        fetchJsonSafe<{ items: Array<{ status: string }> }>("/api/v1/me/applications"),
+        fetchJsonSafe<{ items: SentApplicationSummary[] }>("/api/v1/me/applications"),
         fetchJsonSafe<{ items: Array<{ pendingApplicationCount: number }> }>("/api/v1/me/hosted-matches"),
       ]);
       setUnreadNotificationCount(notifications?.unreadCount ?? 0);
-      setPendingSentCount(sentApplications?.items.filter((item) => item.status === "PENDING").length ?? 0);
+      setPendingSentCount(sentApplications?.items.filter(needsMyAction).length ?? 0);
       setPendingReceivedCount(hostedMatches?.items.reduce((sum, item) => sum + item.pendingApplicationCount, 0) ?? 0);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "내 정보를 불러오지 못했어요.");
@@ -134,7 +151,7 @@ export function M8MyPage() {
           />
           <LinkRow
             badge={<CountBadge count={pendingSentCount} />}
-            description="내가 신청한 매칭의 진행 상황을 확인해요"
+            description="내가 신청한 매칭의 진행 상황과 남은 할 일을 확인해요"
             href="/activity/sent"
             icon={<IconChip><PaperPlaneTilt aria-hidden="true" className="size-5" /></IconChip>}
             title="보낸 신청"
