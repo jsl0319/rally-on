@@ -1,14 +1,14 @@
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { DomainError } from "./profile-service";
 import { reconcileCourtMatch } from "./court-match-service";
-import { getApplicationDeadline, getJudgementAt, isAwaitingRefund, seatHoldingStatuses } from "./court-match";
+import { getApplicationDeadline, getJudgementAt, getRefundAmountKrw, getRefundPercent, isAwaitingRefund, seatHoldingStatuses } from "./court-match";
 
 const applicationSelect = {
   id: true, applicantUserId: true, applicantGender: true, status: true, createdAt: true,
   message: true, profileSnapshot: true, paymentDueAt: true, depositCode: true,
   depositorName: true, depositClaimedAt: true, confirmedAt: true,
   refundBank: true, refundAccountNumber: true, refundAccountHolder: true,
-  refundRequestedAt: true, refundCompletedAt: true,
+  refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, participantCancelledAt: true,
   applicantUser: { select: { nickname: true } },
 } satisfies Prisma.MatchApplicationSelect;
 
@@ -21,8 +21,11 @@ const matchInclude = {
 type Application = Prisma.MatchApplicationGetPayload<{ select: typeof applicationSelect }>;
 type Match = Prisma.MatchGetPayload<{ include: typeof matchInclude }>;
 
-export function courtApplicationStatusLabel(application: Pick<Application, "status" | "depositClaimedAt" | "confirmedAt" | "refundCompletedAt">) {
-  if (application.status === "CANCELLED" && application.confirmedAt) return application.refundCompletedAt ? "환불 완료 표시" : "환불 대기";
+export function courtApplicationStatusLabel(application: Pick<Application, "status" | "depositClaimedAt" | "confirmedAt" | "refundCompletedAt" | "refundAmountKrw">) {
+  if (application.status === "CANCELLED" && application.confirmedAt) {
+    if (application.refundAmountKrw === 0) return "취소됨 · 환불 없음";
+    return application.refundCompletedAt ? "환불 완료 표시" : "환불 대기";
+  }
   if (application.status === "ACCEPTED" && application.depositClaimedAt) return "입금 확인 중";
   return ({ PENDING: "승인 대기", ACCEPTED: "입금 대기", CONFIRMED: "참가 확정", REJECTED: "신청 거절", WITHDRAWN: "신청 철회", EXPIRED_UNPAID: "입금 기한 만료", CANCELLED: "취소됨" } as const)[application.status];
 }
@@ -40,6 +43,8 @@ function toApplication(application: Application) {
       ? { bank: application.refundBank, accountNumber: application.refundAccountNumber!, accountHolder: application.refundAccountHolder! } : null,
     refundRequestedAt: application.refundRequestedAt?.toISOString() ?? null,
     refundCompletedAt: application.refundCompletedAt?.toISOString() ?? null,
+    refundAmountKrw: application.refundAmountKrw,
+    participantCancelledAt: application.participantCancelledAt?.toISOString() ?? null,
   };
 }
 
@@ -90,9 +95,22 @@ export async function getCourtMatchParticipation(prisma: PrismaClient, viewer: {
   else if (info.remainingGenderSpots && (viewer.profile.gender === "MALE" ? info.remainingGenderSpots.male : info.remainingGenderSpots.female) === 0) blockedReason = "해당 성별의 자리가 모두 찼어요.";
 
   const canSeeAccount = application?.status === "ACCEPTED" || application?.status === "CONFIRMED";
+  // 취소는 시작 전까지 언제든 되지만, 지금 누르면 얼마가 돌아오는지 먼저 보여 준다(§3.7).
+  const now = new Date();
+  const cancellable = application !== undefined
+    && ["PENDING", "ACCEPTED", "CONFIRMED"].includes(application.status)
+    && match.status !== "CANCELLED"
+    && now < match.startsAt;
   return {
     ...info, isOperator, legacy, canApply: blockedReason === null, blockedReason,
     application: application ? toApplication(application) : null,
+    cancellation: cancellable && application
+      ? {
+        refundPercent: application.status === "CONFIRMED" ? getRefundPercent(now, match.startsAt) : 0,
+        refundAmountKrw: application.status === "CONFIRMED" ? getRefundAmountKrw(info.guestFeeKrw, now, match.startsAt) : 0,
+        paidBeforeConfirmation: application.status === "ACCEPTED" && application.depositClaimedAt !== null,
+      }
+      : null,
     settlementAccount: canSeeAccount && match.settlementBank && match.settlementAccountNumber && match.settlementAccountHolder
       ? { bank: match.settlementBank, accountNumber: match.settlementAccountNumber, accountHolder: match.settlementAccountHolder } : null,
     chatHref: match.conversation && (isOperator || application?.confirmedAt || (legacy && application?.status === "ACCEPTED")) ? `/chats/${match.id}` : null,

@@ -9,6 +9,7 @@ export type NotificationType =
   | "COURT_MATCH_CONFIRMED"
   | "COURT_MATCH_DEPOSIT_EXPIRED"
   | "COURT_MATCH_CANCELLED"
+  | "COURT_MATCH_PARTICIPANT_CANCELLED"
   | "COURT_MATCH_REFUND_COMPLETED";
 
 /**
@@ -33,6 +34,8 @@ export function buildNotificationContent(type: NotificationType, matchTitle: str
       return { title: "자리가 풀렸어요", body: `${matchTitle} 참가비 기한이 지나 신청이 취소됐어요.` };
     case "COURT_MATCH_CANCELLED":
       return { title: "코트 매칭이 취소됐어요", body: `${matchTitle}에 인원이 모이지 않아 취소됐어요.` };
+    case "COURT_MATCH_PARTICIPANT_CANCELLED":
+      return { title: "참가자가 취소했어요", body: `${matchTitle} 참가자 한 명이 참가를 취소했어요. 환불 대상인지 확인해 주세요.` };
     case "COURT_MATCH_REFUND_COMPLETED":
       return { title: "환불 완료로 표시됐어요", body: `${matchTitle} 운영자가 환불했다고 표시했어요. 통장에서 확인해 주세요.` };
   }

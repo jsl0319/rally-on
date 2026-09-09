@@ -116,6 +116,7 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
 
       {refunds.length ? <Group title="환불할 참가자" description="이체를 마친 뒤 표시해 주세요. 서비스가 송금을 대신하거나 확인하지는 않아요.">
         {refunds.map((application) => <Card application={application} busy={busyId === application.id} key={application.id} match={match}>
+          <p className="mt-3 text-sm leading-6 text-slate-600">보낼 금액 <strong className="font-semibold tabular-nums">{(application.refundAmountKrw ?? match.guestFeeKrw).toLocaleString("ko-KR")}원</strong>{application.participantCancelledAt ? <span className="ml-1.5 text-slate-500">· 참가자 취소</span> : null}</p>
           {application.refundAccount
             ? <div className="mt-3 rounded-2xl bg-slate-50 p-4 text-sm"><p className="font-semibold">{application.refundAccount.bank} · {application.refundAccount.accountHolder}</p><p className="mt-1 break-all font-semibold tabular-nums">{application.refundAccount.accountNumber}</p></div>
             : <p className="mt-3 text-sm leading-6 text-slate-500">참가자가 아직 환불 계좌를 입력하지 않았어요. 입력하면 여기에 보여요.</p>}

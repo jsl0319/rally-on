@@ -397,6 +397,7 @@ enum NotificationType {
   COURT_MATCH_CONFIRMED
   COURT_MATCH_DEPOSIT_EXPIRED
   COURT_MATCH_CANCELLED
+  COURT_MATCH_PARTICIPANT_CANCELLED
   COURT_MATCH_REFUND_COMPLETED
 }
 
@@ -562,6 +563,11 @@ model MatchApplication {
   refundAccountNumber    String?           @map("refund_account_number") @db.VarChar(40)
   refundAccountHolder    String?           @map("refund_account_holder") @db.VarChar(50)
   refundRequestedAt      DateTime?         @map("refund_requested_at") @db.Timestamptz(6)
+  /// 참가자가 스스로 참가를 취소한 시각. 운영자 철회·최소 인원 미달 취소와 구분한다.
+  participantCancelledAt DateTime?         @map("participant_cancelled_at") @db.Timestamptz(6)
+  /// 취소 시점에 확정한 환불 금액. 취소 시각과 참가비로 계산해 스냅샷으로 남긴다.
+  /// null은 이 열이 생기기 전의 기록이거나 앱 사유 취소로, 전액 환불을 뜻한다.
+  refundAmountKrw        Int?              @map("refund_amount_krw")
   /// 운영자가 환불했다고 표시한 시각. 서비스가 송금을 확인한 것은 아니다.
   refundCompletedAt      DateTime?         @map("refund_completed_at") @db.Timestamptz(6)
   createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)

@@ -209,6 +209,29 @@ export async function addAcceptedMemberToConversation(
   await transaction.matchConversation.update({ where: { id: existing.id }, data: { updatedAt: now } });
 }
 
+/**
+ * 참가를 취소한 사람은 대화방에서 뺀다. 남아 있으면 자기가 가지 않는 매칭의
+ * 준비 대화를 계속 보게 된다. 방과 지난 메시지는 남은 사람들을 위해 유지한다.
+ */
+export async function removeParticipantFromConversation(
+  transaction: MatchTransaction,
+  input: { matchId: string; userId: string; now?: Date },
+) {
+  const conversation = await transaction.matchConversation.findUnique({ where: { matchId: input.matchId }, select: { id: true } });
+  if (!conversation) return;
+  const removed = await transaction.matchConversationMember.deleteMany({
+    where: { conversationId: conversation.id, userId: input.userId, role: "PARTICIPANT" },
+  });
+  if (removed.count === 0) return;
+  await transaction.matchConversation.update({
+    where: { id: conversation.id },
+    data: {
+      updatedAt: input.now ?? new Date(),
+      messages: { create: { type: "SYSTEM", body: "참가자 한 명이 참가를 취소했어요." } },
+    },
+  });
+}
+
 export async function makeConversationReadOnly(transaction: MatchTransaction, matchId: string, message: string, now = new Date()) {
   const conversation = await transaction.matchConversation.findUnique({ where: { matchId }, select: { id: true, status: true } });
   if (!conversation || conversation.status !== "OPEN") return false;

@@ -1,7 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import type { PrismaClient } from "@/generated/prisma/client";
 
-import { addAcceptedMemberToConversation, makeConversationReadOnly } from "@/server/domain/match-chat-service";
+import { addAcceptedMemberToConversation, makeConversationReadOnly, removeParticipantFromConversation } from "@/server/domain/match-chat-service";
 import { recordApplicationNotification } from "@/server/domain/notification-service";
 import { DomainError } from "@/server/domain/profile-service";
 import type { ProfileWithRelations } from "./profile-service";
@@ -11,6 +11,7 @@ import {
   getApplicationDeadline,
   getJudgementAt,
   getPaymentDueAt,
+  getRefundAmountKrw,
   makeDepositCode,
   seatHoldingStatuses,
   type CourtMatchDecisionInput,
@@ -39,6 +40,7 @@ const applicantSelect = {
   depositClaimedAt: true,
   confirmedAt: true,
   refundCompletedAt: true,
+  refundAmountKrw: true,
   refundBank: true,
 } satisfies Prisma.MatchApplicationSelect;
 
@@ -49,6 +51,7 @@ const courtMatchSelect = {
   status: true,
   startsAt: true,
   courtSource: true,
+  totalCourtFeeKrw: true,
   recruitCount: true,
   maleRecruitCount: true,
   femaleRecruitCount: true,
@@ -68,11 +71,18 @@ async function lockApplicationMatch(transaction: Transaction, applicationId: str
   return application?.matchId;
 }
 
-/** 시간 보정으로 취소·만료된 기록은 요청을 거절하더라도 커밋해야 한다. */
+/**
+ * 시간 보정으로 취소·만료된 기록은 요청을 거절하더라도 커밋해야 한다.
+ *
+ * `allowAfterApplicationDeadline`은 신청 마감 뒤에도 받아야 하는 요청을 위한 것이다.
+ * 참가 취소가 그렇다. 취소는 신청이 아니라 이미 잡은 자리를 놓는 일이라, 마감을
+ * 이유로 막으면 시작 30분 전부터는 못 가게 된 사람이 자리를 붙잡고 있게 된다.
+ */
 async function withCurrentCourtMatch<T>(
   prisma: PrismaClient,
   target: { matchId: string } | { applicationId: string },
   action: (transaction: Transaction, now: Date) => Promise<T>,
+  options: { allowAfterApplicationDeadline?: boolean } = {},
 ): Promise<T> {
   const result = await prisma.$transaction(async (transaction) => {
     const matchId = "matchId" in target ? target.matchId : await lockApplicationMatch(transaction, target.applicationId);
@@ -84,7 +94,7 @@ async function withCurrentCourtMatch<T>(
     if (reconciled.didCancel) {
       return { error: new DomainError("COURT_MATCH_MINIMUM_NOT_MET", 409, "최소 인원이 모이지 않아 코트 매칭이 취소됐어요.") };
     }
-    if (isOperatorHostedActiveMatch(match) && now >= getApplicationDeadline(match.startsAt)) {
+    if (!options.allowAfterApplicationDeadline && isOperatorHostedActiveMatch(match) && now >= getApplicationDeadline(match.startsAt)) {
       return { error: new DomainError("COURT_MATCH_APPLICATION_CLOSED", 409, "참가 신청과 입금 기한이 지났어요.") };
     }
     if ("applicationId" in target) {
@@ -133,6 +143,28 @@ function countSeats(transaction: Transaction, matchId: string, gender?: "MALE" |
 /** 진행 여부를 판정하는 인원. 입금이 확인된 사람만 센다. */
 function countConfirmed(transaction: Transaction, matchId: string, confirmedBy?: Date) {
   return transaction.matchApplication.count({ where: { matchId, status: "CONFIRMED", ...(confirmedBy ? { confirmedAt: { lte: confirmedBy } } : {}) } });
+}
+
+/**
+ * 판정 시점에 확정돼 있던 인원. 그 뒤에 참가자가 스스로 취소해도 이 수는 줄지 않는다.
+ *
+ * 판정을 통과했다는 것은 진행하기로 정했다는 뜻이고, 그때 운영자는 이미 코트를
+ * 확보한 상태다. 나중에 한 명이 취소했다고 매칭 전체를 취소하면 남은 사람의 경기가
+ * 사라지고 운영자만 손해를 본다. 당일 취소는 환불이 없다는 규칙도 무의미해진다
+ * (전체가 취소되면 남은 사람은 전액을 돌려받으므로). 진행이 어려우면 운영자가 긴급
+ * 공급 철회로 취소한다. 정책 근거는 03-2 §3.2·§3.7.
+ */
+function countConfirmedAtJudgement(transaction: Transaction, matchId: string, judgementAt: Date) {
+  return transaction.matchApplication.count({
+    where: {
+      matchId,
+      confirmedAt: { lte: judgementAt },
+      OR: [
+        { status: "CONFIRMED" },
+        { status: "CANCELLED", participantCancelledAt: { gt: judgementAt } },
+      ],
+    },
+  });
 }
 
 async function assertSeatAvailable(transaction: Transaction, match: CourtMatch, gender: "MALE" | "FEMALE" | null) {
@@ -363,6 +395,81 @@ export async function confirmCourtMatchDeposit(prisma: PrismaClient, operator: {
   });
 }
 
+/**
+ * 참가자가 스스로 참가를 취소한다(§3.7).
+ *
+ * 환불 금액은 취소 시점의 **한국 시간 날짜**로 정한다. 이틀 전까지 전액, 하루 전
+ * 절반, 당일은 없다. 앱은 돈을 옮기지 않으므로 이 금액은 운영자가 얼마를 보내야
+ * 하는지 적어 둔 기록이다.
+ *
+ * 입금이 확인되지 않은 신청은 돌려줄 것이 없어 그냥 철회다. 이미 이체했는데 아직
+ * 확인 전이라면 통장 대조가 필요하므로 화면에서 문의로 안내한다.
+ *
+ * 자리는 언제 취소하든 돌려준다. 남은 자리가 다시 열려야 운영자가 대체 참가자를
+ * 받을 수 있고 현장 인원도 실제와 맞는다.
+ */
+/**
+ * 자리가 비면 다시 모집 중으로 되돌린다.
+ *
+ * 정원이 차면 매칭을 `CLOSED`로 닫는데, 참가자가 취소해 자리가 생겨도 닫힌 채로 두면
+ * 돌려준 자리를 아무도 쓸 수 없다. 신청 마감 전이라면 다시 열어 대체 참가자를 받는다.
+ * 마감될 때 취소된 대기 신청은 되살리지 않는다. 이미 취소 알림을 받았기 때문이다.
+ */
+async function reopenIfSeatFreed(transaction: Transaction, match: CourtMatch, now: Date) {
+  if (match.status !== "CLOSED" || now >= getApplicationDeadline(match.startsAt)) return;
+  const seats = await countSeats(transaction, match.id);
+  if (seats >= match.recruitCount) return;
+  await transaction.match.updateMany({ where: { id: match.id, status: "CLOSED" }, data: { status: "OPEN", closedAt: null } });
+}
+
+export async function cancelCourtMatchApplication(prisma: PrismaClient, viewer: { id: string }, applicationId: string) {
+  return withCurrentCourtMatch(prisma, { applicationId }, async (transaction, now) => {
+    const application = await transaction.matchApplication.findUnique({
+      where: { id: applicationId },
+      select: { ...applicantSelect, match: { select: courtMatchSelect } },
+    });
+    if (!application || application.applicantUserId !== viewer.id) {
+      throw new DomainError("APPLICATION_NOT_FOUND", 404, "신청을 찾을 수 없어요.");
+    }
+    const match = application.match;
+    assertCourtMatch(match);
+    if (match.status === "CANCELLED") throw new DomainError("MATCH_CANCELLED", 409, "이미 취소된 코트 매칭이에요.");
+    if (now >= match.startsAt) throw new DomainError("COURT_MATCH_ALREADY_STARTED", 409, "이미 시작한 코트 매칭이에요.");
+
+    if (application.status === "PENDING" || application.status === "ACCEPTED") {
+      await transaction.matchApplication.update({
+        where: { id: applicationId },
+        data: { status: "WITHDRAWN", withdrawnAt: now, participantCancelledAt: now },
+      });
+      await reopenIfSeatFreed(transaction, match, now);
+      await recordApplicationNotification(transaction, {
+        recipientUserId: match.hostUserId,
+        type: "COURT_MATCH_PARTICIPANT_CANCELLED",
+        matchTitle: match.title,
+        href: `/partner/court-matches/${match.id}`,
+      });
+      return { id: applicationId, status: "WITHDRAWN" as const, refundAmountKrw: 0 };
+    }
+
+    if (application.status !== "CONFIRMED") throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "취소할 수 있는 상태가 아니에요.");
+
+    const refundAmountKrw = getRefundAmountKrw(match.totalCourtFeeKrw ?? 0, now, match.startsAt);
+    await transaction.matchApplication.update({
+      where: { id: applicationId },
+      data: { status: "CANCELLED", cancelledAt: now, participantCancelledAt: now, refundAmountKrw },
+    });
+    await reopenIfSeatFreed(transaction, match, now);
+    await removeParticipantFromConversation(transaction, { matchId: match.id, userId: viewer.id, now });
+    await recordApplicationNotification(transaction, {
+      recipientUserId: match.hostUserId,
+      type: "COURT_MATCH_PARTICIPANT_CANCELLED",
+      matchTitle: match.title,
+      href: `/partner/court-matches/${match.id}`,
+    });
+    return { id: applicationId, status: "CANCELLED" as const, refundAmountKrw };
+  }, { allowAfterApplicationDeadline: true });
+}
+
 /** 취소가 실제로 난 뒤에만 환불받을 계좌를 받는다(§3.9). */
 export async function submitCourtMatchRefundAccount(
   prisma: PrismaClient,
@@ -382,7 +489,7 @@ export async function submitCourtMatchRefundAccount(
       throw new DomainError("APPLICATION_NOT_FOUND", 404, "신청을 찾을 수 없어요.");
     }
     if (application.match.courtSource !== "PARTNER_COURT") throw new DomainError("NOT_A_COURT_MATCH", 409, "이 매칭은 코트 매칭이 아니에요.");
-    if (application.status !== "CANCELLED" || !application.confirmedAt) {
+    if (application.status !== "CANCELLED" || !application.confirmedAt || application.refundAmountKrw === 0) {
       throw new DomainError("REFUND_NOT_APPLICABLE", 409, "환불 대상이 아니에요.");
     }
     if (application.refundCompletedAt) throw new DomainError("REFUND_ALREADY_COMPLETED", 409, "이미 환불 완료로 표시됐어요.");
@@ -416,7 +523,7 @@ export async function completeCourtMatchRefund(prisma: PrismaClient, operator: {
     const match = application.match;
     assertCourtMatch(match);
     if (match.hostUserId !== operator.id) throw new DomainError("COURT_MATCH_OPERATOR_REQUIRED", 403, "이 코트 매칭을 연 운영자만 환불을 표시할 수 있어요.");
-    if (application.status !== "CANCELLED" || !application.confirmedAt) {
+    if (application.status !== "CANCELLED" || !application.confirmedAt || application.refundAmountKrw === 0) {
       throw new DomainError("REFUND_NOT_APPLICABLE", 409, "환불 대상이 아니에요.");
     }
     if (application.refundCompletedAt) throw new DomainError("REFUND_ALREADY_COMPLETED", 409, "이미 환불 완료로 표시됐어요.");
@@ -457,7 +564,7 @@ async function expireOverdueDeposits(transaction: Transaction, matchId: string, 
 
 async function cancelForShortfall(transaction: Transaction, match: CourtMatch, now: Date) {
   const minimum = match.courtSlot?.minParticipantCount ?? 0;
-  const confirmed = await countConfirmed(transaction, match.id, getJudgementAt(match.startsAt));
+  const confirmed = await countConfirmedAtJudgement(transaction, match.id, getJudgementAt(match.startsAt));
   if (confirmed >= minimum) return false;
 
   await transaction.match.update({
