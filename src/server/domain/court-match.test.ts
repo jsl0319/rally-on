@@ -85,13 +85,14 @@ function transactionFor(match: ReturnType<typeof courtMatch>, seatCount: number)
   return {
     // 동시 신청을 막기 위해 Match 행을 잠근 뒤 읽는다.
     $queryRaw: vi.fn().mockResolvedValue([{ id: "match-id" }]),
-    match: { findUnique: vi.fn().mockResolvedValue(match) },
+    match: { findUnique: vi.fn().mockResolvedValue(match), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     matchApplication: {
       findUnique: vi.fn().mockResolvedValue(null),
       count: vi.fn().mockResolvedValue(seatCount),
       create: vi.fn().mockResolvedValue({ id: "application-id" }),
       findMany: vi.fn().mockResolvedValue([]),
       update: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     user: { findUnique: vi.fn().mockResolvedValue({ matchNotificationsEnabled: true }) },
     notification: { create: vi.fn() },
@@ -144,7 +145,8 @@ describe("코트 매칭 참가 신청", () => {
   });
 
   it("시작 30분 전이 지나면 신청을 받지 않는다", async () => {
-    const transaction = transactionFor(courtMatch({ startsAt: new Date(Date.now() + 10 * 60 * 1000) }), 0);
+    // 최소 인원을 채운 매칭도 시작 30분 전에는 추가 신청이 마감된다.
+    const transaction = transactionFor(courtMatch({ startsAt: new Date(Date.now() + 10 * 60 * 1000) }), 2);
 
     await expect(applyToCourtMatch(prismaFor(transaction), viewer, "match-id")).rejects.toMatchObject({
       code: "COURT_MATCH_APPLICATION_CLOSED",

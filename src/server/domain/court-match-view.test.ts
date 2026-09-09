@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { getCourtMatchParticipation, getOperatorCourtMatch } from "./court-match-view";
 
+vi.mock("./court-match-service", () => ({ reconcileCourtMatch: vi.fn().mockResolvedValue({ expiredCount: 0, didCancel: false }) }));
+
 const operatorId = "operator-user-id";
 const applicantId = "applicant-user-id";
 

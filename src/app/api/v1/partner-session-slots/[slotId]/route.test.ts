@@ -19,6 +19,7 @@ vi.mock("@/server/domain/court-slot-service", () => ({ getPublicCourtSlot }));
 vi.mock("@/server/domain/court-match-view", () => ({ getCourtMatchParticipation }));
 
 import { GET } from "./route";
+import { DomainError } from "@/server/domain/profile-service";
 
 const slotId = "e3e70682-c209-4cac-a29f-6fbed82c07cd";
 
@@ -57,5 +58,30 @@ describe("GET /api/v1/partner-session-slots/{slotId}", () => {
 
     expect(response.status).toBe(422);
     expect(getPublicCourtSlot).not.toHaveBeenCalled();
+  });
+
+  it("시간 보정으로 취소되면 상단 상태도 새로 읽어서 일치시킨다", async () => {
+    getRateLimitedCurrentUser.mockResolvedValue({ id: "member-id" });
+    getPrisma.mockReturnValue({});
+    getOnboardedViewer.mockResolvedValue({ id: "member-id" });
+    getPublicCourtSlot.mockResolvedValueOnce({ session: { matchId: "match-id", statusLabel: "모집 중" } });
+    getCourtMatchParticipation.mockResolvedValue({ status: "CANCELLED", canApply: false });
+    getPublicCourtSlot.mockResolvedValueOnce({ session: { matchId: "match-id", statusLabel: "취소됨" } });
+    const response = await GET(new Request("http://localhost"), { params: Promise.resolve({ slotId }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      session: { statusLabel: "취소됨" }, participation: { status: "CANCELLED", canApply: false },
+    });
+    expect(getPublicCourtSlot.mock.invocationCallOrder[1]).toBeGreaterThan(getCourtMatchParticipation.mock.invocationCallOrder[0]);
+  });
+
+  it("시간 접근이 거절되면 참가 상태를 읽거나 보정하지 않는다", async () => {
+    getRateLimitedCurrentUser.mockResolvedValue({ id: "member-id" });
+    getPrisma.mockReturnValue({});
+    getOnboardedViewer.mockResolvedValue({ id: "member-id" });
+    getPublicCourtSlot.mockRejectedValue(new DomainError("PARTNER_SLOT_NOT_AVAILABLE", 404, "조회할 수 없어요."));
+    const response = await GET(new Request("http://localhost"), { params: Promise.resolve({ slotId }) });
+    expect(response.status).toBe(404);
+    expect(getCourtMatchParticipation).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { DomainError } from "./profile-service";
+import { reconcileCourtMatch } from "./court-match-service";
 import { getApplicationDeadline, getJudgementAt, isAwaitingRefund, seatHoldingStatuses } from "./court-match";
 
 const applicationSelect = {
@@ -65,6 +66,7 @@ function summary(match: Match) {
 }
 
 async function readMatch(prisma: PrismaClient, matchId: string) {
+  await reconcileCourtMatch(prisma, matchId);
   const match = await prisma.match.findUnique({ where: { id: matchId }, include: matchInclude });
   if (!match || match.courtSource !== "PARTNER_COURT") throw new DomainError("MATCH_NOT_FOUND", 404, "코트 매칭을 찾을 수 없어요.");
   return match;

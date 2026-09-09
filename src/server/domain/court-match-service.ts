@@ -65,6 +65,38 @@ async function lockCourtMatch(transaction: Transaction, matchId: string) {
 async function lockApplicationMatch(transaction: Transaction, applicationId: string) {
   const application = await transaction.matchApplication.findUnique({ where: { id: applicationId }, select: { matchId: true } });
   if (application) await lockCourtMatch(transaction, application.matchId);
+  return application?.matchId;
+}
+
+/** 시간 보정으로 취소·만료된 기록은 요청을 거절하더라도 커밋해야 한다. */
+async function withCurrentCourtMatch<T>(
+  prisma: PrismaClient,
+  target: { matchId: string } | { applicationId: string },
+  action: (transaction: Transaction, now: Date) => Promise<T>,
+): Promise<T> {
+  const result = await prisma.$transaction(async (transaction) => {
+    const matchId = "matchId" in target ? target.matchId : await lockApplicationMatch(transaction, target.applicationId);
+    if ("matchId" in target) await lockCourtMatch(transaction, target.matchId);
+    // 잠금 대기 중 기한을 넘길 수 있으므로 잠금을 얻은 뒤 시간을 읽는다.
+    const now = new Date();
+    const match = matchId ? await transaction.match.findUnique({ where: { id: matchId }, select: courtMatchSelect }) : null;
+    const reconciled = await reconcileLockedCourtMatch(transaction, match, now);
+    if (reconciled.didCancel) {
+      return { error: new DomainError("COURT_MATCH_MINIMUM_NOT_MET", 409, "최소 인원이 모이지 않아 코트 매칭이 취소됐어요.") };
+    }
+    if (isOperatorHostedActiveMatch(match) && now >= getApplicationDeadline(match.startsAt)) {
+      return { error: new DomainError("COURT_MATCH_APPLICATION_CLOSED", 409, "참가 신청과 입금 기한이 지났어요.") };
+    }
+    if ("applicationId" in target) {
+      const application = await transaction.matchApplication.findUnique({ where: { id: target.applicationId }, select: { status: true } });
+      if (application?.status === "EXPIRED_UNPAID") {
+        return { error: new DomainError("DEPOSIT_DEADLINE_PASSED", 409, "입금 기한이 지났어요.") };
+      }
+    }
+    return { value: await action(transaction, now) };
+  });
+  if ("error" in result) throw result.error;
+  return result.value;
 }
 
 /**
@@ -99,8 +131,8 @@ function countSeats(transaction: Transaction, matchId: string, gender?: "MALE" |
 }
 
 /** 진행 여부를 판정하는 인원. 입금이 확인된 사람만 센다. */
-function countConfirmed(transaction: Transaction, matchId: string) {
-  return transaction.matchApplication.count({ where: { matchId, status: "CONFIRMED" } });
+function countConfirmed(transaction: Transaction, matchId: string, confirmedBy?: Date) {
+  return transaction.matchApplication.count({ where: { matchId, status: "CONFIRMED", ...(confirmedBy ? { confirmedAt: { lte: confirmedBy } } : {}) } });
 }
 
 async function assertSeatAvailable(transaction: Transaction, match: CourtMatch, gender: "MALE" | "FEMALE" | null) {
@@ -146,9 +178,7 @@ export async function applyToCourtMatch(
   matchId: string,
   input: { message?: string } = {},
 ) {
-  const now = new Date();
-  return prisma.$transaction(async (transaction) => {
-    await lockCourtMatch(transaction, matchId);
+  return withCurrentCourtMatch(prisma, { matchId }, async (transaction, now) => {
     const match = await transaction.match.findUnique({ where: { id: matchId }, select: courtMatchSelect });
     assertCourtMatch(match);
 
@@ -160,9 +190,6 @@ export async function applyToCourtMatch(
     }
     assertAccepting(match, now);
     if (!viewer.profile.gender) throw new DomainError("PROFILE_GENDER_REQUIRED", 409, "프로필에 성별을 입력해 주세요.");
-    if (now >= getJudgementAt(match.startsAt) && await countConfirmed(transaction, match.id) < (match.courtSlot?.minParticipantCount ?? 0)) {
-      throw new DomainError("COURT_MATCH_MINIMUM_NOT_MET", 409, "최소 인원이 모이지 않아 참가 신청이 종료됐어요.");
-    }
 
     const existing = await transaction.matchApplication.findUnique({
       where: { matchId_applicantUserId: { matchId, applicantUserId: viewer.id } },
@@ -213,9 +240,7 @@ export async function decideCourtMatchApplication(
   applicationId: string,
   input: CourtMatchDecisionInput,
 ) {
-  const now = new Date();
-  return prisma.$transaction(async (transaction) => {
-    await lockApplicationMatch(transaction, applicationId);
+  return withCurrentCourtMatch(prisma, { applicationId }, async (transaction, now) => {
     const application = await transaction.matchApplication.findUnique({
       where: { id: applicationId },
       select: { ...applicantSelect, match: { select: courtMatchSelect } },
@@ -263,9 +288,7 @@ export async function claimCourtMatchDeposit(
   applicationId: string,
   input: DepositClaimInput,
 ) {
-  const now = new Date();
-  return prisma.$transaction(async (transaction) => {
-    await lockApplicationMatch(transaction, applicationId);
+  return withCurrentCourtMatch(prisma, { applicationId }, async (transaction, now) => {
     const application = await transaction.matchApplication.findUnique({
       where: { id: applicationId },
       select: { ...applicantSelect, match: { select: courtMatchSelect } },
@@ -295,9 +318,7 @@ export async function claimCourtMatchDeposit(
 
 /** 운영자가 통장에서 입금을 확인하고 참가를 확정한다. */
 export async function confirmCourtMatchDeposit(prisma: PrismaClient, operator: { id: string }, applicationId: string) {
-  const now = new Date();
-  return prisma.$transaction(async (transaction) => {
-    await lockApplicationMatch(transaction, applicationId);
+  return withCurrentCourtMatch(prisma, { applicationId }, async (transaction, now) => {
     const application = await transaction.matchApplication.findUnique({
       where: { id: applicationId },
       select: { ...applicantSelect, match: { select: courtMatchSelect } },
@@ -349,30 +370,34 @@ export async function submitCourtMatchRefundAccount(
   applicationId: string,
   input: RefundAccountInput,
 ) {
-  const now = new Date();
-  const application = await prisma.matchApplication.findUnique({
-    where: { id: applicationId },
-    select: { ...applicantSelect, match: { select: { courtSource: true } } },
-  });
-  if (!application || application.applicantUserId !== viewer.id) {
-    throw new DomainError("APPLICATION_NOT_FOUND", 404, "신청을 찾을 수 없어요.");
-  }
-  if (application.match.courtSource !== "PARTNER_COURT") throw new DomainError("NOT_A_COURT_MATCH", 409, "이 매칭은 코트 매칭이 아니에요.");
-  if (application.status !== "CANCELLED" || !application.confirmedAt) {
-    throw new DomainError("REFUND_NOT_APPLICABLE", 409, "환불 대상이 아니에요.");
-  }
-  if (application.refundCompletedAt) throw new DomainError("REFUND_ALREADY_COMPLETED", 409, "이미 환불 완료로 표시됐어요.");
+  return prisma.$transaction(async (transaction) => {
+    // 환불 완료와 같은 Match 잠금을 잡고, 완료 여부를 잠금 이후에 다시 읽는다.
+    await lockApplicationMatch(transaction, applicationId);
+    const now = new Date();
+    const application = await transaction.matchApplication.findUnique({
+      where: { id: applicationId },
+      select: { ...applicantSelect, match: { select: { courtSource: true } } },
+    });
+    if (!application || application.applicantUserId !== viewer.id) {
+      throw new DomainError("APPLICATION_NOT_FOUND", 404, "신청을 찾을 수 없어요.");
+    }
+    if (application.match.courtSource !== "PARTNER_COURT") throw new DomainError("NOT_A_COURT_MATCH", 409, "이 매칭은 코트 매칭이 아니에요.");
+    if (application.status !== "CANCELLED" || !application.confirmedAt) {
+      throw new DomainError("REFUND_NOT_APPLICABLE", 409, "환불 대상이 아니에요.");
+    }
+    if (application.refundCompletedAt) throw new DomainError("REFUND_ALREADY_COMPLETED", 409, "이미 환불 완료로 표시됐어요.");
 
-  await prisma.matchApplication.update({
-    where: { id: applicationId },
-    data: {
-      refundBank: input.bank,
-      refundAccountNumber: input.accountNumber,
-      refundAccountHolder: input.accountHolder,
-      refundRequestedAt: now,
-    },
+    await transaction.matchApplication.update({
+      where: { id: applicationId },
+      data: {
+        refundBank: input.bank,
+        refundAccountNumber: input.accountNumber,
+        refundAccountHolder: input.accountHolder,
+        refundRequestedAt: now,
+      },
+    });
+    return { id: applicationId, refundRequestedAt: now.toISOString() };
   });
-  return { id: applicationId, refundRequestedAt: now.toISOString() };
 }
 
 /**
@@ -380,9 +405,9 @@ export async function submitCourtMatchRefundAccount(
  * 이 기록은 송금 증명이 아니다. 화면에서 그렇게 안내해야 한다(§3.9).
  */
 export async function completeCourtMatchRefund(prisma: PrismaClient, operator: { id: string }, applicationId: string) {
-  const now = new Date();
   return prisma.$transaction(async (transaction) => {
     await lockApplicationMatch(transaction, applicationId);
+    const now = new Date();
     const application = await transaction.matchApplication.findUnique({
       where: { id: applicationId },
       select: { ...applicantSelect, match: { select: courtMatchSelect } },
@@ -432,7 +457,7 @@ async function expireOverdueDeposits(transaction: Transaction, matchId: string, 
 
 async function cancelForShortfall(transaction: Transaction, match: CourtMatch, now: Date) {
   const minimum = match.courtSlot?.minParticipantCount ?? 0;
-  const confirmed = await countConfirmed(transaction, match.id);
+  const confirmed = await countConfirmed(transaction, match.id, getJudgementAt(match.startsAt));
   if (confirmed >= minimum) return false;
 
   await transaction.match.update({
@@ -460,16 +485,36 @@ async function cancelForShortfall(transaction: Transaction, match: CourtMatch, n
   return true;
 }
 
+function isOperatorHostedActiveMatch(match: CourtMatch | null): match is CourtMatch {
+  return Boolean(match && match.courtSource === "PARTNER_COURT" && ["OPEN", "CLOSED"].includes(match.status)
+    && match.courtSlot?.courtUnit.court.operatorApplication.applicantUserId === match.hostUserId);
+}
+
 /**
- * 코트 매칭의 시간 기반 정리. 크론에서 주기적으로 부른다.
- *
- * 1. 입금 기한이 지난 승인 건을 `EXPIRED_UNPAID`로 돌려 자리를 반환한다.
- * 2. 판정 시점(시작 3시간 전)을 지난 코트 매칭 중 입금 완료 인원이 최소 인원에
- *    미달하면 자동으로 취소한다.
- *
- * 순서가 중요하다. 기한 만료를 먼저 처리해야 미달 판정이 실제 입금 인원을 본다.
+ * 호출자는 Match 행 잠금을 보유해야 한다. 요청과 크론이 같은 판정을 사용한다.
+ * 입금 기한 만료로 자리를 반환한 뒤, 판정 시점까지 확정된 최소 인원을 확인한다.
  */
-export async function reconcileCourtMatches(prisma: PrismaClient, now = new Date()) {
+async function reconcileLockedCourtMatch(transaction: Transaction, match: CourtMatch | null, now: Date) {
+  if (!isOperatorHostedActiveMatch(match)) return { expiredCount: 0, didCancel: false };
+  const expiredCount = await expireOverdueDeposits(transaction, match.id, match.title, now);
+  const didCancel = now >= getJudgementAt(match.startsAt) ? await cancelForShortfall(transaction, match, now) : false;
+  if (!didCancel && now >= getApplicationDeadline(match.startsAt)) {
+    await transaction.match.updateMany({ where: { id: match.id, status: "OPEN" }, data: { status: "CLOSED", closedAt: now } });
+    await transaction.matchApplication.updateMany({ where: { matchId: match.id, status: "PENDING" }, data: { status: "CANCELLED", cancelledAt: now } });
+  }
+  return { expiredCount, didCancel };
+}
+
+export async function reconcileCourtMatch(prisma: PrismaClient, matchId: string, at?: Date) {
+  return prisma.$transaction(async (transaction) => {
+    await lockCourtMatch(transaction, matchId);
+    const now = at ?? new Date();
+    const match = await transaction.match.findUnique({ where: { id: matchId }, select: courtMatchSelect });
+    return reconcileLockedCourtMatch(transaction, match, now);
+  });
+}
+
+export async function reconcileCourtMatches(prisma: PrismaClient, now?: Date) {
   const matches = await prisma.match.findMany({
     where: { courtSource: "PARTNER_COURT", status: { in: ["OPEN", "CLOSED"] } },
     select: courtMatchSelect,
@@ -478,19 +523,7 @@ export async function reconcileCourtMatches(prisma: PrismaClient, now = new Date
   let expired = 0;
   let cancelled = 0;
   for (const match of matches) {
-    const result = await prisma.$transaction(async (transaction) => {
-      await lockCourtMatch(transaction, match.id);
-      const current = await transaction.match.findUnique({ where: { id: match.id }, select: courtMatchSelect });
-      if (!current || !["OPEN", "CLOSED"].includes(current.status) || current.courtSlot?.courtUnit.court.operatorApplication.applicantUserId !== current.hostUserId) return { expiredCount: 0, didCancel: false };
-      const expiredCount = await expireOverdueDeposits(transaction, current.id, current.title, now);
-      const judged = now >= getJudgementAt(current.startsAt);
-      const didCancel = judged ? await cancelForShortfall(transaction, current, now) : false;
-      if (!didCancel && now >= getApplicationDeadline(current.startsAt)) {
-        await transaction.match.updateMany({ where: { id: current.id, status: "OPEN" }, data: { status: "CLOSED", closedAt: now } });
-        await transaction.matchApplication.updateMany({ where: { matchId: current.id, status: "PENDING" }, data: { status: "CANCELLED", cancelledAt: now } });
-      }
-      return { expiredCount, didCancel };
-    });
+    const result = await reconcileCourtMatch(prisma, match.id, now);
     expired += result.expiredCount;
     if (result.didCancel) cancelled += 1;
   }
