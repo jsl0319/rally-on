@@ -23,6 +23,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:m3": "tsx prisma/seed-m3-matches.ts",
     "db:seed:announcements": "tsx prisma/seed-announcements.ts",
+    "db:seed:court-match": "tsx prisma/seed-court-match.ts",
     "db:studio": "prisma studio",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
