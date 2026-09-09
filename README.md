@@ -143,6 +143,23 @@ docker compose exec postgres psql -U tennis_mate -d tennis_mate \
   -c 'CREATE DATABASE tennis_mate_e2e OWNER tennis_mate;'
 ```
 
+Docker가 없다면 Homebrew로도 됩니다. 기본 포트와 자동 시작을 건드리지 않으려고
+전용 포트에 전용 클러스터를 따로 띄웁니다.
+
+```bash
+brew install postgresql@17
+PGBIN="$(brew --prefix postgresql@17)/bin"
+"$PGBIN/initdb" -D ~/.rally-on-e2e-pg -U postgres --auth=trust -E UTF8 --locale=C
+"$PGBIN/pg_ctl" -D ~/.rally-on-e2e-pg -o "-p 55432 -k /tmp -c listen_addresses=127.0.0.1" \
+  -l ~/.rally-on-e2e-pg/server.log start
+"$PGBIN/psql" -h 127.0.0.1 -p 55432 -U postgres \
+  -c "CREATE ROLE tennis_mate LOGIN PASSWORD 'tennis_mate' SUPERUSER;" \
+  -c 'CREATE DATABASE tennis_mate_e2e OWNER tennis_mate;'
+```
+
+이때 `E2E_DATABASE_URL`의 포트는 `55432`입니다. 클러스터는 재부팅하면 꺼지므로
+다시 쓸 때 위 `pg_ctl ... start`만 실행하면 됩니다.
+
 그다음 전용 DB에 migration을 적용하고 Chromium을 설치합니다. 아래 명령의
 `$E2E_DATABASE_URL`은 셸 변수이므로, `.env.local`에만 적어 뒀다면 이 줄에서는
 값을 직접 넣거나 먼저 `export` 해야 합니다.
@@ -160,7 +177,26 @@ npm run e2e
 > `e2e`가 없으면 실행을 막지만, 값을 넣기 전에 한 번 더 확인해 주세요.
 
 `npm run e2e`는 로컬 `127.0.0.1:3100`에서 앱을 실행하고, 390×844 기준의 테스트
-계정 두 개로 신청·수락·채팅 권한과 하단 메뉴 프레임을 확인합니다.
+계정 네 개로 일반 매칭 개설·신청·수락·채팅 권한, 코트 매칭의 신청·입금 알림·운영자
+확정, 옛 기록 보존, 하단 메뉴 프레임을 확인합니다.
+
+포트 3000에 개발 서버를 띄워 둔 채로 실행하지 마세요. 같은 저장소의 `.next` 산출물을
+공유해 테스트가 불안정해집니다.
+
+### 실제 DB 통합 테스트
+
+`tests/db/court-match-flow.test.ts`는 코트 매칭의 권한·상태 경계와 **실제 PostgreSQL
+행 잠금 아래의 동시 실행**을 검증합니다. 브라우저 없이 도메인 함수를 직접 호출하며,
+E2E와 같은 전용 DB를 씁니다(같은 방식으로 `users`·`regions`를 `TRUNCATE` 합니다).
+
+```bash
+export E2E_DATABASE_URL='postgresql://tennis_mate:tennis_mate@127.0.0.1:55432/tennis_mate_e2e?schema=public'
+npx vitest run tests/db/court-match-flow.test.ts
+```
+
+`E2E_DATABASE_URL`이 없으면 이 파일은 통째로 건너뜁니다. 그래서 DB 없이 `npm run check`
+만 돌리면 이 테스트는 실행되지 않습니다. 코트 매칭을 고칠 때는 위 변수를 넣고 함께
+돌려 주세요.
 
 ### 코트 매칭 손으로 확인하기
 
