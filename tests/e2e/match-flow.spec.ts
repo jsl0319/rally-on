@@ -232,6 +232,52 @@ test("공개된 코트 매칭은 신청·입금 알림·운영자 확정·채팅
   await operatorContext.close();
 });
 
+test("확정한 참가자가 스스로 취소하면 환불 금액과 함께 환불 대기가 된다", async ({ browser }) => {
+  // 픽스처의 코트 매칭은 10일 뒤라 이틀 전보다 이르다. 전액 환불 구간이다.
+  const applicantContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  await signInAs(applicantContext, e2eUsers.applicant.id);
+  const applicantPage = await applicantContext.newPage();
+
+  await applicantPage.goto(`/partner-sessions/${fixture.partnerSlotId}`);
+  await applicantPage.getByRole("button", { name: "참가 신청하기" }).click();
+  await applicantPage.getByRole("dialog", { name: "참가 신청" }).getByRole("button", { name: "참가 신청" }).click();
+  await applicantPage.getByLabel("실제로 보낸 입금자명").fill("E2E입금자");
+  await applicantPage.getByRole("button", { name: "입금했어요" }).click();
+  await expect(applicantPage.getByText("입금 알림을 보냈어요", { exact: false })).toBeVisible();
+
+  const operatorContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  await signInAs(operatorContext, e2eUsers.operator.id);
+  const operatorPage = await operatorContext.newPage();
+  await operatorPage.goto(`/partner/court-matches/${fixture.partnerMatchId}`);
+  await operatorPage.getByRole("button", { name: "입금 확인하고 확정" }).click();
+  await expect(operatorPage.getByRole("heading", { name: /참가 확정 1명/ })).toBeVisible();
+
+  // 참가자가 스스로 취소한다. 누르기 전에 얼마가 돌아오는지 먼저 보여 준다.
+  await applicantPage.reload();
+  await expect(applicantPage.getByText("운영자가 입금을 확인했어요", { exact: false })).toBeVisible();
+  await applicantPage.getByRole("button", { name: "참가 취소", exact: true }).click();
+  await expect(applicantPage.getByText("36,000원", { exact: false }).first()).toBeVisible();
+  await applicantPage.getByRole("button", { name: "참가 취소하기" }).click();
+  await expect(applicantPage.getByText("참가를 취소했어요", { exact: false })).toBeVisible();
+
+  // 취소 뒤에는 환불받을 계좌를 받는다.
+  await applicantPage.getByLabel("은행").fill("E2E은행");
+  await applicantPage.getByLabel("계좌번호").fill("555-666-777");
+  await applicantPage.getByLabel("예금주").fill("E2E참가자");
+  await applicantPage.getByRole("button", { name: "환불 계좌 저장" }).click();
+  await expect(applicantPage.getByText("환불 계좌를 저장했어요")).toBeVisible();
+
+  // 운영자에게는 보낼 금액과 참가자가 입력한 계좌가 보인다.
+  await operatorPage.reload();
+  await expect(operatorPage.getByRole("heading", { name: "환불할 참가자" })).toBeVisible();
+  await expect(operatorPage.getByText("36,000원", { exact: false }).first()).toBeVisible();
+  await expect(operatorPage.getByText("555-666-777")).toBeVisible();
+  await expect(operatorPage.getByText("참가자 취소", { exact: false })).toBeVisible();
+
+  await applicantContext.close();
+  await operatorContext.close();
+});
+
 test("코트 매칭은 일반 매칭 목록과 매칭 상세 주소에 섞이지 않는다", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
   await signInAs(context, e2eUsers.applicant.id);

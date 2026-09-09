@@ -4,9 +4,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { PrismaClient } from "@/generated/prisma/client";
-import { getApplicationDeadline, getJudgementAt } from "@/server/domain/court-match";
+import { getApplicationDeadline, getJudgementAt, getRefundAmountKrw, getRefundPercent } from "@/server/domain/court-match";
 import {
   applyToCourtMatch,
+  cancelCourtMatchApplication,
   claimCourtMatchDeposit,
   completeCourtMatchRefund,
   confirmCourtMatchDeposit,
@@ -119,12 +120,14 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
   }
 
   /** 코트 슬롯은 최대 인원이 2 이상이어야 한다(DB 제약). 자리 하나를 미리 채워 "마지막 한 자리"를 만든다. */
+  let seatCounter = 100;
   async function fillSeat(matchId: string, user: { id: string; gender: "MALE" | "FEMALE" }, status: "ACCEPTED" | "CONFIRMED" = "ACCEPTED") {
+    seatCounter += 1; // 입금 식별코드는 매칭 안에서 겹칠 수 없다
     return prisma.matchApplication.create({
       data: {
         matchId, applicantUserId: user.id, applicantGender: user.gender, status,
         profileSnapshot: {}, profileSnapshotVersion: 1, decidedAt: new Date(),
-        depositCode: "999", paymentDueAt: new Date(Date.now() + HOUR),
+        depositCode: String(seatCounter), paymentDueAt: new Date(Date.now() + HOUR),
         ...(status === "CONFIRMED" ? { confirmedAt: new Date() } : {}),
       },
     });
@@ -385,6 +388,179 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
 
     // 우회가 막혔으니 입금 코드 없는 ACCEPTED가 생기지 않는다.
     expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: applied.id } })).status).toBe("PENDING");
+  });
+
+
+  // ── §3.7 참가자 취소와 환불 단계 ──────────────────────────────
+
+  it("환불 비율은 시각이 아니라 한국 시간 날짜로 정한다", () => {
+    const startsAt = new Date("2026-09-20T01:00:00.000Z"); // KST 2026-09-20 10:00
+    // KST 기준 이틀 전(9/18)이면 늦은 밤이어도 전액이다. 시각 기준이면 여기서 50%가 나온다.
+    expect(getRefundPercent(new Date("2026-09-18T14:59:00.000Z"), startsAt)).toBe(100);
+    // KST 9/19로 넘어가는 순간부터 하루 전이다.
+    expect(getRefundPercent(new Date("2026-09-18T15:00:00.000Z"), startsAt)).toBe(50);
+    expect(getRefundPercent(new Date("2026-09-19T14:59:00.000Z"), startsAt)).toBe(50);
+    // KST 9/20 당일.
+    expect(getRefundPercent(new Date("2026-09-19T15:00:00.000Z"), startsAt)).toBe(0);
+    // 원 단위 내림.
+    expect(getRefundAmountKrw(35_000, new Date("2026-09-18T15:00:00.000Z"), startsAt)).toBe(17_500);
+    expect(getRefundAmountKrw(35_001, new Date("2026-09-18T15:00:00.000Z"), startsAt)).toBe(17_500);
+  });
+
+  it("확정 참가자가 이틀 전에 취소하면 전액이 환불 대상이 되고 자리가 돌아온다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const applicant = await makeUser("참가자", "FEMALE");
+    const startsAt = new Date(Date.now() + 5 * 24 * HOUR);
+    const { matchId } = await makeCourtMatch(operator.id, { startsAt, minParticipantCount: 1, maxParticipantCount: 2 });
+    const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
+    await confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id);
+
+    const result = await cancelCourtMatchApplication(prisma, { id: applicant.id }, applied.id);
+    expect(result).toMatchObject({ status: "CANCELLED", refundAmountKrw: 36_000 });
+
+    const after = await prisma.matchApplication.findUniqueOrThrow({ where: { id: applied.id } });
+    expect(after.participantCancelledAt).not.toBeNull();
+    const view = await getOperatorCourtMatch(prisma, { id: operator.id }, matchId);
+    expect(view.seatCount).toBe(0);
+    expect(view.applications[0].awaitingRefund).toBe(true);
+
+    // 대화방에서도 빠진다.
+    expect(await prisma.matchConversationMember.count({ where: { userId: applicant.id, conversation: { matchId } } })).toBe(0);
+  });
+
+  it("당일 취소는 환불 대상이 아니고 환불 계좌도 받지 않는다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const applicant = await makeUser("참가자", "FEMALE");
+    // 오늘 안에서 시작하는 매칭이라 취소 시점이 곧 당일이다.
+    const startsAt = new Date(Date.now() + 6 * HOUR);
+    const { matchId } = await makeCourtMatch(operator.id, { startsAt, minParticipantCount: 1, maxParticipantCount: 2 });
+    const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
+    await confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id);
+
+    const result = await cancelCourtMatchApplication(prisma, { id: applicant.id }, applied.id);
+    expect(result.refundAmountKrw).toBe(getRefundAmountKrw(36_000, new Date(), startsAt));
+
+    const view = await getCourtMatchParticipation(prisma, applicant.viewer, matchId);
+    if (result.refundAmountKrw === 0) {
+      expect(view.application?.awaitingRefund).toBe(false);
+      expect(view.application?.statusLabel).toBe("취소됨 · 환불 없음");
+      await expect(submitCourtMatchRefundAccount(prisma, { id: applicant.id }, applied.id, { bank: "DB은행", accountNumber: "111-111", accountHolder: "참가자" }))
+        .rejects.toMatchObject({ code: "REFUND_NOT_APPLICABLE" });
+    }
+  });
+
+  it("입금 확인 전 취소는 철회로 남고 환불 기록을 만들지 않는다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const applicant = await makeUser("참가자", "FEMALE");
+    const { matchId } = await makeCourtMatch(operator.id);
+    const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
+
+    const result = await cancelCourtMatchApplication(prisma, { id: applicant.id }, applied.id);
+    expect(result).toMatchObject({ status: "WITHDRAWN", refundAmountKrw: 0 });
+    const after = await prisma.matchApplication.findUniqueOrThrow({ where: { id: applied.id } });
+    expect(after.confirmedAt).toBeNull();
+    expect(after.refundAmountKrw).toBeNull();
+    const view = await getOperatorCourtMatch(prisma, { id: operator.id }, matchId);
+    expect(view.seatCount).toBe(0);
+  });
+
+  it("판정 전에 취소해 미달이 되면 판정 시점에 매칭이 취소되고 남은 사람은 전액 대상이다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const leaver = await makeUser("취소할 사람", "MALE");
+    const stayer = await makeUser("남는 사람", "FEMALE");
+    // 판정까지 아직 시간이 남은 매칭. 최소 2명.
+    const startsAt = new Date(Date.now() + 5 * HOUR);
+    const { matchId } = await makeCourtMatch(operator.id, { startsAt, minParticipantCount: 2, maxParticipantCount: 2 });
+    const first = await applyToCourtMatch(prisma, leaver.viewer, matchId, {});
+    const second = await applyToCourtMatch(prisma, stayer.viewer, matchId, {});
+    await confirmCourtMatchDeposit(prisma, { id: operator.id }, first.id);
+    await confirmCourtMatchDeposit(prisma, { id: operator.id }, second.id);
+
+    // 정원이 차서 마감됐던 매칭이다.
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).status).toBe("CLOSED");
+
+    await cancelCourtMatchApplication(prisma, { id: leaver.id }, first.id);
+    // 아직 판정 전이라 매칭은 살아 있고, 빈 자리를 채울 수 있도록 다시 모집 중이 된다.
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).status).toBe("OPEN");
+
+    // 판정 시점을 지나게 만들고 판정을 돌린다.
+    await prisma.match.update({ where: { id: matchId }, data: { startsAt: new Date(Date.now() + HOUR), endsAt: new Date(Date.now() + 3 * HOUR) } });
+    await reconcileCourtMatch(prisma, matchId);
+
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).status).toBe("CANCELLED");
+    const remaining = await prisma.matchApplication.findUniqueOrThrow({ where: { id: second.id } });
+    expect(remaining.status).toBe("CANCELLED");
+    expect(remaining.refundAmountKrw).toBeNull(); // 앱 사유 취소는 전액
+  });
+
+  it("판정을 통과한 뒤의 취소는 매칭을 취소시키지 않는다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const leaver = await makeUser("취소할 사람", "MALE");
+    const stayer = await makeUser("남는 사람", "FEMALE");
+    // 판정 시점이 이미 지난 매칭. 두 명 모두 판정 전에 확정됐다.
+    const startsAt = new Date(Date.now() + HOUR);
+    const { matchId } = await makeCourtMatch(operator.id, { startsAt, minParticipantCount: 2, maxParticipantCount: 2 });
+    const first = await fillSeat(matchId, leaver, "CONFIRMED");
+    const second = await fillSeat(matchId, stayer, "CONFIRMED");
+    const beforeJudgement = new Date(getJudgementAt(startsAt).getTime() - HOUR);
+    await prisma.matchApplication.updateMany({ where: { id: { in: [first.id, second.id] } }, data: { confirmedAt: beforeJudgement } });
+
+    await cancelCourtMatchApplication(prisma, { id: leaver.id }, first.id);
+    await reconcileCourtMatch(prisma, matchId);
+
+    // 한 번 통과한 판정은 뒤집지 않는다.
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).status).toBe("OPEN");
+    expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: second.id } })).status).toBe("CONFIRMED");
+  });
+
+  it("남의 신청은 취소할 수 없다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const applicant = await makeUser("참가자", "FEMALE");
+    const outsider = await makeUser("제3자", "MALE");
+    const { matchId } = await makeCourtMatch(operator.id, { minParticipantCount: 1, maxParticipantCount: 2 });
+    const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
+
+    await expect(cancelCourtMatchApplication(prisma, { id: outsider.id }, applied.id))
+      .rejects.toMatchObject({ code: "APPLICATION_NOT_FOUND" });
+    await expect(cancelCourtMatchApplication(prisma, { id: operator.id }, applied.id))
+      .rejects.toMatchObject({ code: "APPLICATION_NOT_FOUND" });
+    expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: applied.id } })).status).toBe("ACCEPTED");
+  });
+
+  it("신청이 마감된 뒤에도 시작 전이면 취소할 수 있다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const applicant = await makeUser("참가자", "FEMALE");
+    const startsAt = new Date(Date.now() + 5 * HOUR);
+    const { matchId } = await makeCourtMatch(operator.id, { startsAt, minParticipantCount: 1, maxParticipantCount: 2 });
+    const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
+    await confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id);
+
+    // 시작 20분 전. 신청 마감(30분 전)은 지났지만 아직 시작하지 않았다.
+    const soon = new Date(Date.now() + 20 * 60_000);
+    await prisma.match.update({ where: { id: matchId }, data: { startsAt: soon, endsAt: new Date(Date.now() + 2 * HOUR) } });
+    await prisma.matchApplication.update({ where: { id: applied.id }, data: { confirmedAt: new Date(getJudgementAt(soon).getTime() - HOUR) } });
+
+    // 못 가게 된 사람이 자리를 붙잡고 있지 않도록 취소는 받는다. 환불은 당일이라 없다.
+    const result = await cancelCourtMatchApplication(prisma, { id: applicant.id }, applied.id);
+    expect(result.status).toBe("CANCELLED");
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).status).not.toBe("CANCELLED");
+  });
+
+  it("이미 시작한 매칭은 취소할 수 없다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const applicant = await makeUser("참가자", "FEMALE");
+    const startsAt = new Date(Date.now() + 5 * HOUR);
+    const { matchId } = await makeCourtMatch(operator.id, { startsAt, minParticipantCount: 1, maxParticipantCount: 2 });
+    const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
+    await confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id);
+
+    // 시작 시각을 지나게 하되, 판정 시점 전에 확정된 것으로 만들어 자동 취소를 피한다.
+    const startedAt = new Date(Date.now() - HOUR);
+    await prisma.match.update({ where: { id: matchId }, data: { startsAt: startedAt, endsAt: new Date(Date.now() + HOUR) } });
+    await prisma.matchApplication.update({ where: { id: applied.id }, data: { confirmedAt: new Date(getJudgementAt(startedAt).getTime() - HOUR) } });
+
+    await expect(cancelCourtMatchApplication(prisma, { id: applicant.id }, applied.id))
+      .rejects.toMatchObject({ code: "COURT_MATCH_ALREADY_STARTED" });
   });
 
   // ── §7 실제 동시 실행 ─────────────────────────────────────────
