@@ -3,7 +3,8 @@
 작성일: 2026-09-09 · 이전 노트: `Claude outputs/handoff.md`(2026-09-07, 일반 매칭 쪽)
 
 **다음 작업 인계:** 실제 브라우저·DB 검증의 실행 순서와 완료 기준은
-[`03-4-codex-to-claude-verification-handoff.md`](03-4-codex-to-claude-verification-handoff.md)를 따른다.
+[`03-5-claude-to-codex-handoff.md`](03-5-claude-to-codex-handoff.md)를 따른다.
+검증 결과는 [`03-4`](03-4-codex-to-claude-verification-handoff.md) §12·§13에 있다.
 이 문서의 과거 미완료 메모와 최신 검증 상태를 구분할 것.
 
 ---
