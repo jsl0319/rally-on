@@ -14,6 +14,32 @@ async function signInAs(context: BrowserContext, userId: string) {
   await context.addCookies([{ name: "authjs.session-token", value, url: E2E_BASE_URL, httpOnly: true, sameSite: "Lax" }]);
 }
 
+const kstInputNow = () => new Date(Date.now() + 9 * 60 * 60_000).toISOString().slice(0, 19);
+async function saveAction(page: Page, name: string, path: string, method = "POST") {
+  const [response] = await Promise.all([
+    page.waitForResponse((r) => r.url().includes(path) && r.request().method() === method),
+    page.getByRole("button", { name, exact: true }).click(),
+  ]);
+  expect(response.ok(), await response.text()).toBeTruthy();
+}
+async function fillTransferTime(page: Page) {
+  const input = page.getByLabel("실제 송금 시각 (한국 시간)");
+  await expect(input).toBeVisible();
+  await input.fill(kstInputNow());
+}
+async function recordReceipt(page: Page, amount = "36000") {
+  await page.getByText("입금 대조·정정", { exact: true }).click();
+  await page.getByLabel("누적 수령 금액").fill(amount);
+  await page.getByLabel("은행 수령 시각 (한국 시간)").fill(kstInputNow());
+  await page.getByLabel("대조·정정 사유").fill("E2E 통장 입금 대조");
+  const [response] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/receipt") && r.request().method() === "POST"),
+    page.getByRole("button", { name: "수령 기록 저장" }).click(),
+  ]);
+  expect(response.ok(), await response.text()).toBeTruthy();
+  await expect(page.getByText("E2E 통장 입금 대조", { exact: false }).first()).toBeAttached();
+}
+
 /**
  * 매칭 날짜·시간은 텍스트 입력이 아니라 바텀시트 휠 피커로 고른다.
  * 휠은 스크롤이 멈춘 뒤에야 선택을 확정하므로, 여러 칸을 한 번에 움직이면
@@ -117,8 +143,12 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   // 직접 예약 코트임을 알리는 문구는 미리보기 시트에 있다. 매칭 상세의 출처 배지는
   // 6479506에서 의도적으로 뺐으므로 상세에서 찾으면 안 된다.
   await expect(previewDialog.getByText("모집자가 코트를 예약했어요")).toBeVisible();
-  await previewDialog.getByRole("button", { name: "매칭 공개하기" }).click();
-  await expect(hostPage).toHaveURL(/\/matches\/[0-9a-f-]{36}$/);
+  const [published] = await Promise.all([
+    hostPage.waitForResponse((r) => r.url().endsWith("/api/v1/matches") && r.request().method() === "POST"),
+    previewDialog.getByRole("button", { name: "매칭 공개하기" }).click(),
+  ]);
+  expect(published.ok(), await published.text()).toBeTruthy();
+  await expect(hostPage).toHaveURL(/\/matches\/[0-9a-f-]{36}$/, { timeout: 15000 });
   const matchId = new URL(hostPage.url()).pathname.split("/").at(-1);
   if (!matchId) throw new Error("생성된 Match ID를 확인하지 못했어요.");
 
@@ -209,6 +239,7 @@ test("공개된 코트 매칭은 신청·입금 알림·운영자 확정·채팅
   await expect(operatorPage.getByRole("heading", { name: /입금 대기/ })).toBeVisible();
   await expect(operatorPage.getByText(e2eUsers.applicant.nickname)).toBeVisible();
   await expect(operatorPage.getByText("E2E입금자")).toBeVisible();
+  await recordReceipt(operatorPage);
   await operatorPage.getByRole("button", { name: "입금 확인하고 확정" }).click();
   await expect(operatorPage.getByRole("heading", { name: /참가 확정 1명/ })).toBeVisible();
 
@@ -249,6 +280,7 @@ test("확정한 참가자가 스스로 취소하면 환불 금액과 함께 환�
   await signInAs(operatorContext, e2eUsers.operator.id);
   const operatorPage = await operatorContext.newPage();
   await operatorPage.goto(`/partner/court-matches/${fixture.partnerMatchId}`);
+  await recordReceipt(operatorPage);
   await operatorPage.getByRole("button", { name: "입금 확인하고 확정" }).click();
   await expect(operatorPage.getByRole("heading", { name: /참가 확정 1명/ })).toBeVisible();
 
@@ -257,22 +289,36 @@ test("확정한 참가자가 스스로 취소하면 환불 금액과 함께 환�
   await expect(applicantPage.getByText("운영자가 입금을 확인했어요", { exact: false })).toBeVisible();
   await applicantPage.getByRole("button", { name: "참가 취소", exact: true }).click();
   await expect(applicantPage.getByText("36,000원", { exact: false }).first()).toBeVisible();
-  await applicantPage.getByRole("button", { name: "참가 취소하기" }).click();
+  const [cancelled] = await Promise.all([
+    applicantPage.waitForResponse((r) => r.url().endsWith("/cancel") && r.request().method() === "POST"),
+    applicantPage.getByRole("button", { name: "참가 취소하기" }).click(),
+  ]);
+  expect(cancelled.ok(), await cancelled.text()).toBeTruthy();
   await expect(applicantPage.getByText("참가를 취소했어요", { exact: false })).toBeVisible();
 
   // 취소 뒤에는 환불받을 계좌를 받는다.
   await applicantPage.getByLabel("은행").fill("E2E은행");
   await applicantPage.getByLabel("계좌번호").fill("555-666-777");
   await applicantPage.getByLabel("예금주").fill("E2E참가자");
-  await applicantPage.getByRole("button", { name: "환불 계좌 저장" }).click();
+  await saveAction(applicantPage, "환불 계좌 저장", "/refund-account", "PUT");
   await expect(applicantPage.getByText("환불 계좌를 저장했어요")).toBeVisible();
 
   // 운영자에게는 보낼 금액과 참가자가 입력한 계좌가 보인다.
   await operatorPage.reload();
-  await expect(operatorPage.getByRole("heading", { name: "환불할 참가자" })).toBeVisible();
+  await expect(operatorPage.getByRole("heading", { name: "반환·환불 처리" })).toBeVisible();
   await expect(operatorPage.getByText("36,000원", { exact: false }).first()).toBeVisible();
   await expect(operatorPage.getByText("555-666-777")).toBeVisible();
-  await expect(operatorPage.getByText("참가자 취소", { exact: false })).toBeVisible();
+  await saveAction(operatorPage, "환불 처리 시작 · 36,000원", "/refund/start", "POST");
+  await expect(operatorPage.getByText("송금 처리 중 · 36,000원", { exact: true })).toBeVisible();
+  await applicantPage.reload();
+  await expect(applicantPage.getByText("운영자가 환불을 처리하고 있어요.", { exact: false })).toBeVisible();
+  await expect(applicantPage.getByRole("button", { name: "환불 계좌 저장" })).toHaveCount(0);
+  await fillTransferTime(operatorPage);
+  await operatorPage.getByLabel("처리 근거·메모").fill("E2E 은행에서 송금 확인");
+  await saveAction(operatorPage, "송금 결과 저장", "/refund", "POST");
+  await expect(operatorPage.getByText("송금 완료 기록 · 36,000원", { exact: true })).toBeVisible();
+  await applicantPage.reload();
+  await expect(applicantPage.getByText("실제 입금 여부는 통장에서 확인해 주세요.", { exact: false })).toBeVisible();
 
   await applicantContext.close();
   await operatorContext.close();
@@ -362,4 +408,71 @@ test("본문이 비어 있는 요청에는 서버 오류가 아니라 400으로 
   expect(result).toEqual({ status: 400, code: "INVALID_REQUEST_BODY" });
 
   await context.close();
+});
+
+test("미확정 입금 문의를 운영자와 대조하고 전액 반환한 뒤 회원에게 답변·해결한다", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const errors: string[] = [];
+  const contexts = await Promise.all([e2eUsers.applicant, e2eUsers.operator, e2eUsers.reviewer].map(async (user) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+    await signInAs(context, user.id);
+    const page = await context.newPage(); page.on("pageerror", (error) => errors.push(error.message));
+    return { context, page };
+  }));
+  const [member, operator, reviewer] = contexts.map((c) => c.page);
+  await member.goto(`/partner-sessions/${fixture.partnerSlotId}`);
+  await member.getByRole("button", { name: "참가 신청하기" }).click();
+  await member.getByRole("dialog", { name: "참가 신청" }).getByRole("button", { name: "참가 신청" }).click();
+  await member.getByRole("button", { name: "참가 취소", exact: true }).click();
+  await member.getByRole("button", { name: "참가 취소하기" }).click();
+  await expect(member.getByText("신청 철회", { exact: true }).first()).toBeVisible();
+  await member.getByRole("link", { name: "입금·환불 문의" }).click();
+  await member.getByLabel("문의 내용", { exact: true }).fill("취소 전에 보낸 입금이 있습니다. 확인 부탁드립니다.");
+  await saveAction(member, "문의 보내기", "/support-inquiries", "POST");
+  await expect(member.getByText("문의가 접수됐어요.", { exact: false })).toBeVisible();
+
+  await reviewer.goto("/internal/support-inquiries");
+  await saveAction(reviewer, "문의 담당하기", "/support-inquiries/", "POST");
+  await reviewer.getByLabel("처리 유형").selectOption("REQUEST_OPERATOR");
+  await reviewer.getByLabel("답변 내용").fill("이 신청의 입금을 통장에서 대조해 주세요.");
+  await saveAction(reviewer, "답변·처리 저장", "/support-inquiries/", "POST");
+  await expect(reviewer.getByText("운영자 확인 중", { exact: true }).last()).toBeVisible();
+  await operator.goto("/partner/support-inquiries");
+  await expect(operator.getByText("취소 전에 보낸 입금이 있습니다.", { exact: false })).toHaveCount(0);
+  await operator.getByRole("link", { name: "해당 매칭 입금·환불 대조 →" }).click();
+  await recordReceipt(operator, "18000");
+  await expect(operator.getByRole("heading", { name: "반환·환불 처리" })).toBeVisible();
+  await member.goto(`/partner-sessions/${fixture.partnerSlotId}`);
+  await member.getByLabel("은행", { exact: true }).fill("E2E은행");
+  await member.getByLabel("계좌번호").fill("555-666-777");
+  await member.getByLabel("예금주").fill("E2E참가자");
+  await saveAction(member, "환불 계좌 저장", "/refund-account", "PUT");
+  await expect(member.getByText("환불 계좌를 저장했어요")).toBeVisible();
+  await operator.reload();
+  await saveAction(operator, "환불 처리 시작 · 18,000원", "/refund/start", "POST");
+  await fillTransferTime(operator);
+  await operator.getByLabel("처리 근거·메모").fill("E2E 미확정 입금 전액 반환 확인");
+  await saveAction(operator, "송금 결과 저장", "/refund", "POST");
+  await expect(operator.getByText("송금 완료 기록 · 18,000원", { exact: true })).toBeVisible();
+  await operator.goto("/partner/support-inquiries");
+  await operator.getByLabel("답변 내용").fill("은행 내역 대조 후 18000원 전액을 반환했습니다.");
+  await saveAction(operator, "답변·처리 저장", "/support-inquiries/", "POST");
+  await expect(operator.getByText("검토 중", { exact: true }).last()).toBeVisible();
+  await reviewer.reload();
+  await reviewer.getByLabel("답변 내용").fill("확인된 입금 18000원이 전액 반환됐습니다. 통장을 확인해 주세요.");
+  await saveAction(reviewer, "답변·처리 저장", "/support-inquiries/", "POST");
+  await expect(reviewer.getByText("답변 완료", { exact: true }).last()).toBeVisible();
+  await reviewer.getByLabel("처리 유형").selectOption("RESOLVE");
+  await reviewer.getByLabel("답변 내용").fill("전액 반환과 안내를 완료했습니다.");
+  await saveAction(reviewer, "답변·처리 저장", "/support-inquiries/", "POST");
+  await expect(reviewer.getByText("해결 완료", { exact: true }).last()).toBeVisible();
+  await member.goto("/support/inquiry");
+  await expect(member.getByText("확인된 입금 18000원이 전액 반환됐습니다.", { exact: false })).toBeVisible();
+  await expect(member.getByText("해결 완료", { exact: true })).toBeVisible();
+  await expect(member.getByText("이 신청의 입금을 통장에서 대조해 주세요.")).toHaveCount(0);
+  await member.screenshot({ path: "/tmp/rally-money-support-member.png", fullPage: true });
+  await operator.screenshot({ path: "/tmp/rally-money-support-operator.png", fullPage: true });
+  expect(await member.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+  await Promise.all(contexts.map((c) => c.context.close()));
 });

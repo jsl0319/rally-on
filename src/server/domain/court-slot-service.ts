@@ -4,9 +4,9 @@ import type { CourtSlotStatus, MatchStatus, PrismaClient } from "@/generated/pri
 import { DomainError } from "@/server/domain/profile-service";
 import { purposeLabels } from "@/server/domain/profile";
 import { gameTypeLabels } from "@/matches/game-type";
-import { isAwaitingRefund } from "./court-match";
+import { courtMoneySummary } from "./court-match-money";
 import { makeConversationReadOnly } from "@/server/domain/match-chat-service";
-import { getApplicationDeadline, seatHoldingStatuses } from "./court-match";
+import { canAcceptCourtApplication, seatHoldingStatuses } from "./court-match";
 
 import type {
   CourtCreateInput,
@@ -146,7 +146,7 @@ function toCourtView(court: CourtWithRelations) {
 }
 
 export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) {
-  const canApply = slot.status === "AVAILABLE" && slot.match?.status === "OPEN" && getApplicationDeadline(slot.startsAt) > now;
+  const canApply = slot.status === "AVAILABLE" && slot.match?.status === "OPEN" && canAcceptCourtApplication(now, slot.startsAt);
   const session = slot.match
     ? { matchId: slot.match.id, status: slot.match.status, statusLabel: sessionStatusLabels[slot.match.status] }
     : null;
@@ -414,7 +414,7 @@ async function getOperatorActionCounts(prisma: PrismaClient, matchIds: string[])
 
   const applications = await prisma.matchApplication.findMany({
     where: { matchId: { in: matchIds } },
-    select: { matchId: true, status: true, depositClaimedAt: true, confirmedAt: true, refundRequestedAt: true, refundCompletedAt: true },
+    select: { matchId: true, status: true, depositClaimedAt: true, confirmedAt: true, refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, receivedAmountKrw: true, legacyRefundPaidKrw: true, refundAttempts: { select: { status: true, amountKrw: true } }, match: { select: { totalCourtFeeKrw: true } } },
   });
   for (const application of applications) {
     const entry = counts.get(application.matchId)
@@ -423,7 +423,7 @@ async function getOperatorActionCounts(prisma: PrismaClient, matchIds: string[])
     if (application.status === "ACCEPTED" && application.depositClaimedAt) entry.depositToConfirm += 1;
     if (application.status === "CONFIRMED") entry.confirmed += 1;
     // 환불 대기 중이면서 참가자가 계좌까지 넣은 건만 운영자가 지금 처리할 수 있다.
-    if (isAwaitingRefund(application) && application.refundRequestedAt) entry.refundToComplete += 1;
+    if (courtMoneySummary(application, application.match.totalCourtFeeKrw ?? 0).outstandingKrw > 0 && application.refundRequestedAt) entry.refundToComplete += 1;
     counts.set(application.matchId, entry);
   }
   return counts;
@@ -560,6 +560,9 @@ async function transitionSlot(
   const isCancelledSessionConfirmation = nextStatus === "BLOCKED" && slot.status === "ALLOCATED" && slot.match?.status === "CANCELLED";
 
   const now = new Date();
+  if (nextStatus === "AVAILABLE" && slot.startsAt.getTime() - now.getTime() < 4 * 60 * 60_000) {
+    throw new DomainError("COURT_SLOT_TOO_LATE_TO_PUBLISH", 409, "입금과 확인 시간을 확보하려면 시작 4시간 전까지 공개해 주세요.");
+  }
   const result = await prisma.$transaction(async (transaction) => {
     const updated = await transaction.courtSlot.updateMany({
       where: {

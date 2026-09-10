@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { MatchBadge } from "@/features/matches/match-presentation";
 import type { CourtMatchParticipation } from "@/server/domain/court-match-view";
@@ -11,6 +11,13 @@ const inputClass = "mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p
 
 export function CourtMatchPayment({ participation, onRefresh }: { participation: CourtMatchParticipation; onRefresh: () => Promise<void> }) {
   const application = participation.application;
+  const [now, setNow] = useState(() => Date.now());
+  const due = application?.paymentDueAt;
+  useEffect(() => {
+    if (!due) return;
+    const timer = window.setTimeout(() => setNow(Date.now()), Math.max(0, Math.min(new Date(due).getTime() - Date.now(), 2147483647)));
+    return () => window.clearTimeout(timer);
+  }, [due]);
   const [depositorName, setDepositorName] = useState(application?.depositorName ?? "");
   const [bank, setBank] = useState(application?.refundAccount?.bank ?? "");
   const [accountNumber, setAccountNumber] = useState(application?.refundAccount?.accountNumber ?? "");
@@ -20,6 +27,7 @@ export function CourtMatchPayment({ participation, onRefresh }: { participation:
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   if (!application) return null;
+  const canTransfer = application.status === "ACCEPTED" && due !== null && due !== undefined && now < new Date(due).getTime() && application.money.receivedKrw < participation.guestFeeKrw;
 
   const cancel = async () => {
     if (busy) return;
@@ -48,22 +56,26 @@ export function CourtMatchPayment({ participation, onRefresh }: { participation:
   return <div>
     <MatchBadge tone={application.status === "CONFIRMED" ? "green" : application.awaitingRefund ? "amber" : "blue"}>{application.statusLabel}</MatchBadge>
     {application.status === "PENDING" ? <p className="mt-3 text-sm leading-6 text-slate-600">운영자가 신청을 검토하고 있어요. 승인되면 입금 계좌와 기한을 안내해요.</p> : null}
-    {application.status === "ACCEPTED" ? <div className="mt-4">
-      <div className="rounded-2xl bg-blue-50 p-4"><p className="text-sm font-semibold text-blue-800">입금할 금액</p><p className="mt-1 text-2xl font-bold tabular-nums text-blue-900">{participation.guestFeeKrw.toLocaleString("ko-KR")}원</p>{participation.settlementAccount ? <><p className="mt-4 text-sm font-semibold">{participation.settlementAccount.bank} · {participation.settlementAccount.accountHolder}</p><p className="mt-1 break-all text-lg font-semibold tabular-nums">{participation.settlementAccount.accountNumber}</p></> : <p className="mt-3 text-sm">계좌를 확인할 수 없어요. 문의해 주세요.</p>}<p className="mt-4 text-sm leading-6 text-blue-800">입금 식별코드 <strong className="text-lg">{application.depositCode}</strong><br />은행 앱의 받는 분 통장 표시를 <strong>이름{application.depositCode}</strong> 형태로 입력해 주세요.</p>{application.paymentDueAt ? <p className="mt-3 text-xs font-semibold text-blue-700">기한 · {formatStatusChangedAt(application.paymentDueAt)}</p> : null}</div>
+    {canTransfer ? <div className="mt-4">
+      <div className="rounded-2xl bg-blue-50 p-4"><p className="text-sm font-semibold text-blue-800">입금할 금액</p><p className="mt-1 text-2xl font-bold tabular-nums text-blue-900">{Math.max(0, participation.guestFeeKrw - application.money.receivedKrw).toLocaleString("ko-KR")}원</p>{participation.settlementAccount ? <><p className="mt-4 text-sm font-semibold">{participation.settlementAccount.bank} · {participation.settlementAccount.accountHolder}</p><p className="mt-1 break-all text-lg font-semibold tabular-nums">{participation.settlementAccount.accountNumber}</p></> : <p className="mt-3 text-sm">계좌를 확인할 수 없어요. 문의해 주세요.</p>}<p className="mt-4 text-sm leading-6 text-blue-800">입금 식별코드 <strong className="text-lg">{application.depositCode}</strong><br />은행 앱의 받는 분 통장 표시를 <strong>이름{application.depositCode}</strong> 형태로 입력해 주세요.</p>{application.paymentDueAt ? <p className="mt-3 text-xs font-semibold text-blue-700">이체 기한 · {formatStatusChangedAt(application.paymentDueAt)}</p> : null}</div>
       <form className="mt-5" onSubmit={(e) => { e.preventDefault(); void save("deposit"); }}><fieldset disabled={busy}><label className="text-sm font-semibold" htmlFor="depositor-name">실제로 보낸 입금자명</label><input className={inputClass} id="depositor-name" required maxLength={50} autoComplete="off" placeholder={`예: 홍길동${application.depositCode}`} value={depositorName} onChange={(e) => setDepositorName(e.target.value)} /><p className="mt-2 text-xs leading-5 text-slate-500">계좌이체를 마친 뒤 알려 주세요. 알림만으로 입금이 확인되지는 않아요.</p><Button className="mt-4" fullWidth type="submit" disabled={busy}>{busy ? "전송 중…" : application.depositClaimedAt ? "입금자명 수정해 알리기" : "입금했어요"}</Button></fieldset></form>
     </div> : null}
+    {application.status === "ACCEPTED" && !canTransfer ? <p className="mt-3 text-sm leading-6 text-slate-600">추가 입금하지 말고 운영자의 참가 확정을 기다려 주세요. 잘못 보낸 금액은 입금·환불 문의로 알려 주세요.</p> : null}
+    {application.confirmationDueAt && application.status === "ACCEPTED" ? <p className="mt-3 text-xs text-slate-500">운영자 확인 기한 · {formatStatusChangedAt(application.confirmationDueAt)}. 이체 기한이 지나면 추가 입금하지 말고 확인을 기다려 주세요.</p> : null}
     {application.status === "CONFIRMED" ? <p className="mt-3 text-sm leading-6 text-slate-600">운영자가 입금을 확인했어요. 일정과 현장 안내를 확인해 주세요.</p> : null}
-    {application.awaitingRefund ? <form className="mt-4" onSubmit={(e) => { e.preventDefault(); void save("refund-account"); }}><p className="mb-4 text-sm leading-6 text-slate-600">{application.refundAmountKrw === null ? "환불받을 계좌를 입력해 주세요." : <>환불 예정 금액은 <strong className="font-semibold">{application.refundAmountKrw.toLocaleString("ko-KR")}원</strong>이에요. 환불받을 계좌를 입력해 주세요.</>} 운영자에게만 전달돼요.</p><fieldset disabled={busy} className="space-y-4"><label className="block text-sm font-semibold">은행<input className={inputClass} required maxLength={50} autoComplete="off" value={bank} onChange={(e) => setBank(e.target.value)} /></label><label className="block text-sm font-semibold">계좌번호<input className={inputClass} required pattern="[0-9-]{5,40}" inputMode="numeric" maxLength={40} autoComplete="off" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} /></label><label className="block text-sm font-semibold">예금주<input className={inputClass} required maxLength={50} autoComplete="off" value={accountHolder} onChange={(e) => setAccountHolder(e.target.value)} /></label><Button fullWidth type="submit" disabled={busy}>{busy ? "저장 중…" : "환불 계좌 저장"}</Button></fieldset></form> : null}
-    {application.refundCompletedAt ? <p className="mt-3 text-sm leading-6 text-slate-600">운영자가 {formatStatusChangedAt(application.refundCompletedAt)}에 환불 완료로 표시했어요.<br />실제 입금 여부는 통장에서 확인해 주세요.</p> : null}
+    {application.awaitingRefund && !application.refundLocked ? <form className="mt-4" onSubmit={(e) => { e.preventDefault(); void save("refund-account"); }}><p className="mb-4 text-sm leading-6 text-slate-600">환불 예정 금액은 <strong>{application.money.outstandingKrw.toLocaleString("ko-KR")}원</strong>이에요. 환불받을 계좌를 입력해 주세요. 운영자에게만 전달돼요.</p><fieldset disabled={busy} className="space-y-4"><label className="block text-sm font-semibold">은행<input className={inputClass} required maxLength={50} autoComplete="off" value={bank} onChange={(e) => setBank(e.target.value)} /></label><label className="block text-sm font-semibold">계좌번호<input className={inputClass} required pattern="[0-9-]{5,40}" inputMode="numeric" maxLength={40} autoComplete="off" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} /></label><label className="block text-sm font-semibold">예금주<input className={inputClass} required maxLength={50} autoComplete="off" value={accountHolder} onChange={(e) => setAccountHolder(e.target.value)} /></label><Button fullWidth type="submit" disabled={busy}>{busy ? "저장 중…" : "환불 계좌 저장"}</Button></fieldset></form> : null}
+    {application.refundLocked ? <p className="mt-3 rounded-xl bg-amber-50 p-4 text-sm leading-6">운영자가 환불을 처리하고 있어요. 송금 여부가 확인될 때까지 금액과 계좌를 변경할 수 없어요.</p> : null}
+    {application.refundAttempts.map((r) => <p key={r.id} className="mt-2 text-sm text-slate-600">{r.amountKrw.toLocaleString("ko-KR")}원 · {r.status === "PAID" ? "송금 완료 기록" : r.status === "FAILED" ? "미송금 확인 · 재처리 대기" : r.status === "REVIEW" ? "송금 여부 확인 중" : "송금 처리 중"}</p>)}
+    {application.refundCompletedAt && !application.awaitingRefund ? <p className="mt-3 text-sm leading-6 text-slate-600">운영자가 {formatStatusChangedAt(application.refundCompletedAt)}에 환불 완료로 표시했어요.<br />실제 입금 여부는 통장에서 확인해 주세요.</p> : null}
     {application.status === "EXPIRED_UNPAID" ? <p className="mt-3 text-sm leading-6 text-slate-600">입금 확인 기한이 지나 자리가 반환됐어요. 이미 이체했다면 문의해 주세요.</p> : null}
     {participation.cancellation ? <div className="mt-5 rounded-2xl border border-slate-100 p-4">
       {cancelOpen ? <div>
         <p className="text-sm font-semibold">참가를 취소할까요?</p>
         <p className="mt-2 text-sm leading-6 text-slate-600">
           {participation.cancellation.refundAmountKrw > 0
-            ? <>환불 예정 금액은 <strong className="font-semibold">{participation.cancellation.refundAmountKrw.toLocaleString("ko-KR")}원</strong>({participation.cancellation.refundPercent}%)이에요. 취소한 뒤 환불받을 계좌를 입력하면 운영자가 보내요.</>
+            ? <>환불 예정 금액은 <strong className="font-semibold">{participation.cancellation.refundAmountKrw.toLocaleString("ko-KR")}원</strong>이에요. 취소한 뒤 환불받을 계좌를 입력하면 운영자가 보내요.</>
             : participation.cancellation.paidBeforeConfirmation
-              ? "아직 입금이 확인되지 않은 신청이에요. 이미 이체하셨다면 취소한 뒤 문의해 주세요."
+              ? "아직 참가가 확정되지 않았어요. 실제 입금이 확인되면 자리 복구 없이 전액 반환해요."
               : "지금 취소하면 돌려받을 금액이 없어요."}
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3">

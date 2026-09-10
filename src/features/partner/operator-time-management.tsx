@@ -161,7 +161,7 @@ export function OperatorDashboard() {
   if (!application || !slotData) return <PageShell><LoadingOrError error={error} label="운영 현황을 준비하고 있어요." onRetry={() => void load()} /></PageShell>;
 
   if (!application.canCreatePrivateDraft) {
-    return <PageShell><p className="text-sm font-semibold text-[var(--tm-action-primary)]">운영 홈</p><h1 className="mt-2 text-2xl font-bold">운영자 확인이 필요해요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{application.statusLabel} 상태에서는 시간대를 관리할 수 없어요. 심사 상태를 먼저 확인해 주세요.</p><Button as={Link} className="mt-6" href="/partner/application" size="medium">심사 상태 보기</Button></PageShell>;
+    return <PageShell><Link className="block py-3 text-sm font-semibold text-blue-600" href="/partner/support-inquiries">담당자 대조 요청 →</Link><p className="text-sm font-semibold text-[var(--tm-action-primary)]">운영 홈</p><h1 className="mt-2 text-2xl font-bold">운영자 확인이 필요해요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{application.statusLabel} 상태에서는 시간대를 관리할 수 없어요. 심사 상태를 먼저 확인해 주세요.</p><Button as={Link} className="mt-6" href="/partner/application" size="medium">심사 상태 보기</Button></PageShell>;
   }
 
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
@@ -174,7 +174,7 @@ export function OperatorDashboard() {
   const needsAction = slotData.items.filter((slot) => slot.session && pendingActionCount(slot) > 0);
   const attentionCount = slotData.items.filter((slot) => slot.status === "BLOCKED" || slot.status === "CANCELLED").length;
   return <PageShell>
-    <div className="flex items-start justify-between gap-4"><div><p className="text-sm font-semibold text-[var(--tm-action-primary)]">운영 홈</p><h1 className="mt-2 text-2xl font-bold">{application.venue.name}</h1><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">시간 공급과 참가자 모집은 따로 관리돼요.</p></div><Button as={Link} href="/partner/application" size="medium" variant="secondary">심사 상태</Button></div>
+    <div className="flex items-start justify-between gap-4"><div><Link className="block py-3 text-sm font-semibold text-blue-600" href="/partner/support-inquiries">담당자 대조 요청 →</Link><p className="text-sm font-semibold text-[var(--tm-action-primary)]">운영 홈</p><h1 className="mt-2 text-2xl font-bold">{application.venue.name}</h1><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">시간 공급과 참가자 모집은 따로 관리돼요.</p></div><Button as={Link} href="/partner/application" size="medium" variant="secondary">심사 상태</Button></div>
     <RestrictionNotice restriction={slotData.supplyRestriction} />
     {needsAction.length ? <section className="mt-6 rounded-3xl border border-[var(--tm-action-primary)] bg-white p-5">
       <p className="text-sm font-semibold text-[var(--tm-action-primary)]">지금 처리할 일</p>

@@ -9,12 +9,12 @@ import {
   applyToCourtMatch,
   cancelCourtMatchApplication,
   claimCourtMatchDeposit,
-  completeCourtMatchRefund,
   confirmCourtMatchDeposit,
   decideCourtMatchApplication,
   reconcileCourtMatch,
-  submitCourtMatchRefundAccount,
 } from "@/server/domain/court-match-service";
+import { recordCourtReceipt, startCourtRefund, completeCourtMatchRefund, submitCourtMatchRefundAccount } from "@/server/domain/court-match-money-service";
+import { actOnSupportInquiry, listSupportQueue } from "@/server/domain/support-service";
 import { getCourtMatchParticipation, getOperatorCourtMatch } from "@/server/domain/court-match-view";
 import { reportCourtSupplyIncident } from "@/server/domain/court-slot-service";
 import { acceptApplication, cancelMatch } from "@/server/domain/match-service";
@@ -61,6 +61,17 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     });
     const profile = await getProfile(prisma, user.id);
     return { id: user.id, gender, profile: profile!, viewer: { id: user.id, profile: profile! } };
+  }
+
+  async function receiveAndConfirm(operator: { id: string }, id: string) {
+    const a = await prisma.matchApplication.findUniqueOrThrow({ where: { id } });
+    await recordCourtReceipt(prisma, operator, id, { amountKrw: 36_000, receivedAt: new Date().toISOString(), expectedVersion: a.receiptVersion, clientRequestId: randomUUID(), note: "통장 정상 입금 대조" });
+    return confirmCourtMatchDeposit(prisma, operator, id);
+  }
+  async function finishRefund(operator: { id: string }, id: string) {
+    const a = await prisma.matchApplication.findUniqueOrThrow({ where: { id }, include: { match: true } });
+    const started = await startCourtRefund(prisma, operator, id, { amountKrw: a.refundAmountKrw ?? a.match.totalCourtFeeKrw!, accountVersion: a.refundAccountVersion, clientRequestId: randomUUID() });
+    return completeCourtMatchRefund(prisma, operator, id, { attemptId: started.id, expectedVersion: 1, clientRequestId: randomUUID(), status: "PAID", transferredAt: new Date().toISOString(), note: "은행 송금 내역 확인" });
   }
 
   type MatchOptions = {
@@ -199,7 +210,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     expect(claimed.depositClaimedAt).not.toBeNull();
     expect(claimed.confirmedAt).toBeNull();
 
-    await confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id);
+    await receiveAndConfirm({ id: operator.id }, applied.id);
     const confirmed = await prisma.matchApplication.findUniqueOrThrow({ where: { id: applied.id } });
     expect(confirmed.status).toBe("CONFIRMED");
 
@@ -235,7 +246,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     await expect(applyToCourtMatch(prisma, applicant.viewer, matchId, {}))
       .rejects.toMatchObject({ code: "APPLICATION_ALREADY_EXISTS" });
 
-    await confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id);
+    await receiveAndConfirm({ id: operator.id }, applied.id);
     await expect(confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id))
       .rejects.toMatchObject({ code: "APPLICATION_STATE_CONFLICT" });
 
@@ -250,7 +261,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     const { matchId } = await makeCourtMatch(operator.id, { startsAt: new Date(Date.now() + 5 * HOUR), maxParticipantCount: 2, minParticipantCount: 1 });
 
     const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
-    await prisma.matchApplication.update({ where: { id: applied.id }, data: { paymentDueAt: new Date(Date.now() - 60_000) } });
+    await prisma.matchApplication.update({ where: { id: applied.id }, data: { paymentDueAt: new Date(Date.now() - 31 * 60_000), confirmationDueAt: new Date(Date.now() - 60_000) } });
 
     await expect(claimCourtMatchDeposit(prisma, { id: applicant.id }, applied.id, { depositorName: "홍길동" }))
       .rejects.toMatchObject({ code: "DEPOSIT_DEADLINE_PASSED" });
@@ -289,7 +300,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     const { matchId } = await makeCourtMatch(operator.id, { startsAt: new Date(Date.now() + 5 * HOUR), maxParticipantCount: 2, minParticipantCount: 1 });
 
     const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
-    await confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id);
+    await receiveAndConfirm({ id: operator.id }, applied.id);
     // 판정 시점을 지나게 만들되 확정 인원은 판정 이후로 밀어 미달을 만든다.
     await prisma.match.update({ where: { id: matchId }, data: { startsAt: new Date(Date.now() - 60_000), endsAt: new Date(Date.now() + HOUR) } });
     await prisma.matchApplication.update({ where: { id: applied.id }, data: { confirmedAt: new Date(Date.now() + HOUR) } });
@@ -306,9 +317,9 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     await submitCourtMatchRefundAccount(prisma, { id: applicant.id }, applied.id, { bank: "DB은행", accountNumber: "222-222", accountHolder: "참가자" });
     expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: applied.id } })).refundAccountNumber).toBe("222-222");
 
-    await completeCourtMatchRefund(prisma, { id: operator.id }, applied.id);
+    await finishRefund({ id: operator.id }, applied.id);
     await expect(submitCourtMatchRefundAccount(prisma, { id: applicant.id }, applied.id, { bank: "DB은행", accountNumber: "333-333", accountHolder: "참가자" }))
-      .rejects.toMatchObject({ code: "REFUND_ALREADY_COMPLETED" });
+      .rejects.toMatchObject({ code: "MONEY_STATE_CONFLICT" });
     expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: applied.id } })).refundAccountNumber).toBe("222-222");
   });
 
@@ -336,12 +347,12 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("CANCELLED");
   });
 
-  it("판정 시점에 최소 인원을 채웠으면 이후 승인도 되고 입금 기한은 시작 30분 전이다", async () => {
+  it("판정 시점에 최소 인원을 채웠으면 이후 승인도 되고 입금 기한은 시작 60분 전이다", async () => {
     const operator = await makeUser("운영자", "MALE");
     const early = await makeUser("먼저 확정한 사람", "MALE");
     const late = await makeUser("나중 신청자", "FEMALE");
-    // 판정 시점(시작 3시간 전)은 이미 지났고 시작까지는 1시간 남았다.
-    const startsAt = new Date(Date.now() + HOUR);
+    // 판정 시점(시작 3시간 전)은 이미 지났고 시작까지는 2시간 남았다.
+    const startsAt = new Date(Date.now() + 2 * HOUR);
     const { matchId } = await makeCourtMatch(operator.id, { startsAt, approvalMode: "OPERATOR", minParticipantCount: 1, maxParticipantCount: 2 });
     const seat = await fillSeat(matchId, early, "CONFIRMED");
     await prisma.matchApplication.update({ where: { id: seat.id }, data: { confirmedAt: new Date(Date.now() - 4 * HOUR) } });
@@ -351,7 +362,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
 
     const decided = await decideCourtMatchApplication(prisma, { id: operator.id }, pending.id, { accept: true });
     expect(decided.status).toBe("ACCEPTED");
-    expect(new Date(decided.paymentDueAt!).getTime()).toBe(getApplicationDeadline(startsAt).getTime());
+    expect(new Date(decided.paymentDueAt!).getTime()).toBe(startsAt.getTime() - 60 * 60_000);
     expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).status).toBe("OPEN");
   });
 
@@ -360,7 +371,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     const applicant = await makeUser("참가자", "FEMALE");
     const { matchId, slotId } = await makeCourtMatch(operator.id);
     const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
-    await confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id);
+    await receiveAndConfirm({ id: operator.id }, applied.id);
 
     const slot = await prisma.courtSlot.findUniqueOrThrow({ where: { id: slotId } });
     await reportCourtSupplyIncident(prisma, { id: operator.id }, slotId, { code: "FACILITY_CLOSED", expectedVersion: slot.version });
@@ -414,7 +425,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     const startsAt = new Date(Date.now() + 5 * 24 * HOUR);
     const { matchId } = await makeCourtMatch(operator.id, { startsAt, minParticipantCount: 1, maxParticipantCount: 2 });
     const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
-    await confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id);
+    await receiveAndConfirm({ id: operator.id }, applied.id);
 
     const result = await cancelCourtMatchApplication(prisma, { id: applicant.id }, applied.id);
     expect(result).toMatchObject({ status: "CANCELLED", refundAmountKrw: 36_000 });
@@ -436,7 +447,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     const startsAt = new Date(Date.now() + 6 * HOUR);
     const { matchId } = await makeCourtMatch(operator.id, { startsAt, minParticipantCount: 1, maxParticipantCount: 2 });
     const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
-    await confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id);
+    await receiveAndConfirm({ id: operator.id }, applied.id);
 
     const result = await cancelCourtMatchApplication(prisma, { id: applicant.id }, applied.id);
     expect(result.refundAmountKrw).toBe(getRefundAmountKrw(36_000, new Date(), startsAt));
@@ -446,7 +457,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
       expect(view.application?.awaitingRefund).toBe(false);
       expect(view.application?.statusLabel).toBe("취소됨 · 환불 없음");
       await expect(submitCourtMatchRefundAccount(prisma, { id: applicant.id }, applied.id, { bank: "DB은행", accountNumber: "111-111", accountHolder: "참가자" }))
-        .rejects.toMatchObject({ code: "REFUND_NOT_APPLICABLE" });
+        .rejects.toMatchObject({ code: "MONEY_STATE_CONFLICT" });
     }
   });
 
@@ -474,8 +485,8 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     const { matchId } = await makeCourtMatch(operator.id, { startsAt, minParticipantCount: 2, maxParticipantCount: 2 });
     const first = await applyToCourtMatch(prisma, leaver.viewer, matchId, {});
     const second = await applyToCourtMatch(prisma, stayer.viewer, matchId, {});
-    await confirmCourtMatchDeposit(prisma, { id: operator.id }, first.id);
-    await confirmCourtMatchDeposit(prisma, { id: operator.id }, second.id);
+    await receiveAndConfirm({ id: operator.id }, first.id);
+    await receiveAndConfirm({ id: operator.id }, second.id);
 
     // 정원이 차서 마감됐던 매칭이다.
     expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).status).toBe("CLOSED");
@@ -510,7 +521,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     await reconcileCourtMatch(prisma, matchId);
 
     // 한 번 통과한 판정은 뒤집지 않는다.
-    expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).status).toBe("OPEN");
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).status).toBe("CLOSED");
     expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: second.id } })).status).toBe("CONFIRMED");
   });
 
@@ -534,7 +545,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     const startsAt = new Date(Date.now() + 5 * HOUR);
     const { matchId } = await makeCourtMatch(operator.id, { startsAt, minParticipantCount: 1, maxParticipantCount: 2 });
     const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
-    await confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id);
+    await receiveAndConfirm({ id: operator.id }, applied.id);
 
     // 시작 20분 전. 신청 마감(30분 전)은 지났지만 아직 시작하지 않았다.
     const soon = new Date(Date.now() + 20 * 60_000);
@@ -553,7 +564,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     const startsAt = new Date(Date.now() + 5 * HOUR);
     const { matchId } = await makeCourtMatch(operator.id, { startsAt, minParticipantCount: 1, maxParticipantCount: 2 });
     const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
-    await confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id);
+    await receiveAndConfirm({ id: operator.id }, applied.id);
 
     // 시작 시각을 지나게 하되, 판정 시점 전에 확정된 것으로 만들어 자동 취소를 피한다.
     const startedAt = new Date(Date.now() - HOUR);
@@ -668,7 +679,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     const applicant = await makeUser("참가자", "FEMALE");
     const { matchId } = await makeCourtMatch(operator.id, { startsAt: new Date(Date.now() + 5 * HOUR), maxParticipantCount: 2, minParticipantCount: 1 });
     const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
-    await confirmCourtMatchDeposit(prisma, { id: operator.id }, applied.id);
+    await receiveAndConfirm({ id: operator.id }, applied.id);
     await prisma.match.update({ where: { id: matchId }, data: { status: "CANCELLED", cancelledAt: new Date() } });
     await prisma.matchApplication.update({
       where: { id: applied.id },
@@ -677,13 +688,13 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
 
     // 완료가 먼저 잠금 대기열에 들어가고, 계좌 수정이 그 뒤에 붙는다.
     const results = await whileMatchLocked(matchId, () => [
-      completeCourtMatchRefund(prisma, { id: operator.id }, applied.id),
+      finishRefund({ id: operator.id }, applied.id),
       sleep(200).then(() => submitCourtMatchRefundAccount(prisma, { id: applicant.id }, applied.id, { bank: "DB은행", accountNumber: "999-999", accountHolder: "참가자" })),
     ], 700);
 
     expect(results[0].status).toBe("fulfilled");
     expect(results[1].status).toBe("rejected");
-    expect(errorCode((results[1] as PromiseRejectedResult).reason)).toBe("REFUND_ALREADY_COMPLETED");
+    expect(errorCode((results[1] as PromiseRejectedResult).reason)).toBe("MONEY_STATE_CONFLICT");
     const finalState = await prisma.matchApplication.findUniqueOrThrow({ where: { id: applied.id } });
     expect(finalState.refundAccountNumber).toBe("111-111");
     expect(finalState.refundCompletedAt).not.toBeNull();
@@ -695,7 +706,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     // 판정까지 2초 남은 코트 매칭. 승인 요청은 잠금을 기다리는 동안 판정 시점을 넘긴다.
     const startsAt = new Date(Date.now() + 3 * HOUR + 2_000);
     const { matchId } = await makeCourtMatch(operator.id, { startsAt, approvalMode: "OPERATOR", minParticipantCount: 1, maxParticipantCount: 2 });
-    const applied = await applyToCourtMatch(prisma, applicant.viewer, matchId, {});
+    const applied = await prisma.matchApplication.create({ data: { matchId, applicantUserId: applicant.id, applicantGender: "FEMALE", status: "PENDING", profileSnapshot: {} } });
 
     const results = await whileMatchLocked(matchId, () => [
       decideCourtMatchApplication(prisma, { id: operator.id }, applied.id, { accept: true }),
@@ -707,4 +718,176 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).status).toBe("CANCELLED");
     expect(getApplicationDeadline(startsAt).getTime()).toBeGreaterThan(getJudgementAt(startsAt).getTime());
   });
+  it.each(["WITHDRAWN", "EXPIRED_UNPAID", "CANCELLED"] as const)("미확정 %s의 늦은 입금은 전액 반환하며 자리·채팅을 복구하지 않는다", async (status) => {
+    const operator = await makeUser("운영자", "MALE");
+    const participant = await makeUser("반환 참가자", "FEMALE");
+    const { matchId } = await makeCourtMatch(operator.id);
+    const a = await applyToCourtMatch(prisma, participant.viewer, matchId);
+    await prisma.matchApplication.update({ where: { id: a.id }, data: { status } });
+    const input = { amountKrw: 18000, receivedAt: new Date().toISOString(), expectedVersion: 0, clientRequestId: randomUUID(), note: "종료 후 통장 입금 확인" };
+    await recordCourtReceipt(prisma, operator, a.id, input);
+    await recordCourtReceipt(prisma, operator, a.id, input);
+    expect(await prisma.courtReceiptRecord.count({ where: { applicationId: a.id } })).toBe(1);
+    const view = await getCourtMatchParticipation(prisma, participant.viewer, matchId);
+    expect(view.application).toMatchObject({ status, awaitingRefund: true, money: { availableKrw: 18000 }, confirmedAt: null });
+    expect(view.chatHref).toBeNull();
+    await submitCourtMatchRefundAccount(prisma, participant, a.id, { bank: "DB은행", accountNumber: "12345-678", accountHolder: "참가자" });
+    const record = await prisma.matchApplication.findUniqueOrThrow({ where: { id: a.id } });
+    const started = await startCourtRefund(prisma, operator, a.id, { clientRequestId: randomUUID(), accountVersion: record.refundAccountVersion, amountKrw: 18000 });
+    await completeCourtMatchRefund(prisma, operator, a.id, { attemptId: started.id, clientRequestId: randomUUID(), expectedVersion: 1, status: "PAID", note: "미확정 입금 전액 송금 확인", transferredAt: new Date().toISOString() });
+    expect((await getCourtMatchParticipation(prisma, participant.viewer, matchId)).application).toMatchObject({ status, awaitingRefund: false, money: { paidKrw: 18000 } });
+  });
+
+  it("서로 다른 두 환불 시작이 경쟁해도 한 건만 생성되고 금액·계좌가 고정된다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const participant = await makeUser("참가자", "FEMALE");
+    const { matchId } = await makeCourtMatch(operator.id);
+    const a = await applyToCourtMatch(prisma, participant.viewer, matchId);
+    await receiveAndConfirm(operator, a.id);
+    expect((await cancelCourtMatchApplication(prisma, participant, a.id)).refundAmountKrw).toBe(36000);
+    await submitCourtMatchRefundAccount(prisma, participant, a.id, { bank: "DB은행", accountNumber: "12345-678", accountHolder: "참가자" });
+    const row = await prisma.matchApplication.findUniqueOrThrow({ where: { id: a.id } });
+    const requests = [randomUUID(), randomUUID()].map((clientRequestId) => ({ clientRequestId, accountVersion: row.refundAccountVersion, amountKrw: 36000 }));
+    const results = await whileMatchLocked(matchId, () => requests.map((r) => startCourtRefund(prisma, operator, a.id, r)));
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const winner = results.findIndex((r) => r.status === "fulfilled");
+    await startCourtRefund(prisma, operator, a.id, requests[winner]);
+    expect(await prisma.courtRefundAttempt.count({ where: { applicationId: a.id } })).toBe(1);
+    await expect(submitCourtMatchRefundAccount(prisma, participant, a.id, { bank: "바뀐은행", accountNumber: "99999-999", accountHolder: "참가자" })).rejects.toMatchObject({ code: "MONEY_STATE_CONFLICT" });
+    await expect(recordCourtReceipt(prisma, operator, a.id, { clientRequestId: randomUUID(), expectedVersion: 1, amountKrw: 72000, receivedAt: new Date().toISOString(), note: "처리 중 입금 변경" })).rejects.toMatchObject({ code: "MONEY_STATE_CONFLICT" });
+    const locked = await prisma.courtRefundAttempt.findFirstOrThrow({ where: { applicationId: a.id } });
+    expect(locked).toMatchObject({ amountKrw: 36000, accountNumber: "12345-678" });
+    const result = { attemptId: locked.id, clientRequestId: randomUUID(), expectedVersion: 1, status: "PAID" as const, transferredAt: new Date().toISOString(), note: "은행에서 송금 확인" };
+    await completeCourtMatchRefund(prisma, operator, a.id, result);
+    await completeCourtMatchRefund(prisma, operator, a.id, result);
+    await completeCourtMatchRefund(prisma, operator, a.id, { ...result, expectedVersion: 2, clientRequestId: randomUUID(), status: "REVIEW", transferredAt: null, note: "완료 표시 착오 의심" });
+    await expect(startCourtRefund(prisma, operator, a.id, { ...requests[0], clientRequestId: randomUUID() })).rejects.toMatchObject({ code: "MONEY_STATE_CONFLICT" });
+    await completeCourtMatchRefund(prisma, operator, a.id, { ...result, expectedVersion: 3, clientRequestId: randomUUID(), status: "FAILED", transferredAt: null, note: "은행 대조 결과 미송금 확인" });
+    const retry = await startCourtRefund(prisma, operator, a.id, { ...requests[0], clientRequestId: randomUUID() });
+    expect(retry.id).not.toBe(locked.id);
+    expect(await prisma.courtRefundEvent.count({ where: { attemptId: locked.id } })).toBe(4);
+  });
+
+  it("수령 기록과 환불은 다른 운영자가 처리할 수 없고 오래된 계좌·금액으로 시작할 수 없다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const other = await makeUser("다른 운영자", "MALE");
+    const participant = await makeUser("참가자", "FEMALE");
+    const { matchId } = await makeCourtMatch(operator.id);
+    const a = await applyToCourtMatch(prisma, participant.viewer, matchId);
+    const input = { clientRequestId: randomUUID(), expectedVersion: 0, amountKrw: 36000, receivedAt: new Date().toISOString(), note: "입금 대조" };
+    await expect(recordCourtReceipt(prisma, other, a.id, input)).rejects.toMatchObject({ status: 403 });
+    await recordCourtReceipt(prisma, operator, a.id, input);
+    await expect(recordCourtReceipt(prisma, operator, a.id, { ...input, clientRequestId: randomUUID() })).rejects.toMatchObject({ code: "MONEY_STATE_CONFLICT" });
+    expect((await cancelCourtMatchApplication(prisma, participant, a.id)).refundAmountKrw).toBe(36000);
+    await submitCourtMatchRefundAccount(prisma, participant, a.id, { bank: "DB은행", accountNumber: "12345-678", accountHolder: "참가자" });
+    const request = { clientRequestId: randomUUID(), amountKrw: 36000, accountVersion: 1 };
+    await expect(startCourtRefund(prisma, other, a.id, request)).rejects.toMatchObject({ status: 403 });
+    await expect(startCourtRefund(prisma, operator, a.id, request)).rejects.toMatchObject({ code: "MONEY_STATE_CONFLICT" });
+  });
+
+  it("이체 기한이 지난 뒤에도 30분 확인 기한 안에는 기한 내 수령을 확정한다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const participant = await makeUser("참가자", "FEMALE");
+    const { matchId } = await makeCourtMatch(operator.id);
+    const a = await applyToCourtMatch(prisma, participant.viewer, matchId);
+    await prisma.matchApplication.update({ where: { id: a.id }, data: { paymentDueAt: new Date(Date.now() - 60000), confirmationDueAt: new Date(Date.now() + 29 * 60000) } });
+    await recordCourtReceipt(prisma, operator, a.id, { clientRequestId: randomUUID(), expectedVersion: 0, amountKrw: 36000, receivedAt: new Date(Date.now() - 120000).toISOString(), note: "기한 내 입금 확인" });
+    await confirmCourtMatchDeposit(prisma, operator, a.id);
+    expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: a.id } })).status).toBe("CONFIRMED");
+  });
+
+  it("확인 기한 안이라도 지연 이체나 부족 입금은 참가 확정에 사용할 수 없다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const participant = await makeUser("참가자", "FEMALE");
+    const { matchId } = await makeCourtMatch(operator.id);
+    const a = await applyToCourtMatch(prisma, participant.viewer, matchId);
+    await expect(confirmCourtMatchDeposit(prisma, operator, a.id)).rejects.toMatchObject({ code: "RECEIPT_REQUIRED" });
+    await prisma.matchApplication.update({ where: { id: a.id }, data: { paymentDueAt: new Date(Date.now() - 60000), confirmationDueAt: new Date(Date.now() + 29 * 60000) } });
+    await recordCourtReceipt(prisma, operator, a.id, { clientRequestId: randomUUID(), expectedVersion: 0, amountKrw: 18000, receivedAt: new Date().toISOString(), note: "부족 입금 확인" });
+    await expect(confirmCourtMatchDeposit(prisma, operator, a.id)).rejects.toMatchObject({ code: "RECEIPT_REQUIRED" });
+    await recordCourtReceipt(prisma, operator, a.id, { clientRequestId: randomUUID(), expectedVersion: 1, amountKrw: 36000, receivedAt: new Date().toISOString(), note: "늦은 추가 입금 확인" });
+    await expect(confirmCourtMatchDeposit(prisma, operator, a.id)).rejects.toMatchObject({ code: "LATE_DEPOSIT" });
+    await prisma.matchApplication.update({ where: { id: a.id }, data: { confirmationDueAt: new Date(Date.now() - 1000) } });
+    await reconcileCourtMatch(prisma, matchId);
+    expect((await getCourtMatchParticipation(prisma, participant.viewer, matchId)).application).toMatchObject({ status: "EXPIRED_UNPAID", money: { availableKrw: 36000 } });
+  });
+
+  it("문의 원문과 회원 답변은 운영자에게 공개하지 않고 담당 요청·답변·해결까지 연결한다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const participant = await makeUser("참가자", "FEMALE");
+    const outsider = await makeUser("제3자", "MALE");
+    const reviewer = await makeUser("담당자", "FEMALE");
+    await prisma.user.update({ where: { id: reviewer.id }, data: { role: "INTERNAL_REVIEWER" } });
+    const staff = { id: reviewer.id, role: "INTERNAL_REVIEWER" };
+    const member = { id: participant.id, role: "MEMBER" };
+    const owner = { id: operator.id, role: "MEMBER" };
+    const { matchId } = await makeCourtMatch(operator.id);
+    const a = await applyToCourtMatch(prisma, participant.viewer, matchId);
+    const inquiry = await createSupportInquiry(prisma, participant.id, { matchId, message: "회원 비공개 원문입니다. 입금 내역을 확인해 주세요." });
+    const action = (action: "CLAIM" | "REPLY" | "REQUEST_OPERATOR" | "OPERATOR_REPLY" | "RESOLVE", body: string, expectedVersion: number) => ({ action, body, expectedVersion, clientRequestId: randomUUID() });
+    await expect(listSupportQueue(prisma, member, "reviewer", {})).rejects.toMatchObject({ status: 403 });
+    await expect(actOnSupportInquiry(prisma, { id: outsider.id, role: "MEMBER" }, inquiry.id, "member", action("REPLY", "권한 없음", 1))).rejects.toMatchObject({ status: 404 });
+    const claim = action("CLAIM", "담당 시작", 1);
+    await actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", claim);
+    await actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", claim);
+    await actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", action("REQUEST_OPERATOR", "신청자의 은행 입금 내역을 대조해 주세요.", 2));
+    const queue = await listSupportQueue(prisma, owner, "operator", {});
+    expect(queue.items[0].message).toBeNull();
+    expect(queue.items[0].messages.map((m) => m.body)).toEqual(["신청자의 은행 입금 내역을 대조해 주세요."]);
+    expect(queue.items[0].applicationId).toBe(a.id);
+    expect((await listSupportQueue(prisma, { id: outsider.id, role: "MEMBER" }, "operator", {})).items).toHaveLength(0);
+    await actOnSupportInquiry(prisma, owner, inquiry.id, "operator", action("OPERATOR_REPLY", "통장 대조 완료. 기록을 수정했습니다.", 3));
+    expect((await listMySupportInquiries(prisma, participant.id)).items[0].messages.some((m) => m.body.includes("통장 대조 완료"))).toBe(false);
+    await actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", action("REPLY", "확인 결과를 안내드립니다.", 4));
+    await actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", action("RESOLVE", "처리가 완료됐습니다.", 5));
+    expect((await listMySupportInquiries(prisma, participant.id)).items[0].status).toBe("RESOLVED");
+    await actOnSupportInquiry(prisma, member, inquiry.id, "member", action("REPLY", "추가로 확인할 내용이 있어요.", 6));
+    expect((await listMySupportInquiries(prisma, participant.id)).items[0].status).toBe("IN_PROGRESS");
+    await expect(actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", action("RESOLVE", "예전 답변으로 해결 처리", 7))).rejects.toMatchObject({ code: "SUPPORT_STATE_CONFLICT" });
+  });
+
+  it("정시 참가비 이후 늦은 초과 입금이 있어도 충족 시각을 보존해 확정한다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const participant = await makeUser("참가자", "FEMALE");
+    const { matchId } = await makeCourtMatch(operator.id);
+    const a = await applyToCourtMatch(prisma, participant.viewer, matchId);
+    await prisma.matchApplication.update({ where: { id: a.id }, data: { paymentDueAt: new Date(Date.now() - 60000), confirmationDueAt: new Date(Date.now() + 29 * 60000) } });
+    const input = { clientRequestId: randomUUID(), expectedVersion: 0, amountKrw: 72000, receivedAt: new Date().toISOString(), feeReceivedAt: new Date(Date.now() - 120000).toISOString(), note: "정시 납부 후 중복 입금 확인" };
+    await recordCourtReceipt(prisma, operator, a.id, input);
+    await recordCourtReceipt(prisma, operator, a.id, input);
+    await confirmCourtMatchDeposit(prisma, operator, a.id);
+    expect((await getCourtMatchParticipation(prisma, participant.viewer, matchId)).application).toMatchObject({ status: "CONFIRMED", money: { availableKrw: 36000 } });
+  });
+
+  it("신청 마감 후에도 기존 승인에 안내한 확인 기한을 단축하지 않는다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const first = await makeUser("먼저 확정", "MALE");
+    const participant = await makeUser("기존 승인", "FEMALE");
+    const startsAt = new Date(Date.now() + HOUR);
+    const { matchId } = await makeCourtMatch(operator.id, { startsAt, minParticipantCount: 1 });
+    const confirmed = await fillSeat(matchId, first, "CONFIRMED");
+    await prisma.matchApplication.update({ where: { id: confirmed.id }, data: { confirmedAt: new Date(getJudgementAt(startsAt).getTime() - HOUR) } });
+    const a = await fillSeat(matchId, participant, "ACCEPTED");
+    await prisma.matchApplication.update({ where: { id: a.id }, data: { paymentDueAt: new Date(Date.now() + 20 * 60000), confirmationDueAt: null } });
+    await receiveAndConfirm(operator, a.id);
+    expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: a.id } })).status).toBe("CONFIRMED");
+  });
+
+  it("반환 잔액이 있는 문의는 답변했어도 해결 완료로 닫지 않는다", async () => {
+    const operator = await makeUser("운영자", "MALE");
+    const participant = await makeUser("참가자", "FEMALE");
+    const reviewer = await makeUser("담당자", "FEMALE");
+    await prisma.user.update({ where: { id: reviewer.id }, data: { role: "INTERNAL_REVIEWER" } });
+    const staff = { id: reviewer.id, role: "INTERNAL_REVIEWER" };
+    const { matchId } = await makeCourtMatch(operator.id);
+    const a = await applyToCourtMatch(prisma, participant.viewer, matchId);
+    await cancelCourtMatchApplication(prisma, participant, a.id);
+    await recordCourtReceipt(prisma, operator, a.id, { clientRequestId: randomUUID(), expectedVersion: 0, amountKrw: 36000, receivedAt: new Date().toISOString(), note: "철회 후 입금 대조" });
+    const inquiry = await createSupportInquiry(prisma, participant.id, { matchId, message: "철회한 신청의 입금을 반환해 주세요." });
+    await actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", { action: "CLAIM", body: "담당 시작", expectedVersion: 1, clientRequestId: randomUUID() });
+    await actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", { action: "REPLY", body: "환불을 준비 중입니다.", expectedVersion: 2, clientRequestId: randomUUID() });
+    await expect(actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", { action: "RESOLVE", body: "처리 완료입니다.", expectedVersion: 3, clientRequestId: randomUUID() })).rejects.toMatchObject({ code: "SUPPORT_STATE_CONFLICT" });
+    expect((await listMySupportInquiries(prisma, participant.id)).items[0].status).toBe("ANSWERED");
+  });
+
 });

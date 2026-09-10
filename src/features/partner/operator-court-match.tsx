@@ -12,6 +12,8 @@ import type { OperatorCourtMatch } from "@/server/domain/court-match-view";
 
 import { apiMessage, formatStatusChangedAt } from "./partner-session";
 
+import { OperatorMoneyPanel } from "./operator-money-panel";
+
 type Application = OperatorCourtMatch["applications"][number] & {
   profileSnapshot?: unknown;
   message?: string | null;
@@ -50,7 +52,7 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
   }, [reload]);
 
   /** 승인·거절·입금 확인·환불 표시가 모두 같은 모양이라 한 곳에서 처리한다. */
-  const act = async (application: Application, action: "decision" | "confirm" | "refund", accept?: boolean) => {
+  const act = async (application: Application, action: "decision" | "confirm", accept?: boolean) => {
     if (busyId) return;
     setBusyId(application.id);
     setActionError("");
@@ -79,9 +81,9 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
   }
 
   const date = matchSchedule(match.startsAt, match.endsAt);
-  const pending = match.applications.filter((item) => item.status === "PENDING");
-  const awaitingDeposit = match.applications.filter((item) => item.status === "ACCEPTED");
-  const confirmed = match.applications.filter((item) => item.status === "CONFIRMED");
+  const pending = match.applications.filter((item) => item.status === "PENDING" && !item.awaitingRefund);
+  const awaitingDeposit = match.applications.filter((item) => item.status === "ACCEPTED" && !item.awaitingRefund);
+  const confirmed = match.applications.filter((item) => item.status === "CONFIRMED" && !item.awaitingRefund);
   const refunds = match.applications.filter((item) => item.awaitingRefund);
   const closed = match.applications.filter((item) => !["PENDING", "ACCEPTED", "CONFIRMED"].includes(item.status) && !item.awaitingRefund);
   const shortfall = match.minParticipantCount - match.confirmedCount;
@@ -114,20 +116,14 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
         {actionError ? <p className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700" role="alert">{actionError}</p> : null}
       </section>
 
-      {refunds.length ? <Group title="환불할 참가자" description="이체를 마친 뒤 표시해 주세요. 서비스가 송금을 대신하거나 확인하지는 않아요.">
-        {refunds.map((application) => <Card application={application} busy={busyId === application.id} key={application.id} match={match}>
-          <p className="mt-3 text-sm leading-6 text-slate-600">보낼 금액 <strong className="font-semibold tabular-nums">{(application.refundAmountKrw ?? match.guestFeeKrw).toLocaleString("ko-KR")}원</strong>{application.participantCancelledAt ? <span className="ml-1.5 text-slate-500">· 참가자 취소</span> : null}</p>
-          {application.refundAccount
-            ? <div className="mt-3 rounded-2xl bg-slate-50 p-4 text-sm"><p className="font-semibold">{application.refundAccount.bank} · {application.refundAccount.accountHolder}</p><p className="mt-1 break-all font-semibold tabular-nums">{application.refundAccount.accountNumber}</p></div>
-            : <p className="mt-3 text-sm leading-6 text-slate-500">참가자가 아직 환불 계좌를 입력하지 않았어요. 입력하면 여기에 보여요.</p>}
-          {application.refundAccount && !application.refundCompletedAt
-            ? <Button className="mt-3" disabled={busyId === application.id} fullWidth onClick={() => void act(application, "refund")} size="medium" variant="secondary">환불 완료로 표시</Button>
-            : null}
+      {refunds.length ? <Group title="반환·환불 처리" description="처리 시작 후 고정된 금액과 계좌로 송금하고 결과를 기록해 주세요.">
+        {refunds.map((application) => <Card application={application} busy={busyId === application.id} key={application.id} match={match} refresh={load}>
+          {application.status === "ACCEPTED" ? <Button size="medium" onClick={() => void act(application, "confirm")}>입금 확인하고 확정</Button> : null}
         </Card>)}
       </Group> : null}
 
       {pending.length ? <Group title={`승인 대기 ${pending.length}명`} description="프로필과 신청 내용을 확인하고 결정해 주세요.">
-        {pending.map((application) => <Card application={application} busy={busyId === application.id} key={application.id} match={match}>
+        {pending.map((application) => <Card application={application} busy={busyId === application.id} key={application.id} match={match} refresh={load}>
           {application.message ? <p className="mt-3 whitespace-pre-wrap break-words rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">{application.message}</p> : null}
           <div className="mt-3 grid grid-cols-2 gap-3">
             <Button disabled={busyId === application.id} fullWidth onClick={() => void act(application, "decision", false)} size="medium" variant="secondary">거절</Button>
@@ -137,24 +133,25 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
       </Group> : null}
 
       {awaitingDeposit.length ? <Group title={`입금 대기 ${awaitingDeposit.length}명`} description="통장 내역의 입금자명을 식별코드와 대조한 뒤 확정해 주세요.">
-        {awaitingDeposit.map((application) => <Card application={application} busy={busyId === application.id} key={application.id} match={match}>
+        {awaitingDeposit.map((application) => <Card application={application} busy={busyId === application.id} key={application.id} match={match} refresh={load}>
           <dl className="mt-3 space-y-2 rounded-2xl bg-slate-50 p-4 text-sm">
             <Row label="입금 예정">{match.guestFeeKrw.toLocaleString("ko-KR")}원</Row>
             <Row label="식별코드"><span className="text-base font-bold tabular-nums">{application.depositCode ?? "-"}</span></Row>
             <Row label="입금자명">{application.depositorName ?? <span className="font-normal text-slate-400">아직 알리지 않음</span>}</Row>
-            {application.paymentDueAt ? <Row label="기한">{formatStatusChangedAt(application.paymentDueAt)}</Row> : null}
+            {application.paymentDueAt ? <Row label="이체 기한">{formatStatusChangedAt(application.paymentDueAt)}</Row> : null}
+            {application.confirmationDueAt ? <Row label="확인 기한">{formatStatusChangedAt(application.confirmationDueAt)}</Row> : null}
           </dl>
           <Button className="mt-3" disabled={busyId === application.id} fullWidth onClick={() => void act(application, "confirm")} size="medium">입금 확인하고 확정</Button>
-          {!application.depositClaimedAt ? <p className="mt-2 text-xs leading-5 text-slate-500">참가자가 아직 입금했다고 알리지 않았어요. 통장에 들어와 있다면 그대로 확정해도 돼요.</p> : null}
+          {!application.depositClaimedAt ? <p className="mt-2 text-xs leading-5 text-slate-500">참가자가 아직 입금했다고 알리지 않았어요. 통장 대조 기록을 저장한 뒤 확정해 주세요.</p> : null}
         </Card>)}
       </Group> : null}
 
       {confirmed.length ? <Group title={`참가 확정 ${confirmed.length}명`}>
-        {confirmed.map((application) => <Card application={application} busy={false} key={application.id} match={match} />)}
+        {confirmed.map((application) => <Card application={application} busy={false} key={application.id} match={match} refresh={load} />)}
       </Group> : null}
 
       {closed.length ? <Group title="지난 신청">
-        {closed.map((application) => <Card application={application} busy={false} key={application.id} match={match} />)}
+        {closed.map((application) => <Card application={application} busy={false} key={application.id} match={match} refresh={load} />)}
       </Group> : null}
 
       {match.applications.length === 0 ? <section className="border-t-[8px] border-slate-50 px-5 py-10 text-center">
@@ -167,6 +164,7 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
           <button className="min-h-11 font-semibold text-blue-600" onClick={reload} type="button">목록 새로고침</button>
           <Link className="font-semibold text-slate-500" href={match.slotId ? `/partner-sessions/${match.slotId}` : "/partner/slots"}>참가자에게 보이는 화면 →</Link>
         </div>
+        <Link className="mt-4 block text-sm font-semibold text-blue-600" href="/partner/support-inquiries">담당자 대조 요청 확인 →</Link>
         <p className="mt-4 text-xs leading-5 text-slate-500">참가비는 Rally On을 거치지 않아요. 입금과 환불은 통장에서 직접 확인해 주세요.</p>
       </section>
     </article>
@@ -185,9 +183,9 @@ function Group({ children, description, title }: { children: React.ReactNode; de
   </section>;
 }
 
-function Card({ application, busy, children, match }: { application: Application; busy: boolean; children?: React.ReactNode; match: OperatorCourtMatch }) {
+function Card({ application, busy, children, match, refresh }: { application: Application; busy: boolean; children?: React.ReactNode; match: OperatorCourtMatch; refresh: () => Promise<void> }) {
   const profile = match.approvalMode === "OPERATOR" ? readProfile(application.profileSnapshot) : null;
-  return <article className={`rounded-3xl border border-slate-100 p-4 ${busy ? "opacity-60" : ""}`}>
+  return <article id={`application-${application.id}`} className={`scroll-mt-6 rounded-3xl border border-slate-100 p-4 ${busy ? "opacity-60" : ""}`}>
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="min-w-0">
         <p className="break-words font-bold">{application.nickname}{application.gender ? <span className="ml-1.5 text-sm font-medium text-slate-500">{genderLabels[application.gender]}</span> : null}</p>
@@ -197,6 +195,7 @@ function Card({ application, busy, children, match }: { application: Application
     </div>
     {profile ? <p className="mt-2 text-xs leading-5 text-slate-500">{profile}</p> : null}
     {children}
+    <OperatorMoneyPanel application={application} refresh={refresh} />
   </article>;
 }
 

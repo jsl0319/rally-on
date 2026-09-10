@@ -8,7 +8,7 @@ import { DomainError } from "@/server/domain/profile-service";
 import { addAcceptedMemberToConversation, makeConversationReadOnly } from "@/server/domain/match-chat-service";
 import { recordApplicationNotification } from "@/server/domain/notification-service";
 
-import { isAwaitingRefund } from "./court-match";
+import { courtMoneySummary } from "./court-match-money";
 import {
   getAcceptedCount,
   getApplicationStatusLabel,
@@ -583,6 +583,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
 }
 
 const applicationInclude = {
+  refundAttempts: { select: { status: true, amountKrw: true } },
   applicantUser: { select: { nickname: true } },
   match: {
     include: {
@@ -628,7 +629,7 @@ function toApplicationView(application: ApplicationWithRelations, supplyNotice: 
           paymentDueAt: application.paymentDueAt?.toISOString() ?? null,
           depositClaimedAt: application.depositClaimedAt?.toISOString() ?? null,
           confirmedAt: application.confirmedAt?.toISOString() ?? null,
-          awaitingRefund: isAwaitingRefund(application),
+          awaitingRefund: courtMoneySummary(application, application.match.totalCourtFeeKrw ?? 0).outstandingKrw > 0,
           refundRequested: application.refundRequestedAt !== null,
           refundCompletedAt: application.refundCompletedAt?.toISOString() ?? null,
         }

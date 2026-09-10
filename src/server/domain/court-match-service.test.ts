@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { ProfileWithRelations } from "./profile-service";
 import {
-  applyToCourtMatch, claimCourtMatchDeposit, completeCourtMatchRefund,
+  applyToCourtMatch, claimCourtMatchDeposit,
   confirmCourtMatchDeposit, decideCourtMatchApplication, reconcileCourtMatch,
-  reconcileCourtMatches, submitCourtMatchRefundAccount,
+  reconcileCourtMatches,
 } from "./court-match-service";
 import { recordApplicationNotification } from "./notification-service";
 
@@ -18,19 +18,18 @@ const before = new Date("2030-01-01T06:59:59Z");
 const after = new Date("2030-01-01T08:00:00Z");
 const operator = { id: "operator" };
 const viewer = { id: "participant", profile: { gender: "MALE" } as ProfileWithRelations };
-const refundInput = { bank: "새은행", accountNumber: "222", accountHolder: "참가자" };
 
 function applicant(id: string, status: string) {
   return {
     id, matchId: "match", applicantUserId: id === "application" ? viewer.id : id,
-    applicantGender: "MALE", status, paymentDueAt: judgement, depositCode: null,
+    applicantGender: "MALE", status, paymentDueAt: judgement, confirmationDueAt: null as Date | null, receivedAmountKrw: 36000, lastReceivedAt: before, feeReceivedAt: before, depositCode: null,
     confirmedAt: status === "CONFIRMED" ? before : null,
     refundCompletedAt: null as Date | null, refundBank: "기존은행",
     refundAccountNumber: "111", refundAccountHolder: "참가자",
   };
 }
 type Row = ReturnType<typeof applicant>;
-type Where = { id?: string | { in: string[] }; matchId?: string; status?: string | { in: string[] }; paymentDueAt?: { lte: Date }; confirmedAt?: { lte: Date }; applicantGender?: string };
+type Where = { OR?: Where[]; confirmationDueAt?: { lte: Date } | null; id?: string | { in: string[] }; matchId?: string; status?: string | { in: string[] }; paymentDueAt?: { lte: Date }; confirmedAt?: { lte: Date }; applicantGender?: string };
 
 // 실제 서비스 함수를 실행하며, 트랜잭션이 예외로 끝나면 저장 상태를 되돌린다.
 function fixture(status = "PENDING", confirmed = 0) {
@@ -41,7 +40,10 @@ function fixture(status = "PENDING", confirmed = 0) {
       courtUnit: { court: { status: "ACTIVE", operatorApplication: { applicantUserId: operator.id, status: "PUBLISH_APPROVED" } } } },
   };
   const rows = [applicant("application", status), ...Array.from({ length: confirmed }, (_, i) => applicant(`confirmed-${i}`, "CONFIRMED"))];
-  const matches = (row: Row, where: Where) => {
+  const matches = (row: Row, where: Where): boolean => {
+    if (where.OR && !where.OR.some((part) => matches(row, part))) return false;
+    if (where.confirmationDueAt === null && row.confirmationDueAt !== null) return false;
+    if (where.confirmationDueAt && (!row.confirmationDueAt || row.confirmationDueAt > where.confirmationDueAt.lte)) return false;
     if (where.id && !(typeof where.id === "string" ? row.id === where.id : where.id.in.includes(row.id))) return false;
     if (where.status && !(typeof where.status === "string" ? row.status === where.status : where.status.in.includes(row.status))) return false;
     if (where.paymentDueAt && row.paymentDueAt > where.paymentDueAt.lte) return false;
@@ -122,15 +124,15 @@ describe("코트 매칭 시간 판정", () => {
     expect(f.rows[0].status).toBe("EXPIRED_UNPAID");
   });
 
-  it("판정 직전에는 최소 인원 미달이어도 승인할 수 있다", async () => {
+  it("판정 직전에는 최소 이체 시간이 없어 새 승인을 차단한다", async () => {
     const f = fixture();
-    await expect(decideCourtMatchApplication(f.prisma, operator, "application", { accept: true })).resolves.toMatchObject({ status: "ACCEPTED", paymentDueAt: judgement.toISOString() });
+    await expect(decideCourtMatchApplication(f.prisma, operator, "application", { accept: true })).rejects.toMatchObject({ code: "COURT_MATCH_APPLICATION_CLOSED" });
   });
 
   it("판정 시점까지 최소 인원이 확정됐다면 이후 승인과 입금 확인을 허용한다", async () => {
     const f = fixture("PENDING", 2);
     vi.setSystemTime(after);
-    await expect(decideCourtMatchApplication(f.prisma, operator, "application", { accept: true })).resolves.toMatchObject({ status: "ACCEPTED", paymentDueAt: "2030-01-01T09:30:00.000Z" });
+    await expect(decideCourtMatchApplication(f.prisma, operator, "application", { accept: true })).resolves.toMatchObject({ status: "ACCEPTED", paymentDueAt: "2030-01-01T09:00:00.000Z" });
     await expect(confirmCourtMatchDeposit(f.prisma, operator, "application")).resolves.toMatchObject({ status: "CONFIRMED" });
   });
 
@@ -153,6 +155,7 @@ describe("코트 매칭 시간 판정", () => {
     f.match.recruitCount = 3;
     f.rows[0].paymentDueAt = before;
     f.match.courtSlot.approvalMode = "AUTO";
+    f.match.startsAt = new Date(start.getTime() + 24 * 60 * 60_000);
     await expect(applyToCourtMatch(f.prisma, { ...viewer, id: "new-user" }, "match")).resolves.toMatchObject({ status: "ACCEPTED" });
     expect(f.rows[0].status).toBe("EXPIRED_UNPAID");
     expect(f.rows.filter((r) => ["ACCEPTED", "CONFIRMED"].includes(r.status))).toHaveLength(3);
@@ -175,35 +178,4 @@ describe("코트 매칭 시간 판정", () => {
   });
 });
 
-describe("환불 계좌와 완료의 동시 처리", () => {
-  it("완료 표시가 먼저 잠금을 얻으면 대기하던 계좌 수정은 완료 여부를 다시 읽고 거절한다", async () => {
-    const f = fixture("CANCELLED");
-    f.rows[0].confirmedAt = before;
-    f.tx.$queryRaw.mockImplementationOnce(async () => {
-      // 다른 트랜잭션이 완료한 뒤 잠금을 반환하는 순서.
-      f.rows[0].refundCompletedAt = before;
-      return [];
-    });
-    await expect(submitCourtMatchRefundAccount(f.prisma, viewer, "application", refundInput)).rejects.toMatchObject({ code: "REFUND_ALREADY_COMPLETED" });
-    expect(f.tx.matchApplication.update).not.toHaveBeenCalled();
-    expect(f.rows[0].refundAccountNumber).toBe("111");
-  });
-
-  it("계좌 수정이 먼저 끝나면 완료 처리가 새 계좌와 같은 잠금을 사용한다", async () => {
-    const f = fixture("CANCELLED");
-    f.rows[0].confirmedAt = before;
-    await submitCourtMatchRefundAccount(f.prisma, viewer, "application", refundInput);
-    await completeCourtMatchRefund(f.prisma, operator, "application");
-    expect(f.rows[0]).toMatchObject({ refundAccountNumber: "222", refundCompletedAt: before });
-    expect(f.tx.$queryRaw).toHaveBeenCalledTimes(2);
-    expect(f.tx.$queryRaw.mock.calls[0]).toEqual(f.tx.$queryRaw.mock.calls[1]);
-    await expect(submitCourtMatchRefundAccount(f.prisma, viewer, "application", refundInput)).rejects.toMatchObject({ code: "REFUND_ALREADY_COMPLETED" });
-  });
-
-  it("본인 신청이 아니면 환불 계좌를 수정할 수 없다", async () => {
-    const f = fixture("CANCELLED");
-    f.rows[0].confirmedAt = before;
-    await expect(submitCourtMatchRefundAccount(f.prisma, { id: "other" }, "application", refundInput)).rejects.toMatchObject({ code: "APPLICATION_NOT_FOUND" });
-    expect(f.tx.matchApplication.update).not.toHaveBeenCalled();
-  });
-});
+// 환불의 계좌 잠금·재처리·권한 검증은 tests/db/court-match-flow.test.ts에서 실제 행 잠금으로 검증한다.

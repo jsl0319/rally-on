@@ -258,7 +258,7 @@ describe("Court Partner time supply authorization and state transitions", () => 
       // 환불 대기지만 계좌를 아직 안 넣었으면 운영자가 보낼 수 없다.
       { matchId: "match-id", status: "CANCELLED", depositClaimedAt: new Date(), confirmedAt: new Date(), refundRequestedAt: null, refundCompletedAt: null },
       { matchId: "match-id", status: "CANCELLED", depositClaimedAt: new Date(), confirmedAt: new Date(), refundRequestedAt: new Date(), refundCompletedAt: null },
-    ]);
+    ].map((a) => ({ ...a, receivedAmountKrw: null, refundAmountKrw: null, legacyRefundPaidKrw: 0, refundAttempts: [], match: { totalCourtFeeKrw: 36000 } })));
     const prisma = {
       courtSlot: { findMany },
       matchApplication: { findMany: applications },

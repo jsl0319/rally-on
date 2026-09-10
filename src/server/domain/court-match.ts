@@ -11,8 +11,9 @@ export const autoCancelLeadMinutes = 180;
 /** 승인 뒤 기본 입금 기한. */
 export const depositWindowMinutes = 360;
 
-/** 판정 시점이 지난 뒤의 신청 마감이자 그때의 입금 기한: 시작 30분 전. */
-export const lateApplicationLeadMinutes = 30;
+/** 추가 모집은 이체·대조에 각각 30분을 남긴다. */
+export const lateApplicationLeadMinutes = 90;
+export const confirmationWindowMinutes = 30;
 
 export function getJudgementAt(startsAt: Date) {
   return new Date(startsAt.getTime() - autoCancelLeadMinutes * 60_000);
@@ -22,15 +23,17 @@ export function getApplicationDeadline(startsAt: Date) {
   return new Date(startsAt.getTime() - lateApplicationLeadMinutes * 60_000);
 }
 
-/**
- * 입금 기한. 판정 전에는 `min(지금 + 6시간, 판정 시점)`이다. 최소 인원을 입금 완료
- * 인원으로 세기 때문에(§3.2), 기한이 판정 시점보다 늦으면 "자리는 찼는데 돈은 안 낸"
- * 상태로 판정을 맞게 된다. 판정 시점이 지난 뒤의 신청은 시작 30분 전까지다.
- */
 export function getPaymentDueAt(now: Date, startsAt: Date) {
-  const judgementAt = getJudgementAt(startsAt);
-  if (now >= judgementAt) return getApplicationDeadline(startsAt);
-  return new Date(Math.min(now.getTime() + depositWindowMinutes * 60_000, judgementAt.getTime()));
+  if (now >= getJudgementAt(startsAt)) return new Date(startsAt.getTime() - 60 * 60_000);
+  return new Date(Math.min(now.getTime() + depositWindowMinutes * 60_000, getJudgementAt(startsAt).getTime() - 30 * 60_000));
+}
+
+export function getConfirmationDueAt(paymentDueAt: Date) {
+  return new Date(paymentDueAt.getTime() + confirmationWindowMinutes * 60_000);
+}
+
+export function canAcceptCourtApplication(now: Date, startsAt: Date) {
+  return now < getApplicationDeadline(startsAt) && getPaymentDueAt(now, startsAt).getTime() - now.getTime() >= 30 * 60_000;
 }
 
 /**
@@ -100,15 +103,3 @@ export type CourtMatchDecisionInput = z.infer<typeof courtMatchDecisionInputSche
 export const courtMatchApplicationInputSchema = z.object({
   message: z.string().trim().max(200, "자기소개는 200자까지 입력해 주세요.").optional(),
 });
-
-/**
- * 환불 대기는 별도 상태가 아니라 이 조건의 조합이다(§4.2).
- * 환불 금액이 0원인 당일 취소는 돌려줄 것이 없으므로 환불 대기가 아니다.
- * `refundAmountKrw`가 null이면 앱 사유 취소이거나 이 열이 생기기 전의 기록으로 전액이다.
- */
-export function isAwaitingRefund(application: { status: string; confirmedAt: Date | null; refundCompletedAt: Date | null; refundAmountKrw?: number | null }) {
-  return application.status === "CANCELLED"
-    && application.confirmedAt !== null
-    && application.refundCompletedAt === null
-    && application.refundAmountKrw !== 0;
-}

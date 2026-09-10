@@ -1475,7 +1475,9 @@ POST /api/v1/court-match-applications/{id}/cancel              참가자 참가 
 POST /api/v1/court-match-applications/{id}/deposit            참가자 입금 알림
 POST /api/v1/court-match-applications/{id}/confirm            운영자 입금 확인·확정
 PUT  /api/v1/court-match-applications/{id}/refund-account     참가자 환불 계좌
-POST /api/v1/court-match-applications/{id}/refund             운영자 환불 완료 표시
+POST /api/v1/court-match-applications/{id}/receipt            운영자 실제 수령 기록
+POST /api/v1/court-match-applications/{id}/refund/start       운영자 환불 처리 시작
+POST /api/v1/court-match-applications/{id}/refund             운영자 송금 결과·정정
 GET  /api/v1/operator/court-matches/{matchId}                 운영자 신청 목록
 
 PUT  /api/v1/operator/courts/{courtId}/settlement-account     운영자 입금 계좌
@@ -1487,10 +1489,13 @@ PUT  /api/v1/operator/courts/{courtId}/settlement-account     운영자 입금 �
 > 서버가 함께 만든다. 자세한 규칙은 `03-2-court-match-operator-hosted-redesign.md`.
 
 `POST /court-match-applications/{id}/cancel`은 본인의 신청만 취소한다. 본문은 없다.
-입금 확인 전이면 `WITHDRAWN`이 되고 돌려줄 금액이 없다. 확정된 참가는 `CANCELLED`가
-되며 응답의 `refundAmountKrw`가 환불 대상 금액이다. 금액은 매칭 시작일 기준으로
-이틀 전까지 전액, 하루 전 절반, 당일 0원이며 한국 시간 날짜로 계산한다. 취소는 신청
-마감(시작 30분 전) 이후에도 받고 시작 시각 이후에는 `COURT_MATCH_ALREADY_STARTED`로
+참가 확정 전이면 `WITHDRAWN`이 되고 실제 수령액 전액이 반환 대상이다. 수령액이
+아직 기록되지 않았다면 0원을 반환하되, 이후 입금 대조로 반환 의무를 기록할 수 있다.
+확정된 참가는 `CANCELLED`가 되며 정상 참가비는 매칭 시작일 기준 이틀 전까지 전액,
+하루 전 절반, 당일 0원으로 한국 시간 날짜에 따라 계산한다. 초과 수령분은 별도로 전액
+반환한다. 응답의 `refundAmountKrw`는 이미 지급한 금액을 제외한 실제 미지급 반환액이며,
+신청에 저장한 날짜별 정책 환불액과 구분한다. 취소는 신청
+마감(시작 90분 전) 이후에도 받고 시작 시각 이후에는 `COURT_MATCH_ALREADY_STARTED`로
 거절한다. 자리는 항상 반환하며, 정원이 차서 마감됐던 매칭은 신청 마감 전에 한해 다시
 모집 중으로 돌아간다.
 >
@@ -1499,8 +1504,7 @@ PUT  /api/v1/operator/courts/{courtId}/settlement-account     운영자 입금 �
 
 계좌이체 흐름의 상태는 `MatchApplication`에 있다. `PENDING`(운영자 승인 대기) →
 `ACCEPTED`(자리 확보·입금 대기) → `CONFIRMED`(입금 확인 완료). 기한을 넘기면
-`EXPIRED_UNPAID`다. 환불 대기는 별도 상태가 아니라 `CANCELLED`이면서 `confirmedAt`이
-있고 `refundCompletedAt`이 비어 있는 상태다.
+`EXPIRED_UNPAID`다. 만료 기준은 `confirmationDueAt ?? paymentDueAt`이다. 환불 대기는 신청 상태와 분리하며 실제 수령액에서 계산한 반환 의무 중 미지급 잔액 또는 처리 중 송금 건이 있는 상태다. 상세 규칙은 `03-7`을 따른다.
 
 정원은 `ACCEPTED + CONFIRMED`로 세고, 자동 취소 판정은 `CONFIRMED`만 센다. 기준이
 다르다는 점에 주의한다.
@@ -1839,3 +1843,24 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 - 공식 계약: https://developers.kakao.com/docs/ko/local/dev-guide#address-coord 및 https://apis.map.kakao.com/web/guide/#routeurl
 
 - 랠리 추천 사유 `SAME_RALLY_LEVEL`과 `NEAR_RALLY_LEVEL`의 사용자 표시 label은 모두 `랠리 수준이 비슷해요.`다. 내부 점수와 코드는 유지한다.
+
+### 코트 입금 대조·환불·문의 계약 보완 (2026-09-10)
+
+- `POST .../{applicationId}/receipt`: `{clientRequestId, expectedVersion, amountKrw, receivedAt, feeReceivedAt?, note}`. 금액은 **누적** 수령액. 양수이면 수령 시각 필수. 참가비 충족 시각을 생략하면 수령 시각을 사용한다. 충족 시각은 최종 수령 시각보다 늦을 수 없다. 미래 시각·버전 충돌·처리 중 금액 정정을 거절한다. 철회/만료/취소 후에도 운영자는 기록할 수 있다.
+- `POST .../{applicationId}/confirm`: 통장 대조액이 참가비 이상, 충족 시각이 이체 기한 이내, 현재가 확인 기한 이전이어야 한다. 이체 알림만으로 확정되지 않는다. 실패: `RECEIPT_REQUIRED`, `LATE_DEPOSIT`, `DEPOSIT_DEADLINE_PASSED`.
+- `POST .../{applicationId}/refund/start`: `{clientRequestId, accountVersion, amountKrw}`. 서버에서 산출한 최신 미지급액 전체 및 최신 계좌 버전과 일치해야 한다. 응답 `{id}`는 고정된 송금 건이다. 네트워크 재시도는 같은 ID를 반환한다.
+- `POST .../{applicationId}/refund`: `{clientRequestId, attemptId, expectedVersion, status: PAID|FAILED|REVIEW, transferredAt, note}`. PAID는 은행에서 확인한 송금 시각 필수. PROCESSING/REVIEW→PAID/FAILED, PAID→REVIEW만 가능하다. 본문 없는 이전 완료 요청은 허용하지 않는다.
+- `PUT .../{applicationId}/refund-account`: 기존 은행/계좌/예금주 계약 유지. 반환 잔액이 있는 본인 신청만 가능하며 처리 중·확인 필요에는 변경할 수 없다.
+- 모든 금전 API는 신청 소유자 또는 해당 코트 매칭 운영자 권한을 검증한다. 오래된 금액·계좌·버전, 중복 요청의 다른 본문은 `MONEY_STATE_CONFLICT`(409). 지연 요청으로 완료한 송금을 새로 만들지 않는다.
+- 참가자/운영자 상세의 `application.money`는 수령액·초과액·반환 의무·완료액·예약액·남은 잔액·확인 필요를 반환한다. `refundLocked`, `confirmationDueAt`, 송금 건과 계좌 버전도 제공한다. 대조 사유와 사건 메모는 운영자에게만 반환한다.
+
+| 경로 | 계약 |
+| --- | --- |
+| GET/POST `/api/v1/support-inquiries` | 본인 내역/문의 생성. 신청 참조는 서버가 본인 매칭 참여에서 연결 |
+| POST `/api/v1/support-inquiries/{id}` | 본인 추가 문의(REPLY). 답변/해결 뒤 새 문의는 다시 검토 |
+| GET `/api/internal/support-inquiries` | INTERNAL_REVIEWER 전용. status/cursor, 페이지 최대 50건과 nextCursor |
+| POST `/api/internal/support-inquiries/{id}` | CLAIM / REPLY / REQUEST_OPERATOR / RESOLVE. 자기 관련 문의 검토 금지. 다른 담당자가 맡은 문의 처리 금지 |
+| GET `/api/v1/operator/support-inquiries` | 자기 코트에 전달된 요청만. 회원 원문과 PUBLIC 답변은 제외 |
+| POST `/api/v1/operator/support-inquiries/{id}` | 대조 요청에 OPERATOR_REPLY. 내부 담당자에게만 전달 |
+
+문의 처리 본문은 `{action, body(2~2000자), expectedVersion, clientRequestId}`다. 서로 다른 본문에 같은 요청 ID를 쓰거나 오래된 버전이면 `SUPPORT_STATE_CONFLICT`(409). 회원에게 답변한 뒤에만 해결 완료로 닫으며 연결 신청의 환불 잔액·처리 중·확인 필요가 남으면 종료를 거절한다. 사용자 역할은 서버 세션에서 읽고 클라이언트가 선택하지 않는다.

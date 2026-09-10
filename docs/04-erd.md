@@ -1305,3 +1305,20 @@ Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_
 ### 2026-09-08 게임 유형 정리
 
 새 개설·게임 유형 필터는 MIXED_DOUBLES(혼복), MENS_DOUBLES(남복), WOMENS_DOUBLES(여복), OTHER(기타)만 허용한다. 기존 SINGLES·RALLY·미지정 기록은 변경하지 않고 전체 목록·상세에서 기존 표시를 유지한다. 기타 필터는 OTHER만 조회하며 이전 유형을 임의로 기타로 합치지 않는다. GET /api/v1/matches의 gameType 쿼리로 실제 Match.gameType을 필터링하고 잘못된 유형은 400, 새 생성의 폐기된 유형은 422로 거절한다. 기존 playPurpose API 필터와 추천은 활동 목적 기준으로 유지하되 홈의 게임 유형 UI와 구분한다. 원하는 플레이의 랠리 연습은 별개 개념으로 유지한다.
+
+## 코트 매칭 금전 운영 보완 — 2026-09-10
+
+현재 구현 정본은 `03-7-court-match-money-operations.md`이며 기존 단일 환불 완료 표식을 확장한다.
+
+| 모델 | 추가 데이터와 의미 |
+| --- | --- |
+| MatchApplication | `confirmationDueAt`: 확인 기한, null은 기존 이체 기한 유지. `receivedAmountKrw`: 실제 누적 수령액. `lastReceivedAt`: 마지막 수령 시각. `feeReceivedAt`: 참가비가 충족된 시각. `receiptVersion`: 대조 정정 버전. `refundAccountVersion`: 계좌 버전. `legacyRefundPaidKrw`: 이전 완료 금액 보존 |
+| CourtReceiptRecord | 누적액 정정 전후·수령/충족 시각·담당자·사유·버전·요청 ID의 불변 기록 |
+| CourtRefundAttempt | 송금 건별 고정 금액·은행/계좌/예금주·계좌 버전·처리자·상태·송금 시각·버전·요청 ID |
+| CourtRefundEvent | 처리 시작/송금 완료/미송금 확인/완료 착오 재확인의 근거와 처리자·시각을 덧붙이는 이력 |
+| SupportInquiry | 신청 참조·담당자·버전·갱신 시각. OPEN / IN_PROGRESS / WAITING_OPERATOR / ANSWERED / RESOLVED |
+| SupportInquiryMessage | 작성자·처리 유형·PUBLIC/OPERATOR 공개 범위·본문·요청 ID·작성 시각 |
+
+환불 상태는 `PROCESSING / PAID / FAILED / REVIEW`다. 한 신청에서 PROCESSING 또는 REVIEW인 건은 부분 유일 인덱스로 최대 하나만 허용한다. 해당 송금 중에는 계좌와 수령 기록을 수정하지 못한다. 실제 은행 거래를 자동 확인하는 테이블이 아니다.
+
+기존 확정 건은 당시 참가비를 과거 수령 기록으로 이관하되 은행 수령 시각을 만들어 넣지 않는다. 기존 완료 환불은 별도 과거 지급액으로 보존한다. 신규 누적액·송금 건은 0 이상/양수 제약을 적용한다. 공유 DB 적용은 배포 단계에서 별도 수행한다.

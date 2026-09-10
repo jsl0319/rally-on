@@ -7,8 +7,12 @@ import { DomainError } from "@/server/domain/profile-service";
 import type { ProfileWithRelations } from "./profile-service";
 import { toProfileSnapshot } from "./match-service";
 
+import { courtMoneySummary } from "./court-match-money";
+
 import {
   getApplicationDeadline,
+  canAcceptCourtApplication,
+  getConfirmationDueAt,
   getJudgementAt,
   getPaymentDueAt,
   getRefundAmountKrw,
@@ -16,7 +20,6 @@ import {
   seatHoldingStatuses,
   type CourtMatchDecisionInput,
   type DepositClaimInput,
-  type RefundAccountInput,
 } from "./court-match";
 
 type Transaction = Prisma.TransactionClient;
@@ -36,12 +39,18 @@ const applicantSelect = {
   applicantGender: true,
   depositCode: true,
   paymentDueAt: true,
+  confirmationDueAt: true,
+  receivedAmountKrw: true,
+  lastReceivedAt: true,
+  feeReceivedAt: true,
   depositorName: true,
   depositClaimedAt: true,
   confirmedAt: true,
   refundCompletedAt: true,
   refundAmountKrw: true,
   refundBank: true,
+  legacyRefundPaidKrw: true,
+  refundAttempts: { select: { amountKrw: true, status: true } },
 } satisfies Prisma.MatchApplicationSelect;
 
 const courtMatchSelect = {
@@ -61,11 +70,11 @@ const courtMatchSelect = {
 type CourtMatch = Prisma.MatchGetPayload<{ select: typeof courtMatchSelect }>;
 
 // All seat and payment mutations for one match share this row lock, including the cron.
-async function lockCourtMatch(transaction: Transaction, matchId: string) {
+export async function lockCourtMatch(transaction: Transaction, matchId: string) {
   await transaction.$queryRaw(Prisma.sql`SELECT id FROM matches WHERE id = ${matchId}::uuid FOR UPDATE`);
 }
 
-async function lockApplicationMatch(transaction: Transaction, applicationId: string) {
+export async function lockApplicationMatch(transaction: Transaction, applicationId: string) {
   const application = await transaction.matchApplication.findUnique({ where: { id: applicationId }, select: { matchId: true } });
   if (application) await lockCourtMatch(transaction, application.matchId);
   return application?.matchId;
@@ -76,7 +85,7 @@ async function lockApplicationMatch(transaction: Transaction, applicationId: str
  *
  * `allowAfterApplicationDeadline`은 신청 마감 뒤에도 받아야 하는 요청을 위한 것이다.
  * 참가 취소가 그렇다. 취소는 신청이 아니라 이미 잡은 자리를 놓는 일이라, 마감을
- * 이유로 막으면 시작 30분 전부터는 못 가게 된 사람이 자리를 붙잡고 있게 된다.
+ * 이유로 막으면 신청 마감 이후에는 못 가게 된 사람이 자리를 붙잡고 있게 된다.
  */
 async function withCurrentCourtMatch<T>(
   prisma: PrismaClient,
@@ -117,13 +126,13 @@ function courtMatchHref(match: CourtMatch) {
   return match.courtSlot ? `/partner-sessions/${match.courtSlot.id}` : `/matches/${match.id}`;
 }
 
-function assertAccepting(match: CourtMatch, now: Date) {
+function assertAccepting(match: CourtMatch, now: Date, existingApproval = false) {
   const court = match.courtSlot?.courtUnit.court;
   if (!court || court.operatorApplication.applicantUserId !== match.hostUserId || court.status !== "ACTIVE" || court.operatorApplication.status !== "PUBLISH_APPROVED" || match.courtSlot?.status !== "AVAILABLE") {
     throw new DomainError("COURT_MATCH_UNAVAILABLE", 409, "현재 참가를 진행할 수 없는 코트 매칭이에요.");
   }
   if (match.status !== "OPEN" && match.status !== "CLOSED") throw new DomainError("MATCH_STATE_CONFLICT", 409, "취소되거나 종료된 코트 매칭이에요.");
-  if (now >= getApplicationDeadline(match.startsAt)) throw new DomainError("COURT_MATCH_APPLICATION_CLOSED", 409, "참가 신청과 입금 기한이 지났어요.");
+  if (!existingApproval && !canAcceptCourtApplication(now, match.startsAt)) throw new DomainError("COURT_MATCH_APPLICATION_CLOSED", 409, "입금에 필요한 시간이 부족해 지금은 신청·승인을 받지 않아요.");
 }
 
 function assertCourtMatch(match: CourtMatch | null): asserts match is CourtMatch {
@@ -199,7 +208,7 @@ async function approveApplication(transaction: Transaction, match: CourtMatch, a
   const paymentDueAt = getPaymentDueAt(now, match.startsAt);
   await transaction.matchApplication.update({
     where: { id: applicationId },
-    data: { status: "ACCEPTED", decidedAt: now, depositCode, paymentDueAt },
+    data: { status: "ACCEPTED", decidedAt: now, depositCode, paymentDueAt, confirmationDueAt: getConfirmationDueAt(paymentDueAt) },
   });
   return { depositCode, paymentDueAt };
 }
@@ -218,7 +227,7 @@ export async function applyToCourtMatch(
     if (match.status === "CANCELLED") throw new DomainError("MATCH_CANCELLED", 409, "취소된 코트 매칭이에요.");
     if (match.status !== "OPEN") throw new DomainError("MATCH_ALREADY_CLOSED", 409, "모집이 마감된 코트 매칭이에요.");
     if (now >= getApplicationDeadline(match.startsAt)) {
-      throw new DomainError("COURT_MATCH_APPLICATION_CLOSED", 409, "시작 30분 전까지만 신청할 수 있어요.");
+      throw new DomainError("COURT_MATCH_APPLICATION_CLOSED", 409, "시작 90분 전까지만 신청할 수 있어요.");
     }
     assertAccepting(match, now);
     if (!viewer.profile.gender) throw new DomainError("PROFILE_GENDER_REQUIRED", 409, "프로필에 성별을 입력해 주세요.");
@@ -282,7 +291,7 @@ export async function decideCourtMatchApplication(
     assertCourtMatch(match);
     if (match.hostUserId !== operator.id) throw new DomainError("COURT_MATCH_OPERATOR_REQUIRED", 403, "이 코트 매칭을 연 운영자만 신청을 검토할 수 있어요.");
     if (match.courtSlot?.approvalMode !== "OPERATOR") throw new DomainError("APPROVAL_MODE_CONFLICT", 409, "자동 승인 매칭에서는 신청을 검토하지 않아요.");
-    assertAccepting(match, now);
+    assertAccepting(match, now, !input.accept);
     if (application.status !== "PENDING") throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "이미 처리된 신청이에요.");
     if (match.status !== "OPEN") throw new DomainError("MATCH_STATE_CONFLICT", 409, "모집 중인 코트 매칭에서만 신청을 검토할 수 있어요.");
 
@@ -298,7 +307,7 @@ export async function decideCourtMatchApplication(
     }
 
     if (now >= getApplicationDeadline(match.startsAt)) {
-      throw new DomainError("COURT_MATCH_APPLICATION_CLOSED", 409, "시작 30분 전이 지나 승인할 수 없어요.");
+      throw new DomainError("COURT_MATCH_APPLICATION_CLOSED", 409, "시작 90분 전이 지나 승인할 수 없어요.");
     }
     await assertSeatAvailable(transaction, match, application.applicantGender);
 
@@ -331,7 +340,7 @@ export async function claimCourtMatchDeposit(
     const match = application.match;
     assertCourtMatch(match);
     if (application.status !== "ACCEPTED") throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "입금을 알릴 수 있는 상태가 아니에요.");
-    assertAccepting(match, now);
+    assertAccepting(match, now, true);
     if (!application.paymentDueAt || now >= application.paymentDueAt) throw new DomainError("DEPOSIT_DEADLINE_PASSED", 409, "입금 기한이 지났어요.");
 
     await transaction.matchApplication.update({
@@ -345,7 +354,7 @@ export async function claimCourtMatchDeposit(
       href: `/partner/court-matches/${match.id}`,
     });
     return { id: applicationId, depositorName: input.depositorName, depositClaimedAt: now.toISOString() };
-  });
+  }, { allowAfterApplicationDeadline: true });
 }
 
 /** 운영자가 통장에서 입금을 확인하고 참가를 확정한다. */
@@ -360,8 +369,13 @@ export async function confirmCourtMatchDeposit(prisma: PrismaClient, operator: {
     assertCourtMatch(match);
     if (match.hostUserId !== operator.id) throw new DomainError("COURT_MATCH_OPERATOR_REQUIRED", 403, "이 코트 매칭을 연 운영자만 입금을 확인할 수 있어요.");
     if (application.status !== "ACCEPTED") throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "입금을 확인할 수 있는 상태가 아니에요.");
-    assertAccepting(match, now);
-    if (!application.paymentDueAt || now >= application.paymentDueAt) throw new DomainError("DEPOSIT_DEADLINE_PASSED", 409, "입금 확인 기한이 지났어요.");
+    assertAccepting(match, now, true);
+    const confirmationDueAt = application.confirmationDueAt ?? application.paymentDueAt;
+    if (!confirmationDueAt || now >= confirmationDueAt) throw new DomainError("DEPOSIT_DEADLINE_PASSED", 409, "입금 확인 기한이 지났어요.");
+    if (application.receivedAmountKrw === null || application.receivedAmountKrw < (match.totalCourtFeeKrw ?? 0) || !application.feeReceivedAt) {
+      throw new DomainError("RECEIPT_REQUIRED", 409, "통장에서 확인한 수령 금액과 시각을 먼저 기록해 주세요.");
+    }
+    if (!application.paymentDueAt || application.feeReceivedAt > application.paymentDueAt) throw new DomainError("LATE_DEPOSIT", 409, "이체 기한 후 입금은 참가 확정에 사용할 수 없어요. 종료 후 반환해 주세요.");
 
     const confirmed = await transaction.matchApplication.updateMany({
       where: { id: applicationId, status: "ACCEPTED" },
@@ -392,7 +406,7 @@ export async function confirmCourtMatchDeposit(prisma: PrismaClient, operator: {
       });
     }
     return { id: applicationId, status: "CONFIRMED" as const, confirmedAt: now.toISOString() };
-  });
+  }, { allowAfterApplicationDeadline: true });
 }
 
 /**
@@ -402,8 +416,7 @@ export async function confirmCourtMatchDeposit(prisma: PrismaClient, operator: {
  * 절반, 당일은 없다. 앱은 돈을 옮기지 않으므로 이 금액은 운영자가 얼마를 보내야
  * 하는지 적어 둔 기록이다.
  *
- * 입금이 확인되지 않은 신청은 돌려줄 것이 없어 그냥 철회다. 이미 이체했는데 아직
- * 확인 전이라면 통장 대조가 필요하므로 화면에서 문의로 안내한다.
+ * 미확정 신청은 자리를 철회한다. 실제 수령한 금액은 별도 금전 기록을 기준으로 전액 반환한다.
  *
  * 자리는 언제 취소하든 돌려준다. 남은 자리가 다시 열려야 운영자가 대체 참가자를
  * 받을 수 있고 현장 인원도 실제와 맞는다.
@@ -448,7 +461,7 @@ export async function cancelCourtMatchApplication(prisma: PrismaClient, viewer: 
         matchTitle: match.title,
         href: `/partner/court-matches/${match.id}`,
       });
-      return { id: applicationId, status: "WITHDRAWN" as const, refundAmountKrw: 0 };
+      return { id: applicationId, status: "WITHDRAWN" as const, refundAmountKrw: courtMoneySummary({ ...application, status: "WITHDRAWN" }, match.totalCourtFeeKrw ?? 0).outstandingKrw };
     }
 
     if (application.status !== "CONFIRMED") throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "취소할 수 있는 상태가 아니에요.");
@@ -466,83 +479,13 @@ export async function cancelCourtMatchApplication(prisma: PrismaClient, viewer: 
       matchTitle: match.title,
       href: `/partner/court-matches/${match.id}`,
     });
-    return { id: applicationId, status: "CANCELLED" as const, refundAmountKrw };
+    return { id: applicationId, status: "CANCELLED" as const, refundAmountKrw: courtMoneySummary({ ...application, status: "CANCELLED", refundAmountKrw }, match.totalCourtFeeKrw ?? 0).outstandingKrw };
   }, { allowAfterApplicationDeadline: true });
-}
-
-/** 취소가 실제로 난 뒤에만 환불받을 계좌를 받는다(§3.9). */
-export async function submitCourtMatchRefundAccount(
-  prisma: PrismaClient,
-  viewer: { id: string },
-  applicationId: string,
-  input: RefundAccountInput,
-) {
-  return prisma.$transaction(async (transaction) => {
-    // 환불 완료와 같은 Match 잠금을 잡고, 완료 여부를 잠금 이후에 다시 읽는다.
-    await lockApplicationMatch(transaction, applicationId);
-    const now = new Date();
-    const application = await transaction.matchApplication.findUnique({
-      where: { id: applicationId },
-      select: { ...applicantSelect, match: { select: { courtSource: true } } },
-    });
-    if (!application || application.applicantUserId !== viewer.id) {
-      throw new DomainError("APPLICATION_NOT_FOUND", 404, "신청을 찾을 수 없어요.");
-    }
-    if (application.match.courtSource !== "PARTNER_COURT") throw new DomainError("NOT_A_COURT_MATCH", 409, "이 매칭은 코트 매칭이 아니에요.");
-    if (application.status !== "CANCELLED" || !application.confirmedAt || application.refundAmountKrw === 0) {
-      throw new DomainError("REFUND_NOT_APPLICABLE", 409, "환불 대상이 아니에요.");
-    }
-    if (application.refundCompletedAt) throw new DomainError("REFUND_ALREADY_COMPLETED", 409, "이미 환불 완료로 표시됐어요.");
-
-    await transaction.matchApplication.update({
-      where: { id: applicationId },
-      data: {
-        refundBank: input.bank,
-        refundAccountNumber: input.accountNumber,
-        refundAccountHolder: input.accountHolder,
-        refundRequestedAt: now,
-      },
-    });
-    return { id: applicationId, refundRequestedAt: now.toISOString() };
-  });
-}
-
-/**
- * 운영자가 환불했다고 표시한다. 서비스는 송금을 대행하거나 확인하지 않으므로
- * 이 기록은 송금 증명이 아니다. 화면에서 그렇게 안내해야 한다(§3.9).
- */
-export async function completeCourtMatchRefund(prisma: PrismaClient, operator: { id: string }, applicationId: string) {
-  return prisma.$transaction(async (transaction) => {
-    await lockApplicationMatch(transaction, applicationId);
-    const now = new Date();
-    const application = await transaction.matchApplication.findUnique({
-      where: { id: applicationId },
-      select: { ...applicantSelect, match: { select: courtMatchSelect } },
-    });
-    if (!application) throw new DomainError("APPLICATION_NOT_FOUND", 404, "신청을 찾을 수 없어요.");
-    const match = application.match;
-    assertCourtMatch(match);
-    if (match.hostUserId !== operator.id) throw new DomainError("COURT_MATCH_OPERATOR_REQUIRED", 403, "이 코트 매칭을 연 운영자만 환불을 표시할 수 있어요.");
-    if (application.status !== "CANCELLED" || !application.confirmedAt || application.refundAmountKrw === 0) {
-      throw new DomainError("REFUND_NOT_APPLICABLE", 409, "환불 대상이 아니에요.");
-    }
-    if (application.refundCompletedAt) throw new DomainError("REFUND_ALREADY_COMPLETED", 409, "이미 환불 완료로 표시됐어요.");
-    if (!application.refundBank) throw new DomainError("REFUND_ACCOUNT_REQUIRED", 409, "참가자가 환불 계좌를 입력한 뒤 처리해 주세요.");
-
-    await transaction.matchApplication.update({ where: { id: applicationId }, data: { refundCompletedAt: now } });
-    await recordApplicationNotification(transaction, {
-      recipientUserId: application.applicantUserId,
-      type: "COURT_MATCH_REFUND_COMPLETED",
-      matchTitle: match.title,
-      href: "/activity/sent",
-    });
-    return { id: applicationId, refundCompletedAt: now.toISOString() };
-  });
 }
 
 async function expireOverdueDeposits(transaction: Transaction, matchId: string, matchTitle: string, now: Date) {
   const overdue = await transaction.matchApplication.findMany({
-    where: { matchId, status: "ACCEPTED", paymentDueAt: { lte: now } },
+    where: { matchId, status: "ACCEPTED", OR: [{ confirmationDueAt: { lte: now } }, { confirmationDueAt: null, paymentDueAt: { lte: now } }] },
     select: { id: true, applicantUserId: true },
   });
   if (!overdue.length) return 0;

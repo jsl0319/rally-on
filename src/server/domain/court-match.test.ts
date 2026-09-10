@@ -4,16 +4,15 @@ import {
   getApplicationDeadline,
   getJudgementAt,
   getPaymentDueAt,
-  isAwaitingRefund,
 } from "./court-match";
 import { applyToCourtMatch } from "./court-match-service";
 
 const startsAt = new Date("2030-01-02T10:00:00.000Z");
 
 describe("코트 매칭 기한 계산", () => {
-  it("판정 시점은 시작 3시간 전, 신청 마감은 시작 30분 전이다", () => {
+  it("판정 시점은 시작 3시간 전, 신청 마감은 시작 90분 전이다", () => {
     expect(getJudgementAt(startsAt).toISOString()).toBe("2030-01-02T07:00:00.000Z");
-    expect(getApplicationDeadline(startsAt).toISOString()).toBe("2030-01-02T09:30:00.000Z");
+    expect(getApplicationDeadline(startsAt).toISOString()).toBe("2030-01-02T08:30:00.000Z");
   });
 
   it("여유가 있으면 승인 6시간 뒤를 입금 기한으로 준다", () => {
@@ -21,26 +20,19 @@ describe("코트 매칭 기한 계산", () => {
     expect(getPaymentDueAt(now, startsAt).toISOString()).toBe("2030-01-01T06:00:00.000Z");
   });
 
-  it("6시간이 판정 시점을 넘으면 판정 시점으로 자른다", () => {
+  it("판정 전 이체 기한은 대조 시간 30분을 남긴다", () => {
     // 최소 인원을 입금 완료 인원으로 세므로, 기한이 판정보다 늦으면 자리는 찼는데
     // 돈은 안 낸 상태로 판정을 맞게 된다.
     const now = new Date("2030-01-02T05:00:00.000Z");
-    expect(getPaymentDueAt(now, startsAt).toISOString()).toBe("2030-01-02T07:00:00.000Z");
+    expect(getPaymentDueAt(now, startsAt).toISOString()).toBe("2030-01-02T06:30:00.000Z");
   });
 
-  it("판정 시점이 지난 뒤의 신청은 시작 30분 전까지만 준다", () => {
+  it("판정 시점이 지난 뒤의 신청은 시작 90분 전까지만 준다", () => {
     const now = new Date("2030-01-02T08:00:00.000Z");
-    expect(getPaymentDueAt(now, startsAt).toISOString()).toBe("2030-01-02T09:30:00.000Z");
+    expect(getPaymentDueAt(now, startsAt).toISOString()).toBe("2030-01-02T09:00:00.000Z");
   });
 
-  it("입금까지 마친 신청이 취소되고 아직 환불 표시가 없으면 환불 대기다", () => {
-    const confirmedAt = new Date("2030-01-01T00:00:00.000Z");
-    expect(isAwaitingRefund({ status: "CANCELLED", confirmedAt, refundCompletedAt: null })).toBe(true);
-    expect(isAwaitingRefund({ status: "CANCELLED", confirmedAt, refundCompletedAt: new Date() })).toBe(false);
-    // 입금 전에 취소된 신청은 돌려줄 것이 없다.
-    expect(isAwaitingRefund({ status: "CANCELLED", confirmedAt: null, refundCompletedAt: null })).toBe(false);
-    expect(isAwaitingRefund({ status: "EXPIRED_UNPAID", confirmedAt: null, refundCompletedAt: null })).toBe(false);
-  });
+
 });
 
 // 운영자 승인 방식이면 신청 당시 프로필 스냅샷을 남기므로, 프로필 전체가 있어야 한다.
@@ -144,8 +136,8 @@ describe("코트 매칭 참가 신청", () => {
     }));
   });
 
-  it("시작 30분 전이 지나면 신청을 받지 않는다", async () => {
-    // 최소 인원을 채운 매칭도 시작 30분 전에는 추가 신청이 마감된다.
+  it("시작 90분 전이 지나면 신청을 받지 않는다", async () => {
+    // 최소 인원을 채운 매칭도 시작 90분 전에는 추가 신청이 마감된다.
     const transaction = transactionFor(courtMatch({ startsAt: new Date(Date.now() + 10 * 60 * 1000) }), 2);
 
     await expect(applyToCourtMatch(prismaFor(transaction), viewer, "match-id")).rejects.toMatchObject({

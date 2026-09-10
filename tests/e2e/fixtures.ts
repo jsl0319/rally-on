@@ -4,6 +4,7 @@ import { PrismaClient } from "@/generated/prisma/client";
 import { requireE2eDatabaseUrl } from "./e2e-environment";
 
 export const e2eUsers = {
+  reviewer: { id: "20000000-0000-4000-8000-000000000005", nickname: "E2E담당자", gender: "FEMALE" },
   host: { id: "20000000-0000-4000-8000-000000000001", nickname: "E2E모집자", gender: "MALE" },
   applicant: { id: "20000000-0000-4000-8000-000000000002", nickname: "E2E참가자", gender: "FEMALE" },
   outsider: { id: "20000000-0000-4000-8000-000000000003", nickname: "E2E외부인", gender: "MALE" },
@@ -51,6 +52,8 @@ export async function resetE2eDatabase(): Promise<E2eFixture> {
   await createOnboardedUser(e2eUsers.applicant);
   await createOnboardedUser(e2eUsers.outsider);
   await createOnboardedUser(e2eUsers.operator);
+  await createOnboardedUser(e2eUsers.reviewer);
+  await prisma.user.update({ where: { id: e2eUsers.reviewer.id }, data: { role: "INTERNAL_REVIEWER" } });
 
   const matchTitle = "E2E 주말 랠리 연습";
   const partnerMatchTitle = "E2E 준비된 코트 랠리";

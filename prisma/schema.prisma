@@ -272,42 +272,47 @@ enum VerificationAttemptResult {
 }
 
 model User {
-  id                    String     @id @default(uuid()) @db.Uuid
-  nickname              String     @unique @db.VarChar(12)
-  status                UserStatus @default(ACTIVE)
-  role                  UserRole   @default(MEMBER)
-  nicknameConfirmedAt   DateTime?  @map("nickname_confirmed_at") @db.Timestamptz(6)
-  onboardingCompletedAt DateTime?  @map("onboarding_completed_at") @db.Timestamptz(6)
-  withdrawnAt           DateTime?  @map("withdrawn_at") @db.Timestamptz(6)
-  matchNotificationsEnabled Boolean @default(true) @map("match_notifications_enabled")
-  kakaoProfileImageUrl    String?   @map("kakao_profile_image_url") @db.VarChar(500)
-  profileImageObjectRef   String?   @map("profile_image_object_ref") @db.VarChar(500)
-  profileImageContentType String?   @map("profile_image_content_type") @db.VarChar(40)
-  profileImageUpdatedAt   DateTime? @map("profile_image_updated_at") @db.Timestamptz(6)
-  createdAt             DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                        String     @id @default(uuid()) @db.Uuid
+  nickname                  String     @unique @db.VarChar(12)
+  status                    UserStatus @default(ACTIVE)
+  role                      UserRole   @default(MEMBER)
+  nicknameConfirmedAt       DateTime?  @map("nickname_confirmed_at") @db.Timestamptz(6)
+  onboardingCompletedAt     DateTime?  @map("onboarding_completed_at") @db.Timestamptz(6)
+  withdrawnAt               DateTime?  @map("withdrawn_at") @db.Timestamptz(6)
+  matchNotificationsEnabled Boolean    @default(true) @map("match_notifications_enabled")
+  kakaoProfileImageUrl      String?    @map("kakao_profile_image_url") @db.VarChar(500)
+  profileImageObjectRef     String?    @map("profile_image_object_ref") @db.VarChar(500)
+  profileImageContentType   String?    @map("profile_image_content_type") @db.VarChar(40)
+  profileImageUpdatedAt     DateTime?  @map("profile_image_updated_at") @db.Timestamptz(6)
+  createdAt                 DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  authAccounts         AuthAccount[]
-  tennisProfile        TennisProfile?
-  apiRateLimit         ApiRateLimit?
-  hostedMatches        Match[]                    @relation("MatchHost")
-  matchApplications    MatchApplication[]
-  courtImageUploads    CourtImageUpload[]
-  courtImages          CourtImage[]
-  operatorApplications CourtOperatorApplication[] @relation("OperatorApplicationApplicant")
+  authAccounts                       AuthAccount[]
+  tennisProfile                      TennisProfile?
+  apiRateLimit                       ApiRateLimit?
+  hostedMatches                      Match[]                             @relation("MatchHost")
+  matchApplications                  MatchApplication[]
+  courtImageUploads                  CourtImageUpload[]
+  courtImages                        CourtImage[]
+  operatorApplications               CourtOperatorApplication[]          @relation("OperatorApplicationApplicant")
   operatorApplicationEvidenceUploads OperatorApplicationEvidenceUpload[] @relation("OperatorApplicationEvidenceUploadOwner")
-  operatorApplicationReviews OperatorApplicationReview[] @relation("OperatorApplicationReviewer")
-  courtStatusChanges CourtStatusChange[] @relation("CourtStatusChangeReviewer")
-  courtSlotStatusHistories CourtSlotStatusHistory[] @relation("CourtSlotStatusActor")
-  supplyNoticeRecipients MatchSupplyNoticeRecipient[] @relation("MatchSupplyNoticeRecipientUser")
-  clearedSupplyRestrictions OperatorSupplyRestriction[] @relation("OperatorSupplyRestrictionClearedBy")
-  matchConversationMemberships MatchConversationMember[]
-  sentMatchChatMessages MatchChatMessage[] @relation("MatchChatMessageSender")
-  matchChatImageUploads MatchChatImageUpload[] @relation("MatchChatImageUploadOwner")
-  matchChatReports MatchChatReport[] @relation("MatchChatReportReporter")
-  matchChatModerationActions MatchChatModerationAction[] @relation("MatchChatModerationReviewer")
-  notifications Notification[]
-  supportInquiries SupportInquiry[]
+  operatorApplicationReviews         OperatorApplicationReview[]         @relation("OperatorApplicationReviewer")
+  courtStatusChanges                 CourtStatusChange[]                 @relation("CourtStatusChangeReviewer")
+  courtSlotStatusHistories           CourtSlotStatusHistory[]            @relation("CourtSlotStatusActor")
+  supplyNoticeRecipients             MatchSupplyNoticeRecipient[]        @relation("MatchSupplyNoticeRecipientUser")
+  clearedSupplyRestrictions          OperatorSupplyRestriction[]         @relation("OperatorSupplyRestrictionClearedBy")
+  matchConversationMemberships       MatchConversationMember[]
+  sentMatchChatMessages              MatchChatMessage[]                  @relation("MatchChatMessageSender")
+  matchChatImageUploads              MatchChatImageUpload[]              @relation("MatchChatImageUploadOwner")
+  matchChatReports                   MatchChatReport[]                   @relation("MatchChatReportReporter")
+  matchChatModerationActions         MatchChatModerationAction[]         @relation("MatchChatModerationReviewer")
+  notifications                      Notification[]
+  supportInquiries                   SupportInquiry[]                    @relation("SupportInquiryOwner")
+  assignedSupportInquiries           SupportInquiry[]                    @relation("SupportInquiryAssignee")
+  supportMessages                    SupportInquiryMessage[]
+  courtReceiptRecords                CourtReceiptRecord[]
+  courtRefundAttempts                CourtRefundAttempt[]
+  courtRefundEvents                  CourtRefundEvent[]
 
   @@map("users")
 }
@@ -431,25 +436,58 @@ model Announcement {
 
 enum SupportInquiryStatus {
   OPEN
+  IN_PROGRESS
+  WAITING_OPERATOR
   ANSWERED
+  RESOLVED
+}
+
+enum SupportMessageVisibility {
+  PUBLIC
+  OPERATOR
 }
 
 model SupportInquiry {
-  id        String               @id @default(uuid()) @db.Uuid
-  userId    String               @map("user_id") @db.Uuid
+  id             String               @id @default(uuid()) @db.Uuid
+  userId         String               @map("user_id") @db.Uuid
   /// 어느 매칭에 대한 문의인지. 코트 매칭의 입금·환불 문의는 건을 특정할 수 있어야
   /// 운영자에게 되묻지 않고 처리할 수 있다. 일반 문의는 비어 있다.
-  matchId   String?              @map("match_id") @db.Uuid
-  message   String               @db.VarChar(1000)
-  status    SupportInquiryStatus @default(OPEN)
-  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  matchId        String?              @map("match_id") @db.Uuid
+  applicationId  String?              @map("application_id") @db.Uuid
+  assigneeUserId String?              @map("assignee_user_id") @db.Uuid
+  message        String               @db.VarChar(1000)
+  status         SupportInquiryStatus @default(OPEN)
+  version        Int                  @default(1)
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user  User   @relation(fields: [userId], references: [id], onDelete: Restrict)
-  match Match? @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  user        User                    @relation("SupportInquiryOwner", fields: [userId], references: [id], onDelete: Restrict)
+  assignee    User?                   @relation("SupportInquiryAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
+  match       Match?                  @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  application MatchApplication?       @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  messages    SupportInquiryMessage[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([matchId, createdAt(sort: Desc)])
+  @@index([status, updatedAt])
   @@map("support_inquiries")
+}
+
+model SupportInquiryMessage {
+  id              String                   @id @default(uuid()) @db.Uuid
+  inquiryId       String                   @map("inquiry_id") @db.Uuid
+  authorUserId    String                   @map("author_user_id") @db.Uuid
+  clientRequestId String                   @map("client_request_id") @db.Uuid
+  action String @default("REPLY") @db.VarChar(32)
+  visibility      SupportMessageVisibility
+  body            String                   @db.VarChar(2000)
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  inquiry         SupportInquiry           @relation(fields: [inquiryId], references: [id], onDelete: Restrict)
+  author          User                     @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([inquiryId, clientRequestId])
+  @@index([inquiryId, createdAt])
+  @@map("support_inquiry_messages")
 }
 
 enum MatchGameType {
@@ -560,6 +598,12 @@ model MatchApplication {
   depositCode            String?           @map("deposit_code") @db.VarChar(8)
   /// 승인 시 걸리는 입금 기한. 지나면 자동으로 EXPIRED_UNPAID가 된다.
   paymentDueAt           DateTime?         @map("payment_due_at") @db.Timestamptz(6)
+  confirmationDueAt      DateTime?         @map("confirmation_due_at") @db.Timestamptz(6)
+  /// null은 실제 수령액을 별도로 기록하기 전의 신청이다.
+  feeReceivedAt DateTime? @map("fee_received_at") @db.Timestamptz(6)
+  receivedAmountKrw      Int?              @map("received_amount_krw")
+  lastReceivedAt         DateTime?         @map("last_received_at") @db.Timestamptz(6)
+  receiptVersion         Int               @default(0) @map("receipt_version")
   /// 참가자가 실제로 보낸 입금자명과 알린 시각.
   depositorName          String?           @map("depositor_name") @db.VarChar(50)
   depositClaimedAt       DateTime?         @map("deposit_claimed_at") @db.Timestamptz(6)
@@ -569,6 +613,9 @@ model MatchApplication {
   refundAccountNumber    String?           @map("refund_account_number") @db.VarChar(40)
   refundAccountHolder    String?           @map("refund_account_holder") @db.VarChar(50)
   refundRequestedAt      DateTime?         @map("refund_requested_at") @db.Timestamptz(6)
+  refundAccountVersion   Int               @default(1) @map("refund_account_version")
+  /// 새 송금 이력 도입 전 완료 표시는 금액을 고정해 따로 보존한다.
+  legacyRefundPaidKrw    Int               @default(0) @map("legacy_refund_paid_krw")
   /// 참가자가 스스로 참가를 취소한 시각. 운영자 철회·최소 인원 미달 취소와 구분한다.
   participantCancelledAt DateTime?         @map("participant_cancelled_at") @db.Timestamptz(6)
   /// 취소 시점에 확정한 환불 금액. 취소 시각과 참가비로 계산해 스냅샷으로 남긴다.
@@ -579,14 +626,86 @@ model MatchApplication {
   createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  match         Match @relation(fields: [matchId], references: [id], onDelete: Restrict)
-  applicantUser User  @relation(fields: [applicantUserId], references: [id], onDelete: Restrict)
+  match            Match                @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  applicantUser    User                 @relation(fields: [applicantUserId], references: [id], onDelete: Restrict)
+  receiptRecords   CourtReceiptRecord[]
+  refundAttempts   CourtRefundAttempt[]
+  supportInquiries SupportInquiry[]
 
   @@unique([matchId, applicantUserId])
   @@unique([matchId, depositCode])
   @@index([matchId, status, createdAt])
   @@index([applicantUserId, status, createdAt(sort: Desc)])
   @@map("match_applications")
+}
+
+model CourtReceiptRecord {
+  id                String           @id @default(uuid()) @db.Uuid
+  applicationId     String           @map("application_id") @db.Uuid
+  actorUserId       String           @map("actor_user_id") @db.Uuid
+  clientRequestId   String           @map("client_request_id") @db.Uuid
+  version           Int
+  previousAmountKrw Int              @map("previous_amount_krw")
+  amountKrw         Int              @map("amount_krw")
+  feeReceivedAt DateTime? @map("fee_received_at") @db.Timestamptz(6)
+  receivedAt        DateTime?        @map("received_at") @db.Timestamptz(6)
+  note              String           @db.VarChar(500)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  application       MatchApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  actor             User             @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([applicationId, clientRequestId])
+  @@unique([applicationId, version])
+  @@map("court_receipt_records")
+}
+
+enum CourtRefundStatus {
+  PROCESSING
+  PAID
+  FAILED
+  REVIEW
+}
+
+model CourtRefundAttempt {
+  id              String             @id @default(uuid()) @db.Uuid
+  applicationId   String             @map("application_id") @db.Uuid
+  actorUserId     String             @map("actor_user_id") @db.Uuid
+  clientRequestId String             @map("client_request_id") @db.Uuid
+  amountKrw       Int                @map("amount_krw")
+  bank            String             @db.VarChar(50)
+  accountNumber   String             @map("account_number") @db.VarChar(40)
+  accountHolder   String             @map("account_holder") @db.VarChar(50)
+  accountVersion  Int                @map("account_version")
+  status          CourtRefundStatus  @default(PROCESSING)
+  version         Int                @default(1)
+  transferredAt   DateTime?          @map("transferred_at") @db.Timestamptz(6)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  application     MatchApplication   @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  actor           User               @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  events          CourtRefundEvent[]
+
+  @@unique([applicationId, clientRequestId])
+  @@index([applicationId, createdAt])
+  @@index([status, updatedAt])
+  @@map("court_refund_attempts")
+}
+
+model CourtRefundEvent {
+  id              String             @id @default(uuid()) @db.Uuid
+  attemptId       String             @map("attempt_id") @db.Uuid
+  actorUserId     String             @map("actor_user_id") @db.Uuid
+  clientRequestId String             @map("client_request_id") @db.Uuid
+  status          CourtRefundStatus
+  note            String             @db.VarChar(500)
+  transferredAt   DateTime?          @map("transferred_at") @db.Timestamptz(6)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  attempt         CourtRefundAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  actor           User               @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([attemptId, clientRequestId])
+  @@index([attemptId, createdAt])
+  @@map("court_refund_events")
 }
 
 model MatchConversation {

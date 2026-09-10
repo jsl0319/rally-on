@@ -1,7 +1,9 @@
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { DomainError } from "./profile-service";
 import { reconcileCourtMatch } from "./court-match-service";
-import { getApplicationDeadline, getJudgementAt, getRefundAmountKrw, getRefundPercent, isAwaitingRefund, seatHoldingStatuses } from "./court-match";
+import { getApplicationDeadline, getJudgementAt, getRefundAmountKrw, getRefundPercent, canAcceptCourtApplication, seatHoldingStatuses } from "./court-match";
+
+import { courtMoneySummary } from "./court-match-money";
 
 const applicationSelect = {
   id: true, applicantUserId: true, applicantGender: true, status: true, createdAt: true,
@@ -9,6 +11,10 @@ const applicationSelect = {
   depositorName: true, depositClaimedAt: true, confirmedAt: true,
   refundBank: true, refundAccountNumber: true, refundAccountHolder: true,
   refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, participantCancelledAt: true,
+  confirmationDueAt: true, receivedAmountKrw: true, lastReceivedAt: true, feeReceivedAt: true, receiptVersion: true,
+  refundAccountVersion: true, legacyRefundPaidKrw: true,
+  receiptRecords: { orderBy: { version: "desc" } },
+  refundAttempts: { orderBy: { createdAt: "desc" }, include: { events: { orderBy: { createdAt: "asc" } } } },
   applicantUser: { select: { nickname: true } },
 } satisfies Prisma.MatchApplicationSelect;
 
@@ -30,16 +36,32 @@ export function courtApplicationStatusLabel(application: Pick<Application, "stat
   return ({ PENDING: "승인 대기", ACCEPTED: "입금 대기", CONFIRMED: "참가 확정", REJECTED: "신청 거절", WITHDRAWN: "신청 철회", EXPIRED_UNPAID: "입금 기한 만료", CANCELLED: "취소됨" } as const)[application.status];
 }
 
-function toApplication(application: Application) {
+function toApplication(application: Application, fee: number, operator = false) {
+  const money = courtMoneySummary(application, fee);
+  const activeRefund = application.refundAttempts.find((r) => r.status === "PROCESSING" || r.status === "REVIEW");
   return {
+    money, refundAccountVersion: application.refundAccountVersion,
+    refundLocked: Boolean(activeRefund),
+    receiptVersion: application.receiptVersion,
+    receivedAmountKrw: application.receivedAmountKrw,
+    lastReceivedAt: application.lastReceivedAt?.toISOString() ?? null,
+    feeReceivedAt: application.feeReceivedAt?.toISOString() ?? null,
+    confirmationDueAt: (application.confirmationDueAt ?? application.paymentDueAt)?.toISOString() ?? null,
+    receiptRecords: operator ? application.receiptRecords.map((r) => ({ id: r.id, version: r.version, amountKrw: r.amountKrw, previousAmountKrw: r.previousAmountKrw, receivedAt: r.receivedAt?.toISOString() ?? null, feeReceivedAt: r.feeReceivedAt?.toISOString() ?? null, note: r.note, createdAt: r.createdAt.toISOString() })) : [],
+    refundAttempts: application.refundAttempts.map((r) => ({
+      id: r.id, status: r.status, version: r.version, amountKrw: r.amountKrw,
+      bank: r.bank, accountNumber: r.accountNumber, accountHolder: r.accountHolder,
+      createdAt: r.createdAt.toISOString(), transferredAt: r.transferredAt?.toISOString() ?? null,
+      events: operator ? r.events.map((e) => ({ id: e.id, status: e.status, note: e.note, createdAt: e.createdAt.toISOString() })) : [],
+    })),
     id: application.id, nickname: application.applicantUser.nickname, gender: application.applicantGender,
-    status: application.status, statusLabel: courtApplicationStatusLabel(application),
+    status: application.status, statusLabel: activeRefund ? activeRefund.status === "REVIEW" ? "환불 확인 필요" : "환불 처리 중" : money.outstandingKrw > 0 ? "환불 대기" : courtApplicationStatusLabel(application),
     createdAt: application.createdAt.toISOString(), depositCode: application.depositCode,
     paymentDueAt: application.paymentDueAt?.toISOString() ?? null,
     depositorName: application.depositorName, depositClaimedAt: application.depositClaimedAt?.toISOString() ?? null,
     confirmedAt: application.confirmedAt?.toISOString() ?? null,
-    awaitingRefund: isAwaitingRefund(application),
-    refundAccount: application.status === "CANCELLED" && application.confirmedAt && application.refundBank
+    awaitingRefund: money.outstandingKrw > 0 || Boolean(activeRefund),
+    refundAccount: application.refundBank
       ? { bank: application.refundBank, accountNumber: application.refundAccountNumber!, accountHolder: application.refundAccountHolder! } : null,
     refundRequestedAt: application.refundRequestedAt?.toISOString() ?? null,
     refundCompletedAt: application.refundCompletedAt?.toISOString() ?? null,
@@ -89,7 +111,7 @@ export async function getCourtMatchParticipation(prisma: PrismaClient, viewer: {
   else if (isOperator) blockedReason = "내가 개설한 코트 매칭이에요.";
   else if (application) blockedReason = "이미 신청한 코트 매칭이에요.";
   else if (match.status !== "OPEN" || match.courtSlot?.status !== "AVAILABLE") blockedReason = "지금은 참가 신청을 받지 않아요.";
-  else if (new Date() >= getApplicationDeadline(match.startsAt)) blockedReason = "참가 신청이 마감됐어요.";
+  else if (!canAcceptCourtApplication(new Date(), match.startsAt)) blockedReason = "참가 신청이 마감됐어요.";
   else if (!viewer.profile.gender) blockedReason = "프로필에 성별을 입력해 주세요.";
   else if (info.remainingSpots === 0) blockedReason = "남은 자리가 없어요.";
   else if (info.remainingGenderSpots && (viewer.profile.gender === "MALE" ? info.remainingGenderSpots.male : info.remainingGenderSpots.female) === 0) blockedReason = "해당 성별의 자리가 모두 찼어요.";
@@ -103,17 +125,17 @@ export async function getCourtMatchParticipation(prisma: PrismaClient, viewer: {
     && now < match.startsAt;
   return {
     ...info, isOperator, legacy, canApply: blockedReason === null, blockedReason,
-    application: application ? toApplication(application) : null,
+    application: application ? toApplication(application, info.guestFeeKrw) : null,
     cancellation: cancellable && application
       ? {
         refundPercent: application.status === "CONFIRMED" ? getRefundPercent(now, match.startsAt) : 0,
-        refundAmountKrw: application.status === "CONFIRMED" ? getRefundAmountKrw(info.guestFeeKrw, now, match.startsAt) : 0,
+        refundAmountKrw: courtMoneySummary({ ...application, status: "CANCELLED", refundAmountKrw: application.status === "CONFIRMED" ? getRefundAmountKrw(info.guestFeeKrw, now, match.startsAt) : null }, info.guestFeeKrw).outstandingKrw,
         paidBeforeConfirmation: application.status === "ACCEPTED" && application.depositClaimedAt !== null,
       }
       : null,
     settlementAccount: canSeeAccount && match.settlementBank && match.settlementAccountNumber && match.settlementAccountHolder
       ? { bank: match.settlementBank, accountNumber: match.settlementAccountNumber, accountHolder: match.settlementAccountHolder } : null,
-    chatHref: match.conversation && (isOperator || application?.confirmedAt || (legacy && application?.status === "ACCEPTED")) ? `/chats/${match.id}` : null,
+    chatHref: match.conversation && (isOperator || (application?.status === "CONFIRMED" || (match.status === "CANCELLED" && application?.confirmedAt && !application.participantCancelledAt)) || (legacy && application?.status === "ACCEPTED")) ? `/chats/${match.id}` : null,
   };
 }
 
@@ -126,7 +148,7 @@ export async function getOperatorCourtMatch(prisma: PrismaClient, viewer: { id: 
   return {
     ...summary(match),
     applications: match.applications.map((application) => ({
-      ...toApplication(application),
+      ...toApplication(application, match.totalCourtFeeKrw ?? 0, true),
       ...(showProfile ? { profileSnapshot: application.profileSnapshot, message: application.message } : {}),
     })),
   };
