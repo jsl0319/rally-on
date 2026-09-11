@@ -126,9 +126,12 @@ describe.skipIf(!databaseUrl)("일반 매칭 · 실제 DB", () => {
     expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).status).toBe("CLOSED");
 
     const hosted = await getHostedMatches(prisma, host.viewer);
-    expect(hosted.find((item) => item.id === matchId)?.canReopen).toBe(true);
+    const hostedCard = hosted.find((item) => item.id === matchId);
+    expect(hostedCard?.canReopen).toBe(true);
 
     const closed = await prisma.match.findUniqueOrThrow({ where: { id: matchId } });
+    // 화면이 이 값을 expectedVersion으로 그대로 보내므로 빠지면 모든 상태 변경 버튼이 막힌다.
+    expect(hostedCard?.version).toBe(closed.version);
     const reopened = await reopenMatch(prisma, host.viewer, matchId, { expectedVersion: closed.version });
     expect(reopened).toMatchObject({ status: "OPEN", remainingSpots: 1 });
     expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).closedAt).toBeNull();

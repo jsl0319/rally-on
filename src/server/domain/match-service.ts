@@ -1096,6 +1096,7 @@ export async function getHostedMatches(prisma: PrismaClient, viewer: Viewer) {
     .map(({ match, card, pendingApplicationCount, canClose, canCancel, canComplete, canReopen }) => ({
       ...card,
       contact: { conversationStatus: match.conversation?.status ?? "NOT_CREATED", href: match.conversation ? `/chats/${match.id}` : null, label: "채팅방 열기" },
+      version: match.version,
       pendingApplicationCount,
       canClose,
       canCancel,

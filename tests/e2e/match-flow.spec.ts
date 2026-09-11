@@ -476,3 +476,38 @@ test("미확정 입금 문의를 운영자와 대조하고 전액 반환한 뒤 
   expect(errors).toEqual([]);
   await Promise.all(contexts.map((c) => c.context.close()));
 });
+
+test("수락된 참가자가 취소하면 자리가 비고 모집자가 다시 모집한다", async ({ browser }) => {
+  // 픽스처의 매칭은 정원 1명이 모두 차서 마감된 상태다. 참가자가 빠지면 자리가 하나 생긴다.
+  const applicantContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  await signInAs(applicantContext, e2eUsers.applicant.id);
+  const applicantPage = await applicantContext.newPage();
+
+  await applicantPage.goto("/activity/sent");
+  await expect(applicantPage.getByRole("heading", { name: "내가 보낸 신청" })).toBeVisible();
+  const card = applicantPage.locator("article").filter({ hasText: "E2E 마감 테니스장" });
+  await card.getByRole("button", { name: "참가 취소" }).click();
+  await expect(applicantPage.getByText("자리는 바로 비워지고", { exact: false })).toBeVisible();
+  await applicantPage.getByRole("button", { name: "네, 취소할게요" }).click();
+  await expect(card.getByText("참가를 취소했어요.")).toBeVisible();
+
+  // 모집자 화면은 이름이 내용과 맞고, 비워진 자리를 다시 열 수 있다.
+  const hostContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  await signInAs(hostContext, e2eUsers.host.id);
+  const hostPage = await hostContext.newPage();
+
+  await hostPage.goto("/");
+  await hostPage.getByRole("link", { name: /내가 만든 매칭/ }).click();
+  await expect(hostPage).toHaveURL(/\/activity\/received$/);
+  await expect(hostPage.getByRole("heading", { name: "내가 만든 매칭" })).toBeVisible();
+
+  const hostedCard = hostPage.locator("section").filter({ hasText: "E2E 마감 테니스장" }).first();
+  await expect(hostedCard.getByText("수락 0명 / 모집 1명", { exact: false })).toBeVisible();
+  await hostedCard.getByRole("button", { name: "다시 모집하기" }).click();
+  await expect(hostPage.getByText("빈 자리만큼 새 신청을 받을 수 있어요", { exact: false })).toBeVisible();
+  await hostPage.getByRole("button", { name: "네, 다시 모집할게요" }).click();
+  await expect(hostedCard.getByText("모집 중")).toBeVisible();
+
+  await applicantContext.close();
+  await hostContext.close();
+});

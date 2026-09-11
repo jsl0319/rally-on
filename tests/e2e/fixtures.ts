@@ -15,6 +15,9 @@ const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: requ
 
 export type E2eFixture = {
   matchTitle: string;
+  /** 정원이 차서 마감된 일반 매칭. 참가 취소와 다시 모집을 화면에서 확인한다. */
+  fullMatchId: string;
+  fullMatchApplicationId: string;
   partnerMatchTitle: string;
   partnerSlotId: string;
   partnerMatchId: string;
@@ -132,6 +135,49 @@ export async function resetE2eDatabase(): Promise<E2eFixture> {
     },
   });
 
+  // 정원이 차서 마감된 일반 매칭. 참가자가 취소하면 자리가 비고 모집자가 다시 열 수 있다.
+  const fullStartsAt = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
+  const fullMatch = await prisma.match.create({
+    data: {
+      hostUserId: e2eUsers.host.id,
+      clientRequestId: "20000000-0000-4000-8000-000000000006",
+      title: "E2E 자리가 찬 매칭",
+      startsAt: fullStartsAt,
+      endsAt: new Date(fullStartsAt.getTime() + 2 * 60 * 60 * 1000),
+      courtSource: "EXTERNAL_RESERVED",
+      externalCourtName: "E2E 마감 테니스장",
+      externalCourtAddress: "서울시 E2E 마포구 3",
+      recruitCount: 1,
+      partnerPreference: "COMPLETE_BEGINNER_WELCOME",
+      totalCourtFeeKrw: 24_000,
+      status: "CLOSED",
+      closedAt: now,
+      purposes: { create: { purpose: "RALLY_PRACTICE" } },
+    },
+  });
+  const fullMatchApplication = await prisma.matchApplication.create({
+    data: {
+      matchId: fullMatch.id,
+      applicantUserId: e2eUsers.applicant.id,
+      applicantGender: "FEMALE",
+      status: "ACCEPTED",
+      profileSnapshot: { source: "E2E full match fixture" },
+      decidedAt: now,
+    },
+  });
+  await prisma.matchConversation.create({
+    data: {
+      matchId: fullMatch.id,
+      members: {
+        create: [
+          { userId: e2eUsers.host.id, role: "HOST" },
+          { userId: e2eUsers.applicant.id, role: "PARTICIPANT" },
+        ],
+      },
+      messages: { create: { type: "SYSTEM", body: "매칭이 성사됐어요. 당일 준비를 편하게 조율해 보세요." } },
+    },
+  });
+
   const legacyStartsAt = new Date(now.getTime() - 2 * 60 * 60 * 1000);
   const legacyEndsAt = new Date(now.getTime() - 60 * 60 * 1000);
   const legacyMatch = await prisma.match.create({
@@ -171,7 +217,7 @@ export async function resetE2eDatabase(): Promise<E2eFixture> {
     },
   });
 
-  return { matchTitle, partnerMatchTitle, partnerSlotId: partnerSlot.id, partnerMatchId: partnerMatch.id, legacyMatchId: legacyMatch.id, legacyMatchTitle };
+  return { matchTitle, fullMatchId: fullMatch.id, fullMatchApplicationId: fullMatchApplication.id, partnerMatchTitle, partnerSlotId: partnerSlot.id, partnerMatchId: partnerMatch.id, legacyMatchId: legacyMatch.id, legacyMatchTitle };
 }
 
 export async function disconnectE2eDatabase() {
