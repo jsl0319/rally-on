@@ -207,21 +207,29 @@ async function reconcileStartedMatch(transaction: MatchTransaction, matchId: str
   return nextStatus;
 }
 
-export async function reconcileStartedMatches(prisma: PrismaClient, now = new Date()) {
+/**
+ * 시작 시각이 지난 매칭의 상태를 정리한다.
+ *
+ * `scope`로 대상을 좁힐 수 있다. 화면은 자기 매칭만 맞으면 되는데 서비스 전체를
+ * 훑으면, 크론이 하루 한 번이라 그 사이 쌓인 일을 한 사용자의 화면 진입이 떠안는다.
+ *
+ * 매칭마다 트랜잭션을 여는데 한꺼번에 열지 않고 차례로 처리한다. 밀린 양이 많을 때
+ * 동시에 열면 연결 풀을 다 쓰고 서로 기다리다 실패한다. 코트 매칭 쪽 정리도 같은
+ * 방식이다.
+ */
+export async function reconcileStartedMatches(prisma: PrismaClient, now = new Date(), scope: Prisma.MatchWhereInput = {}) {
   const matches = await prisma.match.findMany({
-    where: { courtSource: { not: "PARTNER_COURT" }, status: "OPEN", startsAt: { lte: now } },
+    where: { courtSource: { not: "PARTNER_COURT" }, status: "OPEN", startsAt: { lte: now }, ...scope },
     select: { id: true },
   });
-  const statuses = await Promise.all(matches.map(({ id }) => prisma.$transaction((transaction) => reconcileStartedMatch(transaction, id, now))));
 
-  return statuses.reduce(
-    (summary, status) => {
-      if (status === "CLOSED") summary.closed += 1;
-      if (status === "EXPIRED") summary.expired += 1;
-      return summary;
-    },
-    { checked: matches.length, closed: 0, expired: 0 },
-  );
+  const summary = { checked: matches.length, closed: 0, expired: 0 };
+  for (const { id } of matches) {
+    const status = await prisma.$transaction((transaction) => reconcileStartedMatch(transaction, id, now));
+    if (status === "CLOSED") summary.closed += 1;
+    if (status === "EXPIRED") summary.expired += 1;
+  }
+  return summary;
 }
 
 function toMatchCardView(match: MatchWithRelations, viewer: Viewer) {
@@ -724,7 +732,7 @@ export async function createApplication(prisma: PrismaClient, viewer: Viewer, ma
 }
 
 export async function getSentApplications(prisma: PrismaClient, viewer: Viewer) {
-  await reconcileStartedMatches(prisma);
+  await reconcileStartedMatches(prisma, new Date(), { applications: { some: { applicantUserId: viewer.id } } });
   const applications = await prisma.matchApplication.findMany({
     where: { applicantUserId: viewer.id },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -1061,7 +1069,7 @@ export async function completeMatch(prisma: PrismaClient, viewer: Viewer, matchI
 }
 
 export async function getHostedMatches(prisma: PrismaClient, viewer: Viewer) {
-  await reconcileStartedMatches(prisma);
+  await reconcileStartedMatches(prisma, new Date(), { hostUserId: viewer.id });
   const now = new Date();
   const matches = await prisma.match.findMany({
     where: { hostUserId: viewer.id }, orderBy: [{ startsAt: "asc" }, { id: "asc" }], include: matchInclude,

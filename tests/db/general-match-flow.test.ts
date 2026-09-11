@@ -7,6 +7,8 @@ import {
   closeMatch,
   createApplication,
   getHostedMatches,
+  getSentApplications,
+  reconcileStartedMatches,
   reopenMatch,
   withdrawApplication,
 } from "@/server/domain/match-service";
@@ -165,5 +167,41 @@ describe.skipIf(!databaseUrl)("일반 매칭 · 실제 DB", () => {
     expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).status).toBe("OPEN");
     // 이미 결과를 본 신청은 되살리지 않는다.
     expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: waitingApplication.id } })).status).toBe("CANCELLED");
+  });
+  it("화면 진입은 내 매칭만 보정하고 남의 매칭은 건드리지 않는다", async () => {
+    const me = await makeUser("나", "MALE");
+    const other = await makeUser("남", "MALE");
+    const applicant = await makeUser("참가자", "FEMALE");
+
+    const mine = await makeMatch(me.id, { recruitCount: 2 });
+    const theirs = await makeMatch(other.id, { recruitCount: 2 });
+    // 둘 다 시작 시각이 지났지만 아직 OPEN이다. 크론이 하루 한 번이라 흔한 상태다.
+    const started = new Date(Date.now() - HOUR);
+    await prisma.match.updateMany({ where: { id: { in: [mine, theirs] } }, data: { startsAt: started, endsAt: new Date(Date.now() + HOUR) } });
+    await prisma.matchApplication.create({
+      data: { matchId: theirs, applicantUserId: applicant.id, applicantGender: "FEMALE", status: "PENDING", profileSnapshot: {}, profileSnapshotVersion: 1 },
+    });
+
+    await getHostedMatches(prisma, me.viewer);
+
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: mine } })).status).toBe("EXPIRED");
+    // 남의 매칭은 그대로 둔다. 내 화면 한 번 여는 일이 서비스 전체를 훑지 않는다.
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: theirs } })).status).toBe("OPEN");
+
+    // 신청자 화면은 자기가 신청한 매칭을 보정한다.
+    await getSentApplications(prisma, applicant.viewer);
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: theirs } })).status).toBe("EXPIRED");
+  });
+
+  it("크론은 범위를 주지 않아 서비스 전체를 정리한다", async () => {
+    const host = await makeUser("모집자", "MALE");
+    const first = await makeMatch(host.id);
+    const second = await makeMatch(host.id);
+    await prisma.match.updateMany({ where: { id: { in: [first, second] } }, data: { startsAt: new Date(Date.now() - HOUR), endsAt: new Date(Date.now() + HOUR) } });
+
+    const summary = await reconcileStartedMatches(prisma);
+    expect(summary.checked).toBeGreaterThanOrEqual(2);
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: first } })).status).toBe("EXPIRED");
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: second } })).status).toBe("EXPIRED");
   });
 });
