@@ -304,8 +304,48 @@ function EmptyFilteredState({ onReset }: { onReset: () => void }) {
   return <div className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-5"><p className="font-bold">조건에 맞는 매칭이 아직 없어요.</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">필터를 초기화하면 더 많은 매칭을 볼 수 있어요.</p><button className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)] underline" onClick={onReset} type="button">필터 초기화</button></div>;
 }
 
+/**
+ * 볼 게 없을 때가 초기 사용자가 가장 자주 만나는 화면이다.
+ *
+ * "새로운 매칭이 등록되면 여기에서 확인할 수 있어요"는 사용자가 다시 들어와야만
+ * 성립하는 약속이라, 지금 할 수 있는 일을 주지 못한다. 대신 코트 매칭에 실제로
+ * 몇 개가 열려 있는지 세어서 보여 주고 그쪽으로 보낸다. 거기도 비어 있으면
+ * 매칭 만들기를 주 행동으로 올린다.
+ */
 function EmptyMatchState() {
-  return <div className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-6"><p className="font-bold">아직 둘러볼 매칭이 없어요.</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">새로운 매칭이 등록되면 여기에서 확인할 수 있어요.</p><Link className="mt-4 inline-block text-sm font-semibold text-[var(--tm-action-primary)] underline" href="/matches/new">매칭 만들기</Link></div>;
+  const [openCourtMatches, setOpenCourtMatches] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const response = await fetch("/api/v1/partner-session-slots/available", { cache: "no-store" });
+          if (!response.ok) return;
+          const body = await response.json() as { items?: unknown[] };
+          if (!cancelled) setOpenCourtMatches(Array.isArray(body.items) ? body.items.length : 0);
+        } catch {
+          // 현황을 못 세면 아래 기본 안내로 둔다. 빈 화면을 막을 이유는 없다.
+        }
+      })();
+    }, 0);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, []);
+
+  if (openCourtMatches !== null && openCourtMatches > 0) {
+    return <div className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-6">
+      <p className="font-bold">직접 예약한 코트로 열린 매칭은 아직 없어요.</p>
+      <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">대신 코트 매칭에 <strong className="font-semibold text-[var(--tm-text-primary)]">{openCourtMatches}개</strong>가 열려 있어요. 코트는 운영자가 준비해 두어서 장소 걱정 없이 참가할 수 있어요.</p>
+      <Button as={Link} className="mt-4" fullWidth href="/partner-sessions" size="medium">코트 매칭 보기</Button>
+      <Link className="mt-3 inline-block text-sm font-semibold text-[var(--tm-action-primary)] underline" href="/matches/new">직접 매칭 만들기</Link>
+    </div>;
+  }
+
+  return <div className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-6">
+    <p className="font-bold">아직 열린 매칭이 없어요.</p>
+    <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">첫 매칭을 열면 함께 칠 메이트가 신청할 수 있어요. 코트를 아직 예약하지 않았어도 일정과 지역만으로 시작할 수 있어요.</p>
+    <Button as={Link} className="mt-4" fullWidth href="/matches/new" size="medium">매칭 만들기</Button>
+  </div>;
 }
 
 function HomeLoading() {
