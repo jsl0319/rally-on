@@ -27,6 +27,11 @@ export async function recordApplicationNotification(
   });
 }
 
+/** 읽지 않은 알림 수만 센다. 목록까지 불러오지 않아 배지용으로 가볍다. */
+export function countUnreadNotifications(prisma: PrismaClient, userId: string) {
+  return prisma.notification.count({ where: { userId, readAt: null } });
+}
+
 export async function getMyNotifications(prisma: PrismaClient, userId: string) {
   const [items, unreadCount] = await Promise.all([
     prisma.notification.findMany({
