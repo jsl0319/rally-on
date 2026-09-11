@@ -108,9 +108,9 @@ export function M6ReceivedApplications() {
   return <PageShell withNavigation>
     <BackButton ariaLabel="마이로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/my" />
     <p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">내 활동</p>
-    <h1 className="mt-1 text-2xl font-bold">받은 신청</h1>
+    <h1 className="mt-1 text-2xl font-bold">내가 만든 매칭</h1>
     <ActivityTabs current="received" />
-    <p className="mt-4 text-sm leading-6 text-[var(--tm-text-secondary)]">내가 만든 매칭에 들어온 신청을 한곳에서 확인해요.</p>
+    <p className="mt-4 text-sm leading-6 text-[var(--tm-text-secondary)]">만든 매칭의 상태와 들어온 신청을 한곳에서 확인해요.</p>
     {data === null ? <LoadingOrError error={error} label="신청 정보를 준비하고 있어요." load={load} /> : data.items.length === 0 ? <EmptyHostedMatches /> : <div className="mt-6 space-y-4">{data.items.map((match) => <HostedMatchCard key={match.id} match={match} onChanged={load} />)}</div>}
   </PageShell>;
 }

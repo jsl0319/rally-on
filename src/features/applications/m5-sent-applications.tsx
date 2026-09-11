@@ -123,7 +123,7 @@ export function M5SentApplications() {
     <div className="mx-auto max-w-[560px]">
       <BackButton ariaLabel="마이로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/my" />
       <p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">내 활동</p>
-      <h1 className="mt-1 text-2xl font-bold">보낸 신청</h1>
+      <h1 className="mt-1 text-2xl font-bold">내가 보낸 신청</h1>
       <ActivityTabs current="sent" />
       <p className="mt-4 text-sm leading-6 text-[var(--tm-text-secondary)]">신청 결과와 다음 행동을 한눈에 확인해요.</p>
       {error && items !== null ? <div aria-live="polite" className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]">{error}</div> : null}

@@ -161,7 +161,11 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
       </header>
 
       <section className="mx-auto max-w-[560px] px-5 pt-6">
-        <h2 className="text-xl font-bold">매칭 둘러보기</h2>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-xl font-bold">매칭 둘러보기</h2>
+          {/* 만든 매칭이 지금 어떤 상태인지 보러 가는 길이 마이 안쪽에만 있었다. */}
+          <Link className="shrink-0 text-sm font-semibold text-[var(--tm-action-primary)]" href="/activity/received">내가 만든 매칭 →</Link>
+        </div>
         <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">조건에 맞는 매칭을 찾아보세요.</p>
         <Link className="mt-4 flex min-h-12 items-center justify-between rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 text-sm font-semibold text-[var(--tm-action-primary)]" href="/partner-sessions"><span>코트 걱정 없이 함께 테니스해요</span><span aria-hidden>→</span></Link>
 
