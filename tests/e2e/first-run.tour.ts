@@ -67,7 +67,9 @@ test.beforeAll(async () => {
   // 목록·상세·신청 화면을 보려면 공개된 일반 매칭이 실제로 있어야 한다.
   const day = 24 * 60 * 60 * 1000;
   const firstStartsAt = new Date(Date.now() + 3 * day);
-  browseTitle = "토요일 아침 가볍게 랠리";
+  // 이 앱에서 매칭 제목은 따로 입력받지 않고 테니스장 이름이 그대로 제목이 된다.
+  // 목록 카드도 그 이름을 보여 주므로 픽스처도 같은 모양으로 만든다.
+  browseTitle = "망원 한강공원 테니스장";
   const browseMatch = await prisma.match.create({
     data: {
       hostUserId: e2eUsers.host.id, clientRequestId: crypto.randomUUID(), title: browseTitle,
@@ -81,9 +83,11 @@ test.beforeAll(async () => {
   const secondStartsAt = new Date(Date.now() + 6 * day);
   await prisma.match.create({
     data: {
-      hostUserId: e2eUsers.outsider.id, clientRequestId: crypto.randomUUID(), title: "퇴근 후 스트로크 연습",
+      // 소개글이 없는 매칭도 한 장 둔다. 사람에 대한 줄이 비었을 때 카드가 어떻게 보이는지 봐야 한다.
+      hostUserId: e2eUsers.outsider.id, clientRequestId: crypto.randomUUID(), title: "성산 실내테니스장",
       startsAt: secondStartsAt, endsAt: new Date(secondStartsAt.getTime() + 2 * 60 * 60 * 1000),
-      courtSource: "COURT_TBD", recruitCount: 1, partnerPreference: "COMPLETE_BEGINNER_WELCOME",
+      courtSource: "EXTERNAL_RESERVED", externalCourtName: "성산 실내테니스장", externalCourtAddress: "서울시 마포구 성산로 200",
+      recruitCount: 1, partnerPreference: "SIMILAR_LEVEL", totalCourtFeeKrw: 30_000,
       purposes: { create: { purpose: "STROKE_PRACTICE" } },
     },
   });
@@ -170,7 +174,8 @@ test("3. 둘러보고 신청하는 사람", async ({ browser }) => {
     await page.waitForTimeout(1_500);
   });
   await step(page, "12-신청-시트", async () => {
-    await page.getByRole("button", { name: "참가 신청하기" }).click();
+    // 일반 매칭의 신청 버튼은 "같이 치기"다(코트 매칭만 "참가 신청하기").
+    await page.getByRole("button", { name: "같이 치기" }).click();
     await page.waitForTimeout(800);
   });
   await step(page, "13-내가-보낸-신청", async () => { await visit(page, "/activity/sent"); });

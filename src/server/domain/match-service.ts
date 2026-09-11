@@ -242,10 +242,18 @@ export async function reconcileStartedMatches(prisma: PrismaClient, now = new Da
 function toMatchCardView(match: MatchWithRelations, viewer: Viewer) {
   const acceptedCount = getAcceptedCount(match.applications);
   const recommendation = getRecommendationForMatch(match, viewer);
+  // 목록에 코트 이름과 값만 있으면 코트 목록처럼 읽힌다. 누가 부르는지와 그 사람이
+  // 쓴 말을 함께 실어야 사람을 찾는 화면이 된다.
+  const hostProfile = toProfileView(match.host.tennisProfile);
 
   return {
     id: match.id,
     title: match.title,
+    host: {
+      nickname: match.host.nickname,
+      experienceLabel: hostProfile?.experienceLabel ?? null,
+    },
+    introduction: match.introduction?.trim() ? match.introduction.trim() : null,
     recruitment: hasGenderQuota(match) ? { maleCount: match.maleRecruitCount, femaleCount: match.femaleRecruitCount, maleRemaining: remainingGenderSpots(match, match.applications, "MALE"), femaleRemaining: remainingGenderSpots(match, match.applications, "FEMALE") } : null,
     gameType: match.gameType ? { code: match.gameType, label: gameTypeLabels[match.gameType] } : null,
     status: match.status,
