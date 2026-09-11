@@ -9,7 +9,7 @@ import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { BackButton } from "@/components/navigation/back-button";
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
-import { matchScheduleText } from "@/matches/schedule";
+import { isFinishedSchedule, matchScheduleText } from "@/matches/schedule";
 
 type SentApplication = {
   id: string;
@@ -17,7 +17,7 @@ type SentApplication = {
   statusLabel: string;
   decidedAt: string | null;
   message: string | null;
-  match: { id: string; title: string; status: string; startsAt: string; courtSource: "EXTERNAL_RESERVED" | "COURT_TBD" | "PARTNER_COURT"; courtName: string | null; estimatedFeePerPersonKrw: number | null; courtSlotId: string | null };
+  match: { id: string; title: string; status: string; startsAt: string; endsAt: string; courtSource: "EXTERNAL_RESERVED" | "COURT_TBD" | "PARTNER_COURT"; courtName: string | null; estimatedFeePerPersonKrw: number | null; courtSlotId: string | null };
   courtMatch: {
     depositCode: string | null;
     paymentDueAt: string | null;
@@ -143,13 +143,18 @@ function EmptySentApplications() {
   return <section className="mt-10 rounded-3xl border border-dashed border-[var(--tm-border-strong)] bg-white px-5 py-10 text-center"><p className="text-2xl">🎾</p><h2 className="mt-4 font-bold">아직 보낸 신청이 없어요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">마음에 드는 매치를 찾아 부담 없이 신청해 보세요.</p><Button as={Link} className="mt-5" href="/" size="medium">매치 찾아보기</Button></section>;
 }
 
+/** 지난 일정임을 카드 안에서 바로 알 수 있게 한다. 목록은 다가오는 것부터 보여 준다. */
+function PastBadge() {
+  return <span className="rounded-full bg-[var(--tm-bg-subtle-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--tm-text-secondary)]">지난 매칭</span>;
+}
+
 function SentApplicationCard({ item, withdrawing, onWithdraw }: { item: SentApplication; withdrawing: boolean; onWithdraw: () => void }) {
   const active = item.status === "PENDING" || item.status === "ACCEPTED" || item.status === "CONFIRMED";
   return <article className="rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)]">
     <Link className="block transition-colors hover:text-[var(--tm-action-primary)]" href={item.match.courtSlotId ? `/partner-sessions/${item.match.courtSlotId}` : `/matches/${item.match.id}?returnTo=${encodeURIComponent("/activity/sent")}`}>
       <div className="flex items-start justify-between gap-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${active ? "bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "bg-[var(--tm-bg-subtle-muted)] text-[var(--tm-text-secondary)]"}`}>{item.statusLabel}</span><span className="text-xs text-[var(--tm-text-secondary)]">{appliedDate(item.createdAt)}</span></div>
       <h2 className="mt-4 text-lg font-bold">{item.match.title}</h2>
-      <p className="mt-3 text-sm text-[var(--tm-text-muted)]">🗓 {schedule(item.match.startsAt)}</p>
+      <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--tm-text-muted)]">{isFinishedSchedule(item.match.endsAt) ? <PastBadge /> : null}<span>🗓 {schedule(item.match.startsAt)}</span></p>
       <p className="mt-1 text-sm text-[var(--tm-text-muted)]">📍 {item.match.courtName ?? "코트는 함께 정해요"}</p>
       <p className="mt-3 text-sm font-semibold text-[var(--tm-action-primary)]">{item.match.courtSource === "COURT_TBD" ? "코트와 비용을 함께 정해요" : item.match.estimatedFeePerPersonKrw === null ? "참가비를 확인해 주세요" : `게스트 참가비 ${item.match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p>
       {item.supplyNotice ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm font-semibold leading-6 text-[var(--tm-status-error-text)]">{item.supplyNotice.message}</p> : <p className="mt-4 border-t border-[var(--tm-border-subtle)] pt-3 text-sm font-medium leading-6 text-[var(--tm-text-muted)]">{courtMatchNextStep(item) ?? nextStepMessage(item.status, item.match.status, item.decidedAt !== null)}</p>}

@@ -21,6 +21,16 @@ export function matchScheduleParts(startsAt: string, endsAt?: string | null) {
   return { day, time: `${startTime}–${meridiem(startTime) === meridiem(endTime) ? endTime.slice(2).trim() : endTime}` };
 }
 
+/**
+ * 이미 끝난 일정인지.
+ *
+ * 목록에서 지난 일정이 다가오는 일정과 똑같이 생겼으면, 사람은 카드마다 날짜를 읽어
+ * 오늘과 비교해야 한다. 지난 것은 지난 것으로 보이게 하려고 화면들이 함께 쓴다.
+ */
+export function isFinishedSchedule(endsAt: string, now = Date.now()) {
+  return new Date(endsAt).getTime() <= now;
+}
+
 /** 한 줄로 쓸 때. 카드처럼 날짜와 시간을 따로 두는 곳은 `matchScheduleParts`를 쓴다. */
 export function matchScheduleText(startsAt: string, endsAt?: string | null) {
   const { day, time } = matchScheduleParts(startsAt, endsAt);

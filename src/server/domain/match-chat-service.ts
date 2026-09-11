@@ -457,7 +457,8 @@ export async function getMyMatchConversations(prisma: PrismaClient, userId: stri
   // 방마다 미읽음을 세면 방 수만큼 질의가 나간다. 한 번에 세서 붙인다.
   const unreadByConversation = await countUnreadByConversation(prisma, userId, memberships.map((membership) => membership.conversationId));
 
-  return Promise.all(memberships.map(async (membership) => {
+  const now = new Date();
+  const items = await Promise.all(memberships.map(async (membership) => {
     const lastMessage = membership.conversation.messages[0] ?? null;
     const unreadMessageCount = unreadByConversation.get(membership.conversationId) ?? 0;
     return {
@@ -466,12 +467,17 @@ export async function getMyMatchConversations(prisma: PrismaClient, userId: stri
         title: membership.conversation.match.title,
         startsAt: membership.conversation.match.startsAt.toISOString(),
         status: membership.conversation.match.status,
+        finished: membership.conversation.match.endsAt <= now,
       },
       status: shouldBecomeReadOnlyAfterMatch(membership.conversation) ? "READ_ONLY" : membership.conversation.status,
       unreadMessageCount,
       lastMessage: lastMessage ? toMessageView(lastMessage) : null,
     };
   }));
+
+  // 최근 대화 순으로만 늘어놓으면 이미 끝난 매칭의 방이 위에 온다. 다가오는 약속을
+  // 찾으려고 스크롤하게 하지 않는다. 끝난 방은 뒤로 미루고, 그 안에서는 순서를 지킨다.
+  return items.sort((left, right) => Number(left.match.finished) - Number(right.match.finished));
 }
 
 function requireInternalReviewer(reviewer: Pick<User, "role">) {

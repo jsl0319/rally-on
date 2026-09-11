@@ -9,7 +9,7 @@ import { BackButton } from "@/components/navigation/back-button";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { Button } from "@/components/ui/button";
-import { matchScheduleText } from "@/matches/schedule";
+import { isFinishedSchedule, matchScheduleText } from "@/matches/schedule";
 
 type HostedMatch = {
   id: string;
@@ -159,7 +159,7 @@ function HostedMatchCard({ match, onChanged }: { match: HostedMatch; onChanged: 
         {match.pendingApplicationCount > 0 ? <span className="inline-flex min-h-7 items-center whitespace-nowrap rounded-full bg-[var(--tm-bg-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--tm-action-primary)]">검토할 신청 {match.pendingApplicationCount}건</span> : null}
       </div>
       <h2 className="mt-4 text-lg font-bold">{match.title}</h2>
-      <p className="mt-3 text-sm text-[var(--tm-text-muted)]">🗓 {schedule(match.startsAt)}</p>
+      <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--tm-text-muted)]">{isFinishedSchedule(match.endsAt) ? <span className="rounded-full bg-[var(--tm-bg-subtle-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--tm-text-secondary)]">지난 매칭</span> : null}<span>🗓 {schedule(match.startsAt)}</span></p>
       <p className="mt-1 text-sm text-[var(--tm-text-muted)]">📍 {match.court.name ?? "코트와 비용을 함께 정해요"}</p>
       <p className="mt-4 border-t border-[var(--tm-border-subtle)] pt-3 text-sm font-semibold">수락 {match.acceptedCount}명 / 모집 {match.recruitCount}명 <span className="font-normal text-[var(--tm-text-secondary)]">· 남은 자리 {match.remainingSpots}명</span></p>
       {match.acceptedCount > 0 && match.status !== "COMPLETED" ? <>

@@ -13,6 +13,7 @@ import {
   reopenMatch,
   withdrawApplication,
 } from "@/server/domain/match-service";
+import { getMyMatchConversations } from "@/server/domain/match-chat-service";
 import { getProfile } from "@/server/domain/profile-service";
 
 import { requireE2eDatabaseUrl } from "../e2e/e2e-environment";
@@ -134,6 +135,25 @@ describe.skipIf(!databaseUrl)("일반 매칭 · 실제 DB", () => {
 
     const notified = await prisma.notification.findMany({ where: { type: "MATCH_CLOSED" } });
     expect(notified.map((item) => item.userId)).toEqual([waiting.id]);
+  });
+
+  it("채팅 목록은 다가오는 매칭을 먼저 보여 주고 지난 매칭을 표시한다", async () => {
+    const host = await makeUser("모집자", "MALE");
+    const applicant = await makeUser("참가자", "FEMALE");
+    const soon = await makeMatch(host.id, { recruitCount: 2 });
+    const over = await makeMatch(host.id, { recruitCount: 2 });
+    await acceptedApplication(host.id, soon, applicant);
+    await acceptedApplication(host.id, over, applicant);
+    // 수락은 시작 전에만 되므로 방을 만든 뒤에 일정을 과거로 옮긴다.
+    await prisma.match.update({
+      where: { id: over },
+      data: { startsAt: new Date(Date.now() - 3 * HOUR), endsAt: new Date(Date.now() - HOUR) },
+    });
+
+    const rooms = await getMyMatchConversations(prisma, applicant.id, "PARTICIPANT");
+
+    expect(rooms.map((room) => room.match.id)).toEqual([soon, over]);
+    expect(rooms.map((room) => room.match.finished)).toEqual([false, true]);
   });
 
   it("시작 시각이 지나 신청이 정리되면 기다리던 사람에게 알린다", async () => {
