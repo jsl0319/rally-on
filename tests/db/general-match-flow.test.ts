@@ -4,6 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@/generated/prisma/client";
 import {
   acceptApplication,
+  cancelMatch,
   closeMatch,
   createApplication,
   getHostedMatches,
@@ -93,6 +94,63 @@ describe.skipIf(!databaseUrl)("일반 매칭 · 실제 DB", () => {
     // 모집자에게는 방에 남는 안내 메시지가 자리가 비었다는 신호가 된다.
     const messages = await prisma.matchChatMessage.findMany({ where: { conversation: { matchId }, type: "SYSTEM" } });
     expect(messages.some((message) => message.body.includes("취소"))).toBe(true);
+    // 채팅방을 열어야만 아는 신호로는 부족하다. 다시 모집할지 정해야 할 사람이다.
+    const hostNotifications = await prisma.notification.findMany({ where: { userId: host.id, type: "MATCH_PARTICIPANT_LEFT" } });
+    expect(hostNotifications).toHaveLength(1);
+    expect(hostNotifications[0]?.href).toBe(`/activity/received/${matchId}`);
+  });
+
+  it("매칭을 취소하면 수락된 사람과 기다리던 사람 모두에게 알린다", async () => {
+    const host = await makeUser("모집자", "MALE");
+    const accepted = await makeUser("수락된 사람", "FEMALE");
+    const waiting = await makeUser("대기하던 사람", "FEMALE");
+    const matchId = await makeMatch(host.id, { recruitCount: 3 });
+    await acceptedApplication(host.id, matchId, accepted);
+    await createApplication(prisma, waiting.viewer, matchId, { message: null });
+
+    const open = await prisma.match.findUniqueOrThrow({ where: { id: matchId } });
+    const result = await cancelMatch(prisma, host.viewer, matchId, { expectedVersion: open.version, reason: null });
+    // 알림을 실제로 남기기 전까지 이 응답 문구는 사실이 아니었다.
+    expect(result.notice).toContain("신청한 사람들에게");
+
+    const notified = await prisma.notification.findMany({ where: { type: "MATCH_CANCELLED" } });
+    expect(notified.map((item) => item.userId).sort()).toEqual([accepted.id, waiting.id].sort());
+    expect(notified[0]?.href).toBe("/activity/sent");
+  });
+
+  it("모집을 마감하면 기다리던 사람에게 알리고, 알림을 끈 사람은 건너뛴다", async () => {
+    const host = await makeUser("모집자", "MALE");
+    const accepted = await makeUser("수락된 사람", "FEMALE");
+    const waiting = await makeUser("대기하던 사람", "FEMALE");
+    const quiet = await makeUser("알림을 끈 사람", "FEMALE");
+    await prisma.user.update({ where: { id: quiet.id }, data: { matchNotificationsEnabled: false } });
+    const matchId = await makeMatch(host.id, { recruitCount: 3 });
+    await acceptedApplication(host.id, matchId, accepted);
+    await createApplication(prisma, waiting.viewer, matchId, { message: null });
+    await createApplication(prisma, quiet.viewer, matchId, { message: null });
+
+    const open = await prisma.match.findUniqueOrThrow({ where: { id: matchId } });
+    await closeMatch(prisma, host.viewer, matchId, { expectedVersion: open.version });
+
+    const notified = await prisma.notification.findMany({ where: { type: "MATCH_CLOSED" } });
+    expect(notified.map((item) => item.userId)).toEqual([waiting.id]);
+  });
+
+  it("시작 시각이 지나 신청이 정리되면 기다리던 사람에게 알린다", async () => {
+    const host = await makeUser("모집자", "MALE");
+    const applicant = await makeUser("기다리던 사람", "FEMALE");
+    const matchId = await makeMatch(host.id, { recruitCount: 2 });
+    await createApplication(prisma, applicant.viewer, matchId, { message: null });
+    await prisma.match.update({
+      where: { id: matchId },
+      data: { startsAt: new Date(Date.now() - HOUR), endsAt: new Date(Date.now() + HOUR) },
+    });
+
+    await getHostedMatches(prisma, host.viewer);
+
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: matchId } })).status).toBe("EXPIRED");
+    const notified = await prisma.notification.findMany({ where: { type: "MATCH_EXPIRED" } });
+    expect(notified.map((item) => item.userId)).toEqual([applicant.id]);
   });
 
   it("이미 시작한 매칭과 남의 신청은 취소할 수 없다", async () => {

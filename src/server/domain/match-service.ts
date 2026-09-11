@@ -6,7 +6,7 @@ import type { PlayPurpose, PrismaClient } from "@/generated/prisma/client";
 import { getProfile, type ProfileWithRelations } from "@/server/domain/profile-service";
 import { DomainError } from "@/server/domain/profile-service";
 import { addAcceptedMemberToConversation, makeConversationReadOnly, removeParticipantFromConversation } from "@/server/domain/match-chat-service";
-import { recordApplicationNotification } from "@/server/domain/notification-service";
+import { recordApplicationNotification, recordApplicationNotifications } from "@/server/domain/notification-service";
 
 import { courtMoneySummary } from "./court-match-money";
 import {
@@ -184,7 +184,7 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
 async function reconcileStartedMatch(transaction: MatchTransaction, matchId: string, now = new Date()) {
   const match = await transaction.match.findUnique({
     where: { id: matchId },
-    select: { id: true, status: true, courtSource: true, startsAt: true, applications: { select: { status: true } } },
+    select: { id: true, title: true, status: true, courtSource: true, startsAt: true, applications: { select: { status: true, applicantUserId: true } } },
   });
   if (!match || match.courtSource === "PARTNER_COURT" || match.status !== "OPEN" || match.startsAt > now) return match?.status ?? null;
 
@@ -203,6 +203,13 @@ async function reconcileStartedMatch(transaction: MatchTransaction, matchId: str
   await transaction.matchApplication.updateMany({
     where: { matchId: match.id, status: "PENDING" },
     data: { status: "CANCELLED", cancelledAt: now },
+  });
+  // 답을 기다리던 사람에게는 시작 시각이 지났다는 사실이 곧 결과다.
+  await recordApplicationNotifications(transaction, {
+    recipientUserIds: match.applications.filter((application) => application.status === "PENDING").map((application) => application.applicantUserId),
+    type: "MATCH_EXPIRED",
+    matchTitle: match.title,
+    href: "/activity/sent",
   });
   return nextStatus;
 }
@@ -926,9 +933,11 @@ export async function withdrawApplication(prisma: PrismaClient, viewer: Viewer, 
     const withdrawnAt = new Date();
     const wasAccepted = application.status === "ACCEPTED";
 
+    let hostNotice: { hostUserId: string; title: string } | null = null;
     if (wasAccepted) {
-      const match = await transaction.match.findUnique({ where: { id: application.matchId }, select: { status: true, startsAt: true } });
+      const match = await transaction.match.findUnique({ where: { id: application.matchId }, select: { status: true, startsAt: true, hostUserId: true, title: true } });
       if (!match) throw new DomainError("MATCH_NOT_FOUND", 404, "매칭을 찾을 수 없어요.");
+      hostNotice = { hostUserId: match.hostUserId, title: match.title };
       if (match.status === "CANCELLED") throw new DomainError("MATCH_STATE_CONFLICT", 409, "이미 취소된 매칭이에요.");
       if (match.startsAt <= withdrawnAt) throw new DomainError("MATCH_STARTED", 409, "이미 시작한 매칭은 취소할 수 없어요.");
     }
@@ -941,8 +950,16 @@ export async function withdrawApplication(prisma: PrismaClient, viewer: Viewer, 
 
     // 가지 않는 매칭의 준비 대화를 계속 보게 둘 이유가 없다. 나가면서 남는 안내
     // 메시지가 모집자에게는 자리가 비었다는 신호가 된다.
-    if (wasAccepted) {
+    if (wasAccepted && hostNotice) {
       await removeParticipantFromConversation(transaction, { matchId: application.matchId, userId: viewer.id, now: withdrawnAt });
+      // 채팅방 안내만으로는 채팅을 열어야 안다. 자리가 비었다는 것은 모집자가
+      // 다시 모집할지 정해야 하는 일이라 알림으로도 남긴다.
+      await recordApplicationNotification(transaction, {
+        recipientUserId: hostNotice.hostUserId,
+        type: "MATCH_PARTICIPANT_LEFT",
+        matchTitle: hostNotice.title,
+        href: `/activity/received/${application.matchId}`,
+      });
     }
     const result = await transaction.matchApplication.findUnique({ where: { id: application.id }, include: applicationInclude });
     if (!result) throw new DomainError("APPLICATION_NOT_FOUND", 404, "신청 내역을 찾을 수 없어요.");
@@ -955,7 +972,7 @@ export async function cancelMatch(prisma: PrismaClient, viewer: Viewer, matchId:
     await reconcileStartedMatch(transaction, matchId);
     const match = await transaction.match.findUnique({
       where: { id: matchId },
-      select: { id: true, hostUserId: true, status: true, startsAt: true, version: true, courtSource: true },
+      select: { id: true, title: true, hostUserId: true, status: true, startsAt: true, version: true, courtSource: true },
     });
     if (!match || match.hostUserId !== viewer.id) throw new DomainError("MATCH_HOST_REQUIRED", 403, "이 매칭의 모집자만 취소할 수 있어요.");
     // 코트 매칭 취소는 입금한 참가자의 환불 대기까지 만들어야 한다. 운영상 문제 접수만이 그 일을 한다.
@@ -965,6 +982,11 @@ export async function cancelMatch(prisma: PrismaClient, viewer: Viewer, matchId:
       throw new DomainError("MATCH_STATE_CONFLICT", 409, "시작 전 모집 중이거나 마감된 매칭만 취소할 수 있어요.");
     }
     const cancelledAt = new Date();
+    // 상태를 바꾸고 나면 누가 영향을 받았는지 알 수 없다. 바꾸기 전에 모아 둔다.
+    const affected = await transaction.matchApplication.findMany({
+      where: { matchId: match.id, status: { in: ["PENDING", "ACCEPTED"] } },
+      select: { applicantUserId: true },
+    });
     const updated = await transaction.match.updateMany({
       where: { id: match.id, version: input.expectedVersion, status: { in: ["OPEN", "CLOSED"] } },
       data: { status: "CANCELLED", cancelledAt, cancellationReason: optionalText(input.reason), version: { increment: 1 } },
@@ -974,14 +996,21 @@ export async function cancelMatch(prisma: PrismaClient, viewer: Viewer, matchId:
       where: { matchId: match.id, status: { in: ["PENDING", "ACCEPTED"] } },
       data: { status: "CANCELLED", cancelledAt },
     });
+    // 수락까지 받고 약속을 잡은 사람이 취소를 모른 채 코트에 나가는 일을 막는다.
+    await recordApplicationNotifications(transaction, {
+      recipientUserIds: affected.map((application) => application.applicantUserId),
+      type: "MATCH_CANCELLED",
+      matchTitle: match.title,
+      href: "/activity/sent",
+    });
     await makeConversationReadOnly(transaction, match.id, "매칭이 취소되어 이 채팅방은 읽기 전용이에요.", cancelledAt);
     return {
       id: match.id,
       status: "CANCELLED" as const,
       cancelledAt: cancelledAt.toISOString(),
       notice: match.courtSource === "EXTERNAL_RESERVED"
-        ? "외부에서 예약한 코트는 별도로 취소해야 해요."
-        : "수락된 참가자에게 취소 상태를 알려드렸어요.",
+        ? "신청한 사람들에게 알렸어요. 외부에서 예약한 코트는 따로 취소해 주세요."
+        : "신청한 사람들에게 취소 상태를 알려드렸어요.",
       version: input.expectedVersion + 1,
     };
   });
@@ -992,7 +1021,7 @@ export async function closeMatch(prisma: PrismaClient, viewer: Viewer, matchId: 
     await reconcileStartedMatch(transaction, matchId);
     const match = await transaction.match.findUnique({
       where: { id: matchId },
-      select: { id: true, hostUserId: true, status: true, startsAt: true, version: true },
+      select: { id: true, title: true, hostUserId: true, status: true, startsAt: true, version: true },
     });
     if (!match || match.hostUserId !== viewer.id) throw new DomainError("MATCH_HOST_REQUIRED", 403, "이 매칭의 모집자만 모집을 마감할 수 있어요.");
     if (match.version !== input.expectedVersion) throw new DomainError("VERSION_CONFLICT", 409, "다른 변경사항이 있어 매칭 정보를 다시 불러와 주세요.");
@@ -1006,9 +1035,20 @@ export async function closeMatch(prisma: PrismaClient, viewer: Viewer, matchId: 
       data: { status: "CLOSED", closedAt, version: { increment: 1 } },
     });
     if (updated.count !== 1) throw new DomainError("VERSION_CONFLICT", 409, "다른 변경사항이 있어 매칭 정보를 다시 불러와 주세요.");
+    const waiting = await transaction.matchApplication.findMany({
+      where: { matchId: match.id, status: "PENDING" },
+      select: { applicantUserId: true },
+    });
     await transaction.matchApplication.updateMany({
       where: { matchId: match.id, status: "PENDING" },
       data: { status: "CANCELLED", cancelledAt: closedAt },
+    });
+    // 마감은 기다리던 사람에게 거절과 같은 결과다. 결과를 모른 채 두지 않는다.
+    await recordApplicationNotifications(transaction, {
+      recipientUserIds: waiting.map((application) => application.applicantUserId),
+      type: "MATCH_CLOSED",
+      matchTitle: match.title,
+      href: "/activity/sent",
     });
     return { id: match.id, status: "CLOSED" as const, closedAt: closedAt.toISOString(), version: input.expectedVersion + 1 };
   });

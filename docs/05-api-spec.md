@@ -871,6 +871,7 @@ Core MVP에서 취소 사유를 필수로 받지 않는다. 서버는 한 트랜
 3. Match를 `CANCELLED`로 전환한다.
 4. `PENDING`, `ACCEPTED` Application을 `CANCELLED`로 전환한다.
 5. `cancelledAt`을 기록한다.
+6. 취소된 신청자 전원에게 `MATCH_CANCELLED` 알림을 남긴다.
 
 외부 코트 예약은 자동 취소되지 않으며 응답에도 이를 명시한다.
 
@@ -879,7 +880,7 @@ Core MVP에서 취소 사유를 필수로 받지 않는다. 서버는 한 트랜
   "id": "0198...",
   "status": "CANCELLED",
   "cancelledAt": "2026-08-13T02:00:00.000Z",
-  "notice": "외부에서 예약한 코트는 별도로 취소해야 해요.",
+  "notice": "신청한 사람들에게 알렸어요. 외부에서 예약한 코트는 따로 취소해 주세요.",
   "version": 4
 }
 ```

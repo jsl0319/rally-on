@@ -171,12 +171,17 @@ describe("match service operation safeguards", () => {
       match: {
         findUnique: vi.fn()
           .mockResolvedValueOnce({ id: "match-id", status: "OPEN", startsAt: futureStartsAt, applications: [] })
-          .mockResolvedValueOnce({ id: "match-id", hostUserId: viewer.id, status: "OPEN", startsAt: futureStartsAt, version: 3, courtSource: "COURT_TBD" }),
+          .mockResolvedValueOnce({ id: "match-id", title: "취소할 매칭", hostUserId: viewer.id, status: "OPEN", startsAt: futureStartsAt, version: 3, courtSource: "COURT_TBD" }),
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
-      matchApplication: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      matchApplication: {
+        findMany: vi.fn().mockResolvedValue([{ applicantUserId: "applicant-user-id" }]),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
       matchConversation: { findUnique: vi.fn().mockResolvedValue({ id: "conversation-id", status: "OPEN" }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
       matchChatMessage: { create: vi.fn().mockResolvedValue({ id: "system-message-id" }) },
+      user: { findMany: vi.fn().mockResolvedValue([{ id: "applicant-user-id" }]) },
+      notification: { createMany: vi.fn() },
     };
     const prisma = { $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)) } as unknown as Parameters<typeof cancelMatch>[0];
 
@@ -184,6 +189,10 @@ describe("match service operation safeguards", () => {
 
     expect(transaction.matchConversation.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "READ_ONLY" }) }));
     expect(transaction.matchChatMessage.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: "SYSTEM" }) }));
+    // 채팅방을 열지 않는 사람도 취소를 알아야 한다. 응답 문구가 그렇게 말하고 있다.
+    expect(transaction.notification.createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: [expect.objectContaining({ userId: "applicant-user-id", type: "MATCH_CANCELLED" })],
+    }));
   });
 
   it("does not attach another user's or an already-claimed court image", async () => {

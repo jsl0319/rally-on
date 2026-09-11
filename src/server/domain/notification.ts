@@ -10,7 +10,11 @@ export type NotificationType =
   | "COURT_MATCH_DEPOSIT_EXPIRED"
   | "COURT_MATCH_CANCELLED"
   | "COURT_MATCH_PARTICIPANT_CANCELLED"
-  | "COURT_MATCH_REFUND_COMPLETED";
+  | "COURT_MATCH_REFUND_COMPLETED"
+  | "MATCH_CANCELLED"
+  | "MATCH_CLOSED"
+  | "MATCH_EXPIRED"
+  | "MATCH_PARTICIPANT_LEFT";
 
 /**
  * In-app notification copy. Keep beginner-friendly, no numbers or jargon,
@@ -38,6 +42,14 @@ export function buildNotificationContent(type: NotificationType, matchTitle: str
       return { title: "참가자가 취소했어요", body: `${matchTitle} 참가자 한 명이 참가를 취소했어요. 환불 대상인지 확인해 주세요.` };
     case "COURT_MATCH_REFUND_COMPLETED":
       return { title: "환불 완료로 표시됐어요", body: `${matchTitle} 운영자가 환불했다고 표시했어요. 통장에서 확인해 주세요.` };
+    case "MATCH_CANCELLED":
+      return { title: "매칭이 취소됐어요", body: `${matchTitle} 모집자가 매칭을 취소했어요. 그날 일정은 비워 두셔도 돼요.` };
+    case "MATCH_CLOSED":
+      return { title: "모집이 마감됐어요", body: `${matchTitle} 모집이 마감돼 기다리던 신청이 정리됐어요.` };
+    case "MATCH_EXPIRED":
+      return { title: "시작 시각이 지났어요", body: `${matchTitle} 시작 시각이 지나 기다리던 신청이 정리됐어요.` };
+    case "MATCH_PARTICIPANT_LEFT":
+      return { title: "참가자가 취소했어요", body: `${matchTitle} 참가자 한 명이 취소해 자리가 다시 비었어요.` };
   }
 }
 
