@@ -58,13 +58,25 @@
 
 일반 금융 API에서 클라이언트가 인계 플래그를 보내도 대리 권한은 생기지 않는다. 내부 경로가 명시적으로 내부 접근 모드를 전달하고, 서비스는 DB의 최신 역할·계정 상태·배정을 다시 검사한다. 내부 상세에 테니스 프로필과 신청 메시지는 공개하지 않는다.
 
-## 6. 검증과 현재 배포 상태
+## 6. 최초 구현 검증 (2026-09-11)
 
-- 전용 로컬 `tennis_mate_e2e` DB에 migration 적용 완료. 운영 DB에는 이번 migration을 적용하지 않았다.
+- 전용 로컬 `tennis_mate_e2e` DB에 migration을 먼저 적용했다. 운영 적용 결과는 §7을 따른다.
 - 전체 단위·DB 테스트 51개 파일 341건 통과. 코트 DB 50건, 일반 매칭 DB 7건을 포함하며 공유 테스트 DB 초기화 충돌을 막기 위해 파일을 순차 실행했다. 탈퇴/권한 종료 재배정과 자정 경계의 반환액 재확인도 검증했다.
 - 전체 모바일 E2E 11건 통과(새 거래 연속성 2건 + 기존 9건). 린트·타입·Prisma 스키마 검증과 프로덕션 빌드 모두 통과.
 - 모바일은 390×844에서 실제 브라우저로 확인: 탈퇴 미리보기 → 제한 페이지 → 본인 환불 계좌/문의, 운영자 탈퇴 → 내부 인계 → 제공 불가 취소 → 늦은 입금 기록 → 반환 완료.
 - 기존 클로드 커밋과 일반 매칭/픽스처/재모집 테스트의 미커밋 변경은 수정하지 않았다. 이 작업의 E2E는 별도 `account-continuity.spec.ts`에 추가했다.
 - R05 실제 경기 구성, R06 법적 역할·계약 조건 스냅샷은 이 단위의 완료 항목이 아니다. 크론은 보류 상태다.
 
-검증 로그는 `/tmp/rally-r04-final-tests.log`, `/tmp/rally-r04-final-e2e.log`, `/tmp/rally-r04-final-build.log`에 남겼다. 모바일 확인 이미지는 `/tmp/rally-r04-account-mobile.png`, `/tmp/rally-r04-handoff-mobile.png`다. 이 단위는 로컬 구현·검증 상태이며 커밋·푸시·운영 DB 적용·배포는 아직 하지 않았다. 배포할 때는 운영 백업과 migration 검증을 거쳐야 하며 클로드의 미커밋 변경을 임의 포함하지 않는다.
+검증 로그는 `/tmp/rally-r04-final-tests.log`, `/tmp/rally-r04-final-e2e.log`, `/tmp/rally-r04-final-build.log`에 남겼다. 모바일 확인 이미지는 `/tmp/rally-r04-account-mobile.png`, `/tmp/rally-r04-handoff-mobile.png`다.
+
+## 7. 운영 반영 및 최신 통합 확인 (2026-09-12)
+
+- 구현 커밋은 `62ffb74`이며, 당시 클로드의 미커밋 파일 4개를 제외한 50개 파일만 포함했다. 이후 클로드가 해당 커밋 위에서 작업하고 main에 푸시했다. 재개 시점의 `ef0a949`는 로컬 main·origin/main·운영 배포에 모두 반영되어 있었다. 과거 커밋으로 되돌리거나 클로드의 추가 코드를 수정하지 않았다.
+- 운영 적용 전 백업은 `.vercel/backups/20260911-before-account-continuity.dump`에 보관했다(168,155바이트, archive 항목 329개, 파일 권한 600, Git 제외). 별도 로컬 DB에 복원해 migration 27→28개 적용과 기존 테이블의 행 수 보존을 확인했다.
+- 운영 DB의 `20260911070000_account_transaction_continuity`는 **2026-09-11 18:46:11 KST** 적용 완료로 기록되어 있다. 재개 후 저장소 SQL의 SHA-256과 운영 migration checksum이 일치하고 rollback 기록이 없음을 확인했다. 이후 클로드의 알림 migration까지 포함해 운영 이력은 29개다. 이미 적용된 migration을 다시 실행하거나 운영 거래를 수정하지 않았다.
+- 확인한 운영 배포는 `dpl_HnxtWpnRHzwGvNQ431d7hYAcxbXS`, 커밋 `ef0a949`, **READY**다. 운영 주소는 <https://tennis-mate-ochre.vercel.app>이며 Next.js 16.3.0 빌드는 약 68초 걸렸다. 이 문서 후속 커밋은 기존 main 자동 배포 경로를 사용한다.
+- 최신 커밋을 별도 디렉터리에 복사하고 새 로컬 `rally_r04_release_e2e` DB로 검증했다. 단위·DB 테스트 **52개 파일 352건**, 이번 탈퇴·인계 모바일 E2E **2건**, 린트·타입 검사·프로덕션 빌드가 통과했다. E2E에서 환불 계좌·문의, 운영자 탈퇴 후 업무 인계·취소·늦은 입금·반환 완료와 브라우저 오류 없음을 확인했다.
+- 운영의 `/api/health`는 DB 연결 정상, 로그인 페이지는 정상 응답, 거래·인계 API의 비로그인 요청은 401, 보호 페이지는 로그인으로 이동한다. 운영에서는 실제 회원 탈퇴·입금·환불 변경을 테스트하지 않았다. 확인 시점 운영 배포의 최근 3시간 error 로그 조회 결과는 0건이다.
+- **남은 CI 이슈:** [main CI 실행 34598031091](https://github.com/jsl0319/rally-on/actions/runs/34598031091)에서 `src/matches/schedule.test.ts` 38·48행의 시간 표기 테스트 2건이 실패한다. CI에서는 `오전/오후` 대신 `AM/PM`이 반환되지만 로컬 테스트는 통과한다. 사용자가 클로드 작업을 보존하도록 요청했으므로 해당 코드·테스트는 변경하지 않았다. 운영 배포 성공과 CI 전체 통과를 구분한다.
+
+최신 확인 로그는 `/tmp/rally-r04-current-tests.log`, `/tmp/rally-r04-current-e2e.log`, `/tmp/rally-r04-current-build.log`에 남겼다. 운영 DB 환경 파일과 복원 검증용 임시 DB는 확인 후 삭제하고 권한 제한 백업만 보관한다. R05/R06의 정책 검토와 크론 보류는 유지한다.
