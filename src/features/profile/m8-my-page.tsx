@@ -133,21 +133,21 @@ export function M8MyPage() {
             description="내가 만든 매칭과 새로 들어온 신청을 확인해요"
             href="/activity/received"
             icon={<IconChip><ClipboardText aria-hidden="true" className="size-5" /></IconChip>}
-            title="내가 만든 매칭 · 받은 신청"
+            title="내가 만든 매칭"
           />
           <LinkRow
             badge={<CountBadge count={pendingSentCount} />}
             description="내가 신청한 매칭의 진행 상황과 남은 할 일을 확인해요"
             href="/activity/sent"
             icon={<IconChip><PaperPlaneTilt aria-hidden="true" className="size-5" /></IconChip>}
-            title="보낸 신청"
+            title="내가 보낸 신청"
           />
         </Card>
 
         <SectionLabel>설정</SectionLabel>
         <Card>
           <ToggleRow
-            description="신청 · 수락 · 거절 소식을 알림으로 받아요"
+            description="신청 · 수락 · 취소 같은 매칭 소식을 알림으로 받아요"
             icon={<Bell aria-hidden="true" className="size-5 text-[var(--tm-text-muted)]" />}
             title="매칭 알림"
             toggle={<Switch checked={me.matchNotificationsEnabled} disabled={savingNotificationPref} onCheckedChange={(next) => void toggleMatchNotifications(next)} size="small" />}

@@ -29,47 +29,71 @@ function time(createdAt: string) {
   return new Intl.DateTimeFormat("ko-KR", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Seoul" }).format(new Date(createdAt));
 }
 
+type Lists = Record<ChatRole, ConversationListItem[]>;
+
+async function fetchRole(role: ChatRole) {
+  const response = await fetch(`/api/v1/me/conversations?role=${role}`, { cache: "no-store" });
+  const body: unknown = await response.json();
+  if (!response.ok) throw new Error(apiMessage(body, "채팅 목록을 불러오지 못했어요."));
+  return (body as { items: ConversationListItem[] }).items;
+}
+
+function unreadRooms(items: ConversationListItem[]) {
+  return items.filter((item) => item.unreadMessageCount > 0).length;
+}
+
+/**
+ * 어느 쪽을 먼저 열지 정한다.
+ *
+ * 늘 "내가 만든 매칭"으로 열면, 신청만 해 본 사람은 하단 배지에 안 읽은 채팅이 있다고
+ * 떠 있는데 화면은 비어 있는 것을 본다. 배지가 거짓말을 하는 것처럼 보인다.
+ */
+function initialRole(lists: Lists): ChatRole {
+  if (unreadRooms(lists.HOST) > 0) return "HOST";
+  if (unreadRooms(lists.PARTICIPANT) > 0) return "PARTICIPANT";
+  return lists.HOST.length === 0 && lists.PARTICIPANT.length > 0 ? "PARTICIPANT" : "HOST";
+}
+
 export function MatchChatList() {
-  const [role, setRole] = useState<ChatRole>("HOST");
-  const [items, setItems] = useState<ConversationListItem[] | null>(null);
+  const [role, setRole] = useState<ChatRole | null>(null);
+  const [lists, setLists] = useState<Lists | null>(null);
   const [error, setError] = useState("");
 
-  const load = useCallback(async (nextRole = role) => {
+  const load = useCallback(async () => {
     try {
       setError("");
-      const response = await fetch(`/api/v1/me/conversations?role=${nextRole}`, { cache: "no-store" });
-      const body: unknown = await response.json();
-      if (!response.ok) throw new Error(apiMessage(body, "채팅 목록을 불러오지 못했어요."));
-      setItems((body as { items: ConversationListItem[] }).items);
+      const [hosted, joined] = await Promise.all([fetchRole("HOST"), fetchRole("PARTICIPANT")]);
+      const next: Lists = { HOST: hosted, PARTICIPANT: joined };
+      setLists(next);
+      setRole((current) => current ?? initialRole(next));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "채팅 목록을 불러오지 못했어요.");
-      setItems([]);
+      setLists({ HOST: [], PARTICIPANT: [] });
+      setRole((current) => current ?? "HOST");
     }
-  }, [role]);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const selectRole = (nextRole: ChatRole) => {
-    setRole(nextRole);
-    setItems(null);
-    void load(nextRole);
-  };
+  const items = lists && role ? lists[role] : null;
+  const otherRole: ChatRole = role === "HOST" ? "PARTICIPANT" : "HOST";
+  const otherCount = lists ? lists[otherRole].length : 0;
 
   return <main className="flex min-h-svh flex-col bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]">
     <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col">
       <p className="text-sm font-semibold text-[var(--tm-action-primary)]">채팅</p>
       <h1 className="mt-1 text-2xl font-bold">매칭 채팅</h1>
       <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">매칭이 성사된 뒤에만 일정과 준비를 함께 조율할 수 있어요.</p>
-      <Tab onValueChange={(value) => selectRole(value as ChatRole)} value={role}>
+      <Tab onValueChange={(value) => setRole(value as ChatRole)} value={role ?? "HOST"}>
         <TabList aria-label="채팅 목록 구분" className="mt-6" resize="fill">
           <TabListItem value="HOST">내가 만든 매칭</TabListItem>
           <TabListItem value="PARTICIPANT">내가 신청한 매칭</TabListItem>
         </TabList>
       </Tab>
-      {items === null ? <div className="grid flex-1 place-items-center"><CourtRallyLoader label="채팅을 준비하고 있어요." /></div> : error ? <LoadError error={error} onRetry={() => void load()} /> : items.length === 0 ? <EmptyChatList role={role} /> : <div className="mt-6 space-y-3">{items.map((item) => <ConversationCard item={item} key={item.match.id} />)}</div>}
+      {items === null ? <div className="grid flex-1 place-items-center"><CourtRallyLoader label="채팅을 준비하고 있어요." /></div> : error ? <LoadError error={error} onRetry={() => void load()} /> : items.length === 0 ? <EmptyChatList onSwitch={() => setRole(otherRole)} otherCount={otherCount} role={role ?? "HOST"} /> : <div className="mt-6 space-y-3">{items.map((item) => <ConversationCard item={item} key={item.match.id} />)}</div>}
     </section>
     <BottomNavigation />
   </main>;
@@ -81,8 +105,10 @@ function ConversationCard({ item }: { item: ConversationListItem }) {
   </Link>;
 }
 
-function EmptyChatList({ role }: { role: ChatRole }) {
-  return <section className="mt-16 text-center"><div aria-hidden="true" className="mx-auto grid size-24 place-items-center rounded-full bg-[var(--tm-bg-subtle)] text-4xl">💬</div><h2 className="mt-6 text-xl font-bold">아직 채팅할 매칭이 없어요</h2><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{role === "HOST" ? "매칭을 만들고 참가자가 수락되면 여기에서 준비를 조율할 수 있어요." : "참가가 확정되면 여기에서 준비를 조율할 수 있어요."}</p><Button as={Link} className="mt-6" href="/" size="medium">매칭 찾아보기</Button></section>;
+function EmptyChatList({ onSwitch, otherCount, role }: { onSwitch: () => void; otherCount: number; role: ChatRole }) {
+  return <section className="mt-16 text-center"><div aria-hidden="true" className="mx-auto grid size-24 place-items-center rounded-full bg-[var(--tm-bg-subtle)] text-4xl">💬</div><h2 className="mt-6 text-xl font-bold">아직 채팅할 매칭이 없어요</h2><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{role === "HOST" ? "매칭을 만들고 참가자가 수락되면 여기에서 준비를 조율할 수 있어요." : "참가가 확정되면 여기에서 준비를 조율할 수 있어요."}</p>{otherCount > 0
+    ? <Button className="mt-6" onClick={onSwitch} size="medium" variant="secondary">{role === "HOST" ? `내가 신청한 매칭에 ${otherCount}개 있어요` : `내가 만든 매칭에 ${otherCount}개 있어요`}</Button>
+    : <Button as={Link} className="mt-6" href="/" size="medium">매칭 찾아보기</Button>}</section>;
 }
 
 function LoadError({ error, onRetry }: { error: string; onRetry: () => void }) {

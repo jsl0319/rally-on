@@ -146,7 +146,10 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
 
   if (screen === "loading") return <HomeLoading />;
   if (screen === "entry") return <EntrySelection returnTo={safeReturnTo} />;
-  if (screen === "onboarding") return <M2OnboardingFlow returnTo={safeReturnTo} />;
+  // 온보딩을 마치면 M2는 returnTo로 router.replace를 한다. 그런데 이 화면의 주소가
+  // 이미 "/"라 같은 주소로의 replace는 아무 일도 하지 않고, 완성 화면에 그대로 머문다.
+  // 돌아갈 곳이 홈일 때는 이 화면이 직접 상태를 홈으로 바꾼다.
+  if (screen === "onboarding") return <M2OnboardingFlow onCompleted={safeReturnTo === "/" ? () => { setScreen("loading"); void loadMe(); } : undefined} returnTo={safeReturnTo} />;
   if (screen === "error") return <HomeStateFrame><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">{error}</p><Button className="mt-6" onClick={() => void loadMe()}>다시 불러오기</Button></div></HomeStateFrame>;
 
   const hasFilter = gameType !== null || date !== null;

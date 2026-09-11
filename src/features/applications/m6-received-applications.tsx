@@ -121,6 +121,20 @@ function EmptyHostedMatches() {
 
 type HostedAction = "close" | "cancel" | "complete" | "reopen";
 
+/**
+ * 검토할 신청이 없을 때 무슨 상태인지 알려 준다.
+ *
+ * 모집을 마감해 놓고 "새로 검토할 신청을 기다리고 있어요"라고 말하면 앞뒤가 맞지 않는다.
+ * 마감한 사람은 자기가 닫았다는 것을, 취소한 사람은 끝났다는 것을 확인받아야 한다.
+ */
+function waitingMessage(match: HostedMatch) {
+  if (match.status === "COMPLETED") return "함께한 일정이 완료됐어요.";
+  if (match.status === "CANCELLED") return "취소한 매칭이에요.";
+  if (match.status === "EXPIRED") return "시작 시각이 지나 모집이 끝났어요.";
+  if (match.status === "CLOSED") return match.canReopen ? "모집을 마감했어요. 자리가 비어 있어 다시 모집할 수 있어요." : "모집을 마감해 새 신청은 받지 않아요.";
+  return "새로 검토할 신청을 기다리고 있어요.";
+}
+
 function HostedMatchCard({ match, onChanged }: { match: HostedMatch; onChanged: () => Promise<void> }) {
   const [action, setAction] = useState<HostedAction | null>(null);
   const [confirmAction, setConfirmAction] = useState<HostedAction | null>(null);
@@ -151,7 +165,7 @@ function HostedMatchCard({ match, onChanged }: { match: HostedMatch; onChanged: 
         <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">{hostCoordinationMessage(match.court.source)}</p>
         <HostedContactButton contact={match.contact} />
       </> : null}
-      {match.pendingApplicationCount > 0 ? <Button as={Link} className="mt-4" fullWidth href={`/activity/received/${match.id}`} size="large">신청자 보기</Button> : <p className="mt-4 text-sm text-[var(--tm-text-secondary)]">{match.status === "COMPLETED" ? "함께한 일정이 완료됐어요." : "새로 검토할 신청을 기다리고 있어요."}</p>}
+      {match.pendingApplicationCount > 0 ? <Button as={Link} className="mt-4" fullWidth href={`/activity/received/${match.id}`} size="large">신청자 보기</Button> : <p className="mt-4 text-sm text-[var(--tm-text-secondary)]">{waitingMessage(match)}</p>}
       {match.canComplete ? <Button className="mt-3" disabled={action !== null} fullWidth onClick={() => setConfirmAction("complete")} size="large">플레이 완료하기</Button> : null}
       {match.canClose ? <Button className="mt-3" disabled={action !== null} fullWidth onClick={() => setConfirmAction("close")} size="medium" variant="neutral">모집 마감</Button> : null}
       {match.canReopen ? <Button className="mt-3" disabled={action !== null} fullWidth onClick={() => setConfirmAction("reopen")} size="medium" variant="neutral">다시 모집하기</Button> : null}

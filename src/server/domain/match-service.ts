@@ -745,6 +745,13 @@ export async function getSentApplications(prisma: PrismaClient, viewer: Viewer) 
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     include: applicationInclude,
   });
+  // 신청한 순서로 늘어놓으면 이미 지난 매칭이 맨 위에 온다. 사람이 먼저 보고 싶은 것은
+  // 다가오는 약속이다. 다가오는 것은 가까운 순, 지난 것은 최근 순으로 뒤에 둔다.
+  const sortNow = new Date();
+  const upcoming = (application: (typeof applications)[number]) => (application.match.startsAt > sortNow ? 0 : 1);
+  applications.sort((left, right) => upcoming(left) - upcoming(right) || (upcoming(left) === 0
+    ? left.match.startsAt.getTime() - right.match.startsAt.getTime()
+    : right.match.startsAt.getTime() - left.match.startsAt.getTime()));
   const notices = applications.length === 0
     ? []
     : await prisma.matchSupplyNoticeRecipient.findMany({
