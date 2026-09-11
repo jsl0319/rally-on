@@ -392,6 +392,55 @@ export async function reportMatchChatMessage(prisma: PrismaClient, userId: strin
   }
 }
 
+/**
+ * 안 읽은 메시지가 있는 방의 수. 하단 메뉴 배지가 쓴다.
+ *
+ * 방마다 세면 방 수만큼 질의가 나가므로 한 번의 질의로 끝낸다. 읽음 기준은 채팅
+ * 목록의 미읽음 수와 같아야 한다. 둘이 어긋나면 배지는 있는데 열어 보면 없는 일이
+ * 생긴다. 그래서 `unreadCount`와 같은 (createdAt, id) 커서 비교를 쓴다.
+ */
+export async function countUnreadConversations(prisma: PrismaClient, userId: string) {
+  const rows = await prisma.$queryRaw<{ rooms: bigint }[]>(Prisma.sql`
+    SELECT COUNT(*) AS rooms
+    FROM match_conversation_members member
+    JOIN match_conversations conversation
+      ON conversation.id = member.conversation_id AND conversation.status <> 'ARCHIVED'
+    LEFT JOIN match_chat_messages last_read ON last_read.id = member.last_read_message_id
+    WHERE member.user_id = ${userId}::uuid
+      AND EXISTS (
+        SELECT 1 FROM match_chat_messages message
+        WHERE message.conversation_id = conversation.id
+          AND message.visibility = 'VISIBLE'
+          AND (
+            last_read.id IS NULL
+            OR (message.created_at, message.id) > (last_read.created_at, last_read.id)
+          )
+      )
+  `);
+  return Number(rows[0]?.rooms ?? 0);
+}
+
+/** 여러 방의 미읽음 수를 한 번의 질의로 센다. 기준은 `unreadCount`와 같다. */
+async function countUnreadByConversation(prisma: PrismaClient, userId: string, conversationIds: string[]) {
+  if (conversationIds.length === 0) return new Map<string, number>();
+  const rows = await prisma.$queryRaw<{ conversationId: string; unread: bigint }[]>(Prisma.sql`
+    SELECT member.conversation_id AS "conversationId", COUNT(message.id) AS unread
+    FROM match_conversation_members member
+    LEFT JOIN match_chat_messages last_read ON last_read.id = member.last_read_message_id
+    LEFT JOIN match_chat_messages message
+      ON message.conversation_id = member.conversation_id
+     AND message.visibility = 'VISIBLE'
+     AND (
+       last_read.id IS NULL
+       OR (message.created_at, message.id) > (last_read.created_at, last_read.id)
+     )
+    WHERE member.user_id = ${userId}::uuid
+      AND member.conversation_id IN (${Prisma.join(conversationIds.map((id) => Prisma.sql`${id}::uuid`))})
+    GROUP BY member.conversation_id
+  `);
+  return new Map(rows.map((row) => [row.conversationId, Number(row.unread)]));
+}
+
 export async function getMyMatchConversations(prisma: PrismaClient, userId: string, role: MatchConversationMemberRole) {
   const memberships = await prisma.matchConversationMember.findMany({
     where: { userId, role, conversation: { status: { not: "ARCHIVED" } } },
@@ -405,9 +454,12 @@ export async function getMyMatchConversations(prisma: PrismaClient, userId: stri
     },
     orderBy: { conversation: { updatedAt: "desc" } },
   });
+  // 방마다 미읽음을 세면 방 수만큼 질의가 나간다. 한 번에 세서 붙인다.
+  const unreadByConversation = await countUnreadByConversation(prisma, userId, memberships.map((membership) => membership.conversationId));
+
   return Promise.all(memberships.map(async (membership) => {
     const lastMessage = membership.conversation.messages[0] ?? null;
-    const unreadMessageCount = await unreadCount(prisma, membership.conversationId, membership.lastReadMessageId);
+    const unreadMessageCount = unreadByConversation.get(membership.conversationId) ?? 0;
     return {
       match: {
         id: membership.conversation.match.id,

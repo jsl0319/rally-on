@@ -301,6 +301,16 @@ export async function getOnboardedViewer(prisma: PrismaClient, user: { id: strin
   return { id: user.id, profile } satisfies Viewer;
 }
 
+/**
+ * 목록 질의가 한 번에 읽는 최대 후보 수.
+ *
+ * `filterDiscoverable`이 메모리에서 실제로 걸러내는 조건은 "자리가 남았는지" 하나뿐이고,
+ * 정원이 차면 매칭은 이미 `CLOSED`가 되어 질의 단계에서 빠진다. 그래서 후보를 이 수로
+ * 끊어도 한 페이지를 못 채울 일은 사실상 없다. 상한이 없으면 공개 매칭이 늘어나는 만큼
+ * 목록 요청 하나가 통째로 무거워진다.
+ */
+const DISCOVERY_CANDIDATE_LIMIT = 200;
+
 function filterDiscoverable(matches: MatchWithRelations[], now: Date) {
   return matches.filter((match) => match.courtSource === "EXTERNAL_RESERVED" && isDiscoverableMatch({
     status: match.status,
@@ -315,7 +325,11 @@ export async function getRecommendedMatches(prisma: PrismaClient, viewer: Viewer
   const now = new Date();
   const matches = await prisma.match.findMany({
     where: { courtSource: "EXTERNAL_RESERVED", status: "OPEN", startsAt: { gt: now }, NOT: { hostUserId: viewer.id } },
+    // 정렬이 없으면 어떤 200개가 올지 DB가 정한다. 가까운 일정부터 후보로 삼는 게
+    // 추천의 목적에도 맞고 결과도 매번 같아진다.
+    orderBy: [{ startsAt: "asc" }, { id: "asc" }],
     include: matchInclude,
+    take: DISCOVERY_CANDIDATE_LIMIT,
   });
 
   return filterDiscoverable(matches, now)
@@ -372,6 +386,9 @@ export async function getMatches(
       where: { ...baseWhere, ...cursorCondition },
       orderBy: [{ startsAt: "asc" }, { id: "asc" }],
       include: matchInclude,
+      // 커서로 페이지를 넘기는 정렬인데 상한이 없어서, 첫 페이지를 그리려고 공개된
+      // 매칭 전부를 읽고 있었다. 커서가 시작점을 잡아 주므로 창만 끊으면 된다.
+      take: DISCOVERY_CANDIDATE_LIMIT,
     });
     const items = filterDiscoverable(matches, new Date()).slice(0, input.limit + 1);
     const hasNext = items.length > input.limit;
