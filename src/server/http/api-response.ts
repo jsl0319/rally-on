@@ -11,8 +11,28 @@ export function apiError(
   code: string,
   message: string,
   fieldErrors: Array<{ field: string; message: string }> = [],
+  requestId?: string,
 ) {
-  return NextResponse.json({ error: { code, message, fieldErrors } }, { status });
+  return NextResponse.json(
+    { error: { code, message, fieldErrors, ...(requestId ? { requestId } : {}) } },
+    { status, ...(requestId ? { headers: { "X-Request-Id": requestId } } : {}) },
+  );
+}
+
+/**
+ * 예상 못 한 오류에 붙이는 추적 번호.
+ *
+ * 지금까지 서버 로그에는 오류 이름 한 줄만 남아서, 사용자가 "안 돼요"라고 해도
+ * 무엇이 왜 실패했는지 되짚을 방법이 없었다. 응답과 로그에 같은 번호를 남기면
+ * 사용자가 본 화면과 서버 기록을 이어 붙일 수 있다.
+ */
+function newRequestId() {
+  return globalThis.crypto?.randomUUID?.() ?? `req_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** 스택은 서버 로그에만 남긴다. 응답에는 추적 번호만 나간다. */
+function topStackFrames(error: Error, limit = 6) {
+  return error.stack?.split("\n").slice(1, limit + 1).map((frame) => frame.trim()) ?? [];
 }
 
 export function handleApiError(error: unknown) {
@@ -51,17 +71,19 @@ export function handleApiError(error: unknown) {
     );
   }
 
+  const requestId = newRequestId();
+
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    console.error({ event: "api.database_error", code: error.code, meta: error.meta });
+    console.error({ event: "api.database_error", requestId, code: error.code, meta: error.meta, stack: topStackFrames(error) });
 
     if (error.code === "P2004") {
-      return apiError(422, "DATABASE_CONSTRAINT_FAILED", "입력한 내용을 다시 확인해 주세요.");
+      return apiError(422, "DATABASE_CONSTRAINT_FAILED", "입력한 내용을 다시 확인해 주세요.", [], requestId);
     }
   } else if (error instanceof Error) {
-    console.error({ event: "api.unexpected_error", name: error.name });
+    console.error({ event: "api.unexpected_error", requestId, name: error.name, message: error.message, stack: topStackFrames(error) });
   } else {
-    console.error({ event: "api.unexpected_error", name: "UnknownError" });
+    console.error({ event: "api.unexpected_error", requestId, name: "UnknownError", value: String(error) });
   }
 
-  return apiError(500, "INTERNAL_ERROR", "요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.");
+  return apiError(500, "INTERNAL_ERROR", "요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.", [], requestId);
 }
