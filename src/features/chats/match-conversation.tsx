@@ -261,10 +261,15 @@ export function MatchConversation({ params }: { params: Promise<{ matchId: strin
                 <svg aria-hidden="true" className="size-6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24"><rect height="14" rx="2" width="18" x="3" y="5" /><circle cx="8.5" cy="10" r="1.25" /><path d="m5 17 4.5-4.5L13 16l2.5-2.5L19 17" /></svg>
               </button>
               <label className="sr-only" htmlFor="match-chat-message">메시지</label>
-              <textarea className="min-h-12 max-h-28 flex-1 resize-none rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 py-3 text-sm leading-5 outline-none placeholder:text-[var(--tm-text-placeholder)] focus:border-[var(--tm-action-primary)] focus:ring-2 focus:ring-[var(--tm-action-primary)] disabled:bg-[var(--tm-bg-subtle-muted)]" disabled={sending} id="match-chat-message" maxLength={500} onChange={(event) => setDraft(event.target.value)} placeholder="일정과 준비물을 편하게 이야기해요" value={draft} />
+              <textarea className="min-h-12 max-h-28 flex-1 resize-none rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 py-3 text-sm leading-5 outline-none placeholder:text-[var(--tm-text-placeholder)] focus:border-[var(--tm-action-primary)] focus:ring-2 focus:ring-[var(--tm-action-primary)] disabled:bg-[var(--tm-bg-subtle-muted)]" disabled={sending} id="match-chat-message" maxLength={500} onChange={(event) => setDraft(event.target.value)} placeholder="일정과 준비물을 이야기해요" value={draft} />
               <Button disabled={(!draft.trim() && selectedImages.length === 0) || sending} loading={sending} onClick={() => void send()} size="medium">보내기</Button>
             </div>
-            <div className="mt-1 flex items-start justify-between gap-3 text-xs text-[var(--tm-text-secondary)]"><p>사진은 3장, 각 5 MiB까지 · 얼굴·연락처·예약번호·위치 정보는 올리지 마세요.</p><p className="shrink-0">{draft.length}/500</p></div>
+            {/* 사진 안내와 글자 수는 필요한 순간에만 나온다. 늘 떠 있으면 매번 읽히는 경고가 되고
+                좁은 화면에서 입력창만큼의 자리를 먹는다. */}
+            {selectedImages.length > 0 || draft.length >= 400 ? <div className="mt-1 flex items-start justify-between gap-3 text-xs text-[var(--tm-text-secondary)]">
+              {selectedImages.length > 0 ? <p>사진은 {maxChatImages}장, 각 5 MiB까지 · 얼굴·연락처·예약번호·위치 정보는 올리지 마세요.</p> : <span />}
+              {draft.length >= 400 ? <p className="shrink-0">{draft.length}/500</p> : null}
+            </div> : null}
           </div>
         </footer>
       ) : null}
