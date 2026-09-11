@@ -160,9 +160,9 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   await expect(applicantPage.getByRole("heading", { name: "E2E 테니스장" })).toBeVisible();
   await expect(applicantPage.getByRole("heading", { name: "정산 정보" })).toHaveCount(0);
   await applicantPage.getByRole("button", { name: "같이 치기" }).click();
-  const applyDialog = applicantPage.getByRole("dialog", { name: "참가 신청" });
+  const applyDialog = applicantPage.getByRole("dialog", { name: "같이 치기" });
   await applyDialog.getByLabel(/모집자에게 보낼 자기소개/).fill("천천히 랠리하며 함께 연습하고 싶어요.");
-  await applyDialog.getByRole("button", { name: "참가 신청", exact: true }).click();
+  await applyDialog.getByRole("button", { name: "신청 보내기", exact: true }).click();
   await expect(applicantPage.getByRole("heading", { name: "신청을 보냈어요" })).toBeVisible();
 
   await hostPage.goto(`/activity/received/${matchId}`);
@@ -217,9 +217,9 @@ test("공개된 코트 매칭은 신청·입금 알림·운영자 확정·채팅
   await expect(applicantPage.getByRole("heading", { name: "E2E 준비된 테니스장" })).toBeVisible();
   await expect(applicantPage.getByText("선착순 자동 승인")).toBeVisible();
 
-  await applicantPage.getByRole("button", { name: "참가 신청하기" }).click();
-  const applyDialog = applicantPage.getByRole("dialog", { name: "참가 신청" });
-  await applyDialog.getByRole("button", { name: "참가 신청" }).click();
+  await applicantPage.getByRole("button", { name: "같이 치기" }).click();
+  const applyDialog = applicantPage.getByRole("dialog", { name: "같이 치기" });
+  await applyDialog.getByRole("button", { name: "신청 보내기" }).click();
 
   // 자동 승인이므로 바로 입금 안내가 뜬다. 식별코드는 서버가 발급한다.
   await expect(applicantPage.getByText("입금할 금액")).toBeVisible();
@@ -270,8 +270,8 @@ test("확정한 참가자가 스스로 취소하면 환불 금액과 함께 환�
   const applicantPage = await applicantContext.newPage();
 
   await applicantPage.goto(`/partner-sessions/${fixture.partnerSlotId}`);
-  await applicantPage.getByRole("button", { name: "참가 신청하기" }).click();
-  await applicantPage.getByRole("dialog", { name: "참가 신청" }).getByRole("button", { name: "참가 신청" }).click();
+  await applicantPage.getByRole("button", { name: "같이 치기" }).click();
+  await applicantPage.getByRole("dialog", { name: "같이 치기" }).getByRole("button", { name: "신청 보내기" }).click();
   await applicantPage.getByLabel("실제로 보낸 입금자명").fill("E2E입금자");
   await applicantPage.getByRole("button", { name: "입금했어요" }).click();
   await expect(applicantPage.getByText("입금 알림을 보냈어요", { exact: false })).toBeVisible();
@@ -421,8 +421,8 @@ test("미확정 입금 문의를 운영자와 대조하고 전액 반환한 뒤 
   }));
   const [member, operator, reviewer] = contexts.map((c) => c.page);
   await member.goto(`/partner-sessions/${fixture.partnerSlotId}`);
-  await member.getByRole("button", { name: "참가 신청하기" }).click();
-  await member.getByRole("dialog", { name: "참가 신청" }).getByRole("button", { name: "참가 신청" }).click();
+  await member.getByRole("button", { name: "같이 치기" }).click();
+  await member.getByRole("dialog", { name: "같이 치기" }).getByRole("button", { name: "신청 보내기" }).click();
   await member.getByRole("button", { name: "참가 취소", exact: true }).click();
   await member.getByRole("button", { name: "참가 취소하기" }).click();
   await expect(member.getByText("신청 철회", { exact: true }).first()).toBeVisible();

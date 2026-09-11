@@ -7,6 +7,7 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { BackButton } from "@/components/navigation/back-button";
 import { Button } from "@/components/ui/button";
+import { matchScheduleText } from "@/matches/schedule";
 
 type Conversation = {
   match: { id: string; title: string; startsAt: string; endsAt: string; status: string };
@@ -54,9 +55,7 @@ function apiMessage(body: unknown, fallback: string) {
 }
 
 function schedule(startsAt: string, endsAt: string) {
-  const start = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Seoul" }).format(new Date(startsAt));
-  const end = new Intl.DateTimeFormat("ko-KR", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Seoul" }).format(new Date(endsAt));
-  return `${start}–${end}`;
+  return matchScheduleText(startsAt, endsAt);
 }
 
 function messageTime(createdAt: string) {

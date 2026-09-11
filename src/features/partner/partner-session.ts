@@ -1,4 +1,5 @@
 import type { CourtImageView } from "@/features/matches/court-media";
+import { matchScheduleText } from "@/matches/schedule";
 
 export type PublicCourtSlot = {
   id: string;
@@ -38,21 +39,7 @@ export type PublicCourtSlot = {
 };
 
 export function formatPartnerSchedule(startsAt: string, endsAt: string) {
-  const date = new Date(startsAt);
-  const end = new Date(endsAt);
-  const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-    timeZone: "Asia/Seoul",
-  });
-  const timeFormatter = new Intl.DateTimeFormat("ko-KR", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "Asia/Seoul",
-  });
-  return `${dateFormatter.format(date)} · ${timeFormatter.format(date)}–${timeFormatter.format(end)}`;
+  return matchScheduleText(startsAt, endsAt);
 }
 
 export function formatDuration(minutes: number) {

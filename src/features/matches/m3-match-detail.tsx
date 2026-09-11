@@ -176,7 +176,7 @@ function ApplicationSheet({ detail, message, applyError, alreadyApplied, isSubmi
   return <Modal open onOpenChange={(next) => { if (!next && !isSubmitting) onClose(); }}>
     <ModalContainer variant="bottom" size="large">
       <ModalNavigation trailingContent={<ModalClose aria-label="신청 창 닫기" disabled={isSubmitting} />}>
-        참가 신청
+        같이 치기
       </ModalNavigation>
       <ModalContent>
         <ModalContentItem>
@@ -199,7 +199,7 @@ function ApplicationSheet({ detail, message, applyError, alreadyApplied, isSubmi
       </ModalContent>
       <ActionArea variant="neutral">
         <ActionAreaButton buttonColor="assistive" disabled={isSubmitting} onClick={onClose} variant="alternative">취소</ActionAreaButton>
-        <ActionAreaButton disabled={isSubmitting} loading={isSubmitting} onClick={onSubmit} variant="main">참가 신청</ActionAreaButton>
+        <ActionAreaButton disabled={isSubmitting} loading={isSubmitting} onClick={onSubmit} variant="main">신청 보내기</ActionAreaButton>
       </ActionArea>
     </ModalContainer>
   </Modal>;

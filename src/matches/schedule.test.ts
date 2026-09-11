@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMatchDate, formatMatchTime, isHalfHourTime } from "./schedule";
+import { formatMatchDate, formatMatchTime, isHalfHourTime, matchScheduleParts, matchScheduleText } from "./schedule";
 
 describe("match schedule display", () => {
   it("shows the Korean weekday and keeps midnight/noon correct", () => {
@@ -29,5 +29,17 @@ describe("future match times in Korea", () => {
     expect(firstAvailableMatchTime("2026-09-08", "13:00", undefined, now)).toBe("13:30");
     expect(firstAvailableMatchTime("2026-09-08", undefined, "12:30", now)).toBeNull();
     expect(firstAvailableMatchTime("2026-09-08", undefined, undefined, Date.parse("2026-09-08T23:30:00+09:00"))).toBeNull();
+  });
+});
+
+describe("한 가지 일정 표기", () => {
+  const startsAt = "2026-09-16T10:26:00.000Z"; // 한국 시간 오후 7시 26분
+  it("날짜와 시간을 한국식으로 같은 모양으로 만든다", () => {
+    expect(matchScheduleParts(startsAt)).toEqual({ day: "9월 16일 (수)", time: "오후 7:26" });
+    expect(matchScheduleText(startsAt, "2026-09-16T12:26:00.000Z")).toBe("9월 16일 (수) 오후 7:26–9:26");
+  });
+  it("오전과 오후를 넘나들면 뒤쪽에도 붙인다", () => {
+    // 한국 시간 오전 11시 30분 ~ 오후 1시 30분
+    expect(matchScheduleText("2026-09-16T02:30:00.000Z", "2026-09-16T04:30:00.000Z")).toBe("9월 16일 (수) 오전 11:30–오후 1:30");
   });
 });

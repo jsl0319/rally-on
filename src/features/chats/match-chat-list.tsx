@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { Button } from "@/components/ui/button";
+import { matchScheduleText } from "@/matches/schedule";
 
 type ChatRole = "HOST" | "PARTICIPANT";
 
@@ -22,7 +23,7 @@ function apiMessage(body: unknown, fallback: string) {
 }
 
 function schedule(startsAt: string) {
-  return new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Seoul" }).format(new Date(startsAt));
+  return matchScheduleText(startsAt);
 }
 
 function time(createdAt: string) {

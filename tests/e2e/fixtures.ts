@@ -45,8 +45,27 @@ async function createOnboardedUser({ id, nickname, gender }: { id: string; nickn
   });
 }
 
+/**
+ * 화면을 닫아도 그 화면이 마지막으로 보낸 요청은 서버에서 아직 끝나지 않았을 수 있다.
+ * 하단 배지와 채팅은 주기적으로 다시 불러오므로 그런 요청이 늘 떠 있다. 그 트랜잭션이
+ * users를 참조하는 동안 TRUNCATE가 들어가면 교착이 난다(40P01). 실제로 테스트 하나가
+ * 그렇게 깨졌다. 잠깐 기다렸다 다시 한다.
+ */
+async function truncateUsers(attempts = 5) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await prisma.$executeRawUnsafe('TRUNCATE TABLE "users", "regions" RESTART IDENTITY CASCADE');
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt >= attempts || !/deadlock|lock timeout/i.test(message)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+    }
+  }
+}
+
 export async function resetE2eDatabase(): Promise<E2eFixture> {
-  await prisma.$executeRawUnsafe('TRUNCATE TABLE "users", "regions" RESTART IDENTITY CASCADE');
+  await truncateUsers();
 
   await prisma.region.create({ data: { code: "E2E-SEOUL", name: "E2E 서울", shortName: "E2E서울", type: "CITY", active: true } });
   await prisma.region.create({ data: { code: "E2E-SEOUL-001", name: "E2E 마포구", parentCode: "E2E-SEOUL", type: "DISTRICT", active: true } });

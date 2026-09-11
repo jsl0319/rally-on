@@ -9,6 +9,7 @@ import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { BackButton } from "@/components/navigation/back-button";
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+import { matchScheduleText } from "@/matches/schedule";
 
 type SentApplication = {
   id: string;
@@ -32,7 +33,7 @@ type SentApplication = {
 };
 
 function schedule(startsAt: string) {
-  return new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Seoul" }).format(new Date(startsAt));
+  return matchScheduleText(startsAt);
 }
 
 function appliedDate(createdAt: string) {

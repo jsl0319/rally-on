@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Prisma } from "@/generated/prisma/client";
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), findUnique: vi.fn(), rateLimit: vi.fn() }));
 vi.mock("@/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/server/db/prisma", () => ({ getPrisma: () => ({ user: { findUnique: mocks.findUnique } }) }));
@@ -19,6 +20,11 @@ describe("비활성 계정의 제한 인증", () => {
   });
   it("현재 DB에 없는 계정은 이전 세션만으로 접근할 수 없다", async () => {
     mocks.findUnique.mockResolvedValue(null);
+    await expect(getRateLimitedTransactionUser()).rejects.toBeInstanceOf(AuthenticationError);
+  });
+  it("요청 도중 계정이 사라져도 서버 오류가 아니라 로그인 안내로 답한다", async () => {
+    mocks.findUnique.mockResolvedValue({ id: "owner", status: "ACTIVE" });
+    mocks.rateLimit.mockRejectedValue(new Prisma.PrismaClientKnownRequestError("Foreign key constraint violated", { code: "P2003", clientVersion: "7" }));
     await expect(getRateLimitedTransactionUser()).rejects.toBeInstanceOf(AuthenticationError);
   });
 });

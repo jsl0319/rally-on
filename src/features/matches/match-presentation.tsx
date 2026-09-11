@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+
+import { matchScheduleParts } from "@/matches/schedule";
 import type { CourtImageView } from "./court-media";
 
 const courtSamples = ["aerial", "blue-stadium", "clay", "indoor", "blue-outdoor"] as const;
@@ -12,9 +14,7 @@ export function displayCourtImage(court: { source?: string; name: string | null;
 }
 
 export function matchSchedule(startsAt: string, endsAt: string) {
-  const day = new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", weekday: "short", timeZone: "Asia/Seoul" });
-  const time = new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Seoul" });
-  return { day: day.format(new Date(startsAt)), time: `${time.format(new Date(startsAt))}–${time.format(new Date(endsAt))}` };
+  return matchScheduleParts(startsAt, endsAt);
 }
 
 export function MatchBadge({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "blue" | "green" | "violet" | "amber" | "rose" }) {
