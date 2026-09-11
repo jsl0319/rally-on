@@ -5,7 +5,7 @@ import type { PlayPurpose, PrismaClient } from "@/generated/prisma/client";
 
 import { getProfile, type ProfileWithRelations } from "@/server/domain/profile-service";
 import { DomainError } from "@/server/domain/profile-service";
-import { addAcceptedMemberToConversation, makeConversationReadOnly } from "@/server/domain/match-chat-service";
+import { addAcceptedMemberToConversation, makeConversationReadOnly, removeParticipantFromConversation } from "@/server/domain/match-chat-service";
 import { recordApplicationNotification } from "@/server/domain/notification-service";
 
 import { courtMoneySummary } from "./court-match-money";
@@ -892,20 +892,50 @@ export async function rejectApplication(prisma: PrismaClient, viewer: Viewer, ap
   });
 }
 
+/**
+ * 검토 중인 신청을 철회하거나, 수락된 참가를 시작 전에 취소한다.
+ *
+ * 수락까지 받고 못 가게 된 사람이 앱에서 할 수 있는 일이 없었다. 자리는 시작
+ * 시각까지 묶여 있고 모집자는 올 사람이 몇인지 알 수 없어, 결국 노쇼로 끝난다.
+ *
+ * 취소하면 자리가 곧바로 돌아가고, 모집자는 채팅방의 안내 메시지로 알게 된다.
+ * 정원이 차서 마감된 매칭이면 모집자가 `다시 모집하기`로 자리를 다시 열 수 있다.
+ * 자동으로 열지 않는 것은 모집자가 일부러 마감한 경우와 구분할 수 없기 때문이다.
+ */
 export async function withdrawApplication(prisma: PrismaClient, viewer: Viewer, applicationId: string) {
   return prisma.$transaction(async (transaction) => {
     const application = await transaction.matchApplication.findUnique({
       where: { id: applicationId },
-      select: { id: true, applicantUserId: true, matchId: true },
+      select: { id: true, applicantUserId: true, matchId: true, status: true, match: { select: { courtSource: true } } },
     });
     if (!application || application.applicantUserId !== viewer.id) throw new DomainError("APPLICATION_NOT_FOUND", 404, "신청 내역을 찾을 수 없어요.");
+    // 코트 매칭은 입금·환불 단계가 있어 전용 취소 경로를 쓴다.
+    assertNotCourtMatch(application.match.courtSource, "코트 매칭은 코트 매칭 화면에서 취소해 주세요.");
+    if (application.status !== "PENDING" && application.status !== "ACCEPTED") {
+      throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "검토 중이거나 수락된 신청만 취소할 수 있어요.");
+    }
     await reconcileStartedMatch(transaction, application.matchId);
     const withdrawnAt = new Date();
+    const wasAccepted = application.status === "ACCEPTED";
+
+    if (wasAccepted) {
+      const match = await transaction.match.findUnique({ where: { id: application.matchId }, select: { status: true, startsAt: true } });
+      if (!match) throw new DomainError("MATCH_NOT_FOUND", 404, "매칭을 찾을 수 없어요.");
+      if (match.status === "CANCELLED") throw new DomainError("MATCH_STATE_CONFLICT", 409, "이미 취소된 매칭이에요.");
+      if (match.startsAt <= withdrawnAt) throw new DomainError("MATCH_STARTED", 409, "이미 시작한 매칭은 취소할 수 없어요.");
+    }
+
     const updated = await transaction.matchApplication.updateMany({
-      where: { id: application.id, status: "PENDING" },
+      where: { id: application.id, status: wasAccepted ? "ACCEPTED" : "PENDING" },
       data: { status: "WITHDRAWN", withdrawnAt },
     });
-    if (updated.count !== 1) throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "검토 중인 신청만 철회할 수 있어요.");
+    if (updated.count !== 1) throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "검토 중이거나 수락된 신청만 취소할 수 있어요.");
+
+    // 가지 않는 매칭의 준비 대화를 계속 보게 둘 이유가 없다. 나가면서 남는 안내
+    // 메시지가 모집자에게는 자리가 비었다는 신호가 된다.
+    if (wasAccepted) {
+      await removeParticipantFromConversation(transaction, { matchId: application.matchId, userId: viewer.id, now: withdrawnAt });
+    }
     const result = await transaction.matchApplication.findUnique({ where: { id: application.id }, include: applicationInclude });
     if (!result) throw new DomainError("APPLICATION_NOT_FOUND", 404, "신청 내역을 찾을 수 없어요.");
     return toApplicationView(result);
@@ -976,6 +1006,40 @@ export async function closeMatch(prisma: PrismaClient, viewer: Viewer, matchId: 
   });
 }
 
+/**
+ * 마감된 매칭의 자리를 다시 연다.
+ *
+ * 참가자가 취소해 자리가 비어도 마감된 채로 두면 아무도 그 자리를 쓸 수 없다.
+ * 자동으로 열지 않는 이유는 정원이 차서 닫힌 것과 모집자가 일부러 닫은 것을
+ * 데이터로 구분할 수 없기 때문이다. 판단은 모집자에게 맡긴다.
+ *
+ * 마감하며 취소된 대기 신청은 되살리지 않는다. 이미 결과를 본 사람들이다.
+ */
+export async function reopenMatch(prisma: PrismaClient, viewer: Viewer, matchId: string, input: MatchLifecycleInput) {
+  return prisma.$transaction(async (transaction) => {
+    await reconcileStartedMatch(transaction, matchId);
+    const match = await transaction.match.findUnique({
+      where: { id: matchId },
+      select: { id: true, hostUserId: true, status: true, startsAt: true, recruitCount: true, version: true, courtSource: true },
+    });
+    if (!match || match.hostUserId !== viewer.id) throw new DomainError("MATCH_HOST_REQUIRED", 403, "이 매칭의 모집자만 다시 모집할 수 있어요.");
+    assertNotCourtMatch(match.courtSource, "코트 매칭은 시간 관리 화면에서 다뤄요.");
+    if (match.version !== input.expectedVersion) throw new DomainError("VERSION_CONFLICT", 409, "다른 변경사항이 있어 매칭 정보를 다시 불러와 주세요.");
+    if (match.status !== "CLOSED" || match.startsAt <= new Date()) {
+      throw new DomainError("MATCH_NOT_REOPENABLE", 409, "시작 전 모집 마감 매칭만 다시 모집할 수 있어요.");
+    }
+    const acceptedCount = await transaction.matchApplication.count({ where: { matchId: match.id, status: "ACCEPTED" } });
+    if (acceptedCount >= match.recruitCount) throw new DomainError("NO_REMAINING_SPOTS", 409, "남은 자리가 없어 다시 모집할 수 없어요.");
+
+    const updated = await transaction.match.updateMany({
+      where: { id: match.id, status: "CLOSED", version: input.expectedVersion },
+      data: { status: "OPEN", closedAt: null, version: { increment: 1 } },
+    });
+    if (updated.count !== 1) throw new DomainError("VERSION_CONFLICT", 409, "다른 변경사항이 있어 매칭 정보를 다시 불러와 주세요.");
+    return { id: match.id, status: "OPEN" as const, remainingSpots: match.recruitCount - acceptedCount, version: input.expectedVersion + 1 };
+  });
+}
+
 export async function completeMatch(prisma: PrismaClient, viewer: Viewer, matchId: string, input: MatchLifecycleInput) {
   return prisma.$transaction(async (transaction) => {
     await reconcileStartedMatch(transaction, matchId);
@@ -1014,18 +1078,20 @@ export async function getHostedMatches(prisma: PrismaClient, viewer: Viewer) {
         canClose: match.status === "OPEN" && isFuture && acceptedCount > 0,
         canCancel: (match.status === "OPEN" || match.status === "CLOSED") && isFuture,
         canComplete: match.status === "CLOSED" && match.endsAt <= now,
+        canReopen: match.status === "CLOSED" && isFuture && acceptedCount < match.recruitCount,
       };
     })
     .sort((left, right) => {
       const group = (item: { match: MatchWithRelations; pendingApplicationCount: number }) => item.match.startsAt <= now ? 2 : item.pendingApplicationCount > 0 ? 0 : 1;
       return group(left) - group(right) || left.match.startsAt.getTime() - right.match.startsAt.getTime();
     })
-    .map(({ match, card, pendingApplicationCount, canClose, canCancel, canComplete }) => ({
+    .map(({ match, card, pendingApplicationCount, canClose, canCancel, canComplete, canReopen }) => ({
       ...card,
       contact: { conversationStatus: match.conversation?.status ?? "NOT_CREATED", href: match.conversation ? `/chats/${match.id}` : null, label: "채팅방 열기" },
       pendingApplicationCount,
       canClose,
       canCancel,
       canComplete,
+      canReopen,
     }));
 }

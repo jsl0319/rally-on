@@ -26,6 +26,7 @@ type HostedMatch = {
   canClose: boolean;
   canCancel: boolean;
   canComplete: boolean;
+  canReopen: boolean;
   contact: { href: string | null; label: string; conversationStatus: "OPEN" | "READ_ONLY" | "ARCHIVED" | "NOT_CREATED" };
 };
 
@@ -118,11 +119,13 @@ function EmptyHostedMatches() {
   return <section className="mt-10 rounded-3xl border border-dashed border-[var(--tm-border-strong)] bg-white px-5 py-10 text-center"><p className="text-2xl">🎾</p><h2 className="mt-4 font-bold">아직 만든 매칭이 없어요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">코트 예약 전에도 일정과 지역을 정해 메이트를 모집할 수 있어요.</p><Button as={Link} className="mt-5" href="/matches/new" size="medium">매칭 만들기</Button></section>;
 }
 
+type HostedAction = "close" | "cancel" | "complete" | "reopen";
+
 function HostedMatchCard({ match, onChanged }: { match: HostedMatch; onChanged: () => Promise<void> }) {
-  const [action, setAction] = useState<"close" | "cancel" | "complete" | null>(null);
-  const [confirmAction, setConfirmAction] = useState<"close" | "cancel" | "complete" | null>(null);
+  const [action, setAction] = useState<HostedAction | null>(null);
+  const [confirmAction, setConfirmAction] = useState<HostedAction | null>(null);
   const [error, setError] = useState("");
-  const runAction = async (nextAction: "close" | "cancel" | "complete") => {
+  const runAction = async (nextAction: HostedAction) => {
     setAction(nextAction); setError("");
     try {
       const response = await fetch(`/api/v1/matches/${encodeURIComponent(match.id)}/${nextAction}`, {
@@ -151,6 +154,7 @@ function HostedMatchCard({ match, onChanged }: { match: HostedMatch; onChanged: 
       {match.pendingApplicationCount > 0 ? <Button as={Link} className="mt-4" fullWidth href={`/activity/received/${match.id}`} size="large">신청자 보기</Button> : <p className="mt-4 text-sm text-[var(--tm-text-secondary)]">{match.status === "COMPLETED" ? "함께한 일정이 완료됐어요." : "새로 검토할 신청을 기다리고 있어요."}</p>}
       {match.canComplete ? <Button className="mt-3" disabled={action !== null} fullWidth onClick={() => setConfirmAction("complete")} size="large">플레이 완료하기</Button> : null}
       {match.canClose ? <Button className="mt-3" disabled={action !== null} fullWidth onClick={() => setConfirmAction("close")} size="medium" variant="neutral">모집 마감</Button> : null}
+      {match.canReopen ? <Button className="mt-3" disabled={action !== null} fullWidth onClick={() => setConfirmAction("reopen")} size="medium" variant="neutral">다시 모집하기</Button> : null}
       {match.canCancel ? <button className="mt-3 min-h-11 w-full rounded-2xl px-4 text-sm font-semibold text-[var(--tm-text-secondary)] disabled:opacity-50" disabled={action !== null} onClick={() => setConfirmAction("cancel")} type="button">매칭 취소</button> : null}
       {error ? <p className="mt-3 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]">{error}</p> : null}
     </section>
@@ -162,8 +166,14 @@ function HostedContactButton({ contact }: { contact: HostedMatch["contact"] }) {
   return contact.href ? <Button as={Link} className="mt-3" fullWidth href={contact.href} size="large" variant="secondary">{contact.label}</Button> : <p className="mt-3 text-center text-sm text-[var(--tm-text-secondary)]">채팅방을 준비하고 있어요.</p>;
 }
 
-function LifecycleConfirm({ action, busy, onCancel, onConfirm }: { action: "close" | "cancel" | "complete"; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
-  const copy = action === "complete" ? { title: "플레이를 완료할까요?", body: "완료하면 수락된 참가자에게도 ‘완료’로 표시돼요.", confirm: "네, 완료할게요" } : action === "close" ? { title: "모집을 마감할까요?", body: "남은 대기 신청은 ‘모집이 마감됐어요’로 표시돼요.", confirm: "네, 마감할게요" } : { title: "매칭을 취소할까요?", body: "수락된 참가자와 대기 신청자에게 취소로 표시돼요.", confirm: "네, 취소할게요" };
+function LifecycleConfirm({ action, busy, onCancel, onConfirm }: { action: HostedAction; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
+  const copy = action === "complete"
+    ? { title: "플레이를 완료할까요?", body: "완료하면 수락된 참가자에게도 ‘완료’로 표시돼요.", confirm: "네, 완료할게요" }
+    : action === "close"
+      ? { title: "모집을 마감할까요?", body: "남은 대기 신청은 ‘모집이 마감됐어요’로 표시돼요.", confirm: "네, 마감할게요" }
+      : action === "reopen"
+        ? { title: "다시 모집할까요?", body: "빈 자리만큼 새 신청을 받을 수 있어요. 마감할 때 정리된 지난 신청은 되살아나지 않아요.", confirm: "네, 다시 모집할게요" }
+        : { title: "매칭을 취소할까요?", body: "수락된 참가자와 대기 신청자에게 취소로 표시돼요.", confirm: "네, 취소할게요" };
   return <Modal open onOpenChange={(next) => { if (!next) onCancel(); }}>
     <ModalContainer variant="bottom">
       <ModalContent>

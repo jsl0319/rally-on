@@ -14,6 +14,7 @@ type SentApplication = {
   id: string;
   status: string;
   statusLabel: string;
+  decidedAt: string | null;
   message: string | null;
   match: { id: string; title: string; status: string; startsAt: string; courtSource: "EXTERNAL_RESERVED" | "COURT_TBD" | "PARTNER_COURT"; courtName: string | null; estimatedFeePerPersonKrw: number | null; courtSlotId: string | null };
   courtMatch: {
@@ -60,12 +61,12 @@ function courtMatchNextStep(item: SentApplication) {
   return null;
 }
 
-function nextStepMessage(status: string, matchStatus: string) {
+function nextStepMessage(status: string, matchStatus: string, wasAccepted = false) {
   return ({
     PENDING: "모집자가 프로필을 확인하고 있어요.",
     ACCEPTED: "같이 치게 됐어요. 매칭 정보를 확인해 주세요.",
     REJECTED: "이번에는 함께하기 어려워요. 다른 추천 매치를 찾아볼 수 있어요.",
-    WITHDRAWN: "신청을 철회했어요.",
+    WITHDRAWN: wasAccepted ? "참가를 취소했어요." : "신청을 철회했어요.",
     CANCELLED: matchStatus === "CANCELLED"
       ? "모집자가 매칭을 취소했어요."
       : matchStatus === "EXPIRED"
@@ -127,7 +128,7 @@ export function M5SentApplications() {
       <p className="mt-4 text-sm leading-6 text-[var(--tm-text-secondary)]">신청 결과와 다음 행동을 한눈에 확인해요.</p>
       {error && items !== null ? <div aria-live="polite" className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]">{error}</div> : null}
       {error && items === null ? <LoadError error={error} onRetry={load} /> : items === null ? <CourtRallyLoader className="mt-4" label="신청 내역을 준비하고 있어요." /> : items.length === 0 ? <EmptySentApplications /> : <div className="mt-6 grid gap-4">{items.map((item) => <SentApplicationCard item={item} key={item.id} withdrawing={withdrawingId === item.id} onWithdraw={() => setWithdrawConfirmId(item.id)} />)}</div>}
-      {withdrawConfirmId ? <WithdrawalConfirm busy={withdrawingId === withdrawConfirmId} onCancel={() => setWithdrawConfirmId(null)} onConfirm={() => { const applicationId = withdrawConfirmId; setWithdrawConfirmId(null); void withdraw(applicationId); }} /> : null}
+      {withdrawConfirmId ? <WithdrawalConfirm busy={withdrawingId === withdrawConfirmId} mode={items?.find((item) => item.id === withdrawConfirmId)?.status === "ACCEPTED" ? "ACCEPTED" : "PENDING"} onCancel={() => setWithdrawConfirmId(null)} onConfirm={() => { const applicationId = withdrawConfirmId; setWithdrawConfirmId(null); void withdraw(applicationId); }} /> : null}
     </div>
     <BottomNavigation />
   </main>;
@@ -150,33 +151,48 @@ function SentApplicationCard({ item, withdrawing, onWithdraw }: { item: SentAppl
       <p className="mt-3 text-sm text-[var(--tm-text-muted)]">🗓 {schedule(item.match.startsAt)}</p>
       <p className="mt-1 text-sm text-[var(--tm-text-muted)]">📍 {item.match.courtName ?? "코트는 함께 정해요"}</p>
       <p className="mt-3 text-sm font-semibold text-[var(--tm-action-primary)]">{item.match.courtSource === "COURT_TBD" ? "코트와 비용을 함께 정해요" : item.match.estimatedFeePerPersonKrw === null ? "참가비를 확인해 주세요" : `게스트 참가비 ${item.match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p>
-      {item.supplyNotice ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm font-semibold leading-6 text-[var(--tm-status-error-text)]">{item.supplyNotice.message}</p> : <p className="mt-4 border-t border-[var(--tm-border-subtle)] pt-3 text-sm font-medium leading-6 text-[var(--tm-text-muted)]">{courtMatchNextStep(item) ?? nextStepMessage(item.status, item.match.status)}</p>}
+      {item.supplyNotice ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm font-semibold leading-6 text-[var(--tm-status-error-text)]">{item.supplyNotice.message}</p> : <p className="mt-4 border-t border-[var(--tm-border-subtle)] pt-3 text-sm font-medium leading-6 text-[var(--tm-text-muted)]">{courtMatchNextStep(item) ?? nextStepMessage(item.status, item.match.status, item.decidedAt !== null)}</p>}
       {item.message ? <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">“{item.message}”</p> : null}
     </Link>
     {item.contact ? <><p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">{acceptedCoordinationMessage(item.match.courtSource)}</p><ContactButton contact={item.contact} /></> : null}
     {item.courtMatch && item.match.courtSlotId && (item.status === "ACCEPTED" || item.courtMatch.awaitingRefund) && !item.courtMatch.refundCompletedAt
       ? <Button as={Link} className="mt-3" fullWidth href={`/partner-sessions/${item.match.courtSlotId}`} size="medium">{item.courtMatch.awaitingRefund ? "환불 계좌 입력하기" : item.courtMatch.depositClaimedAt ? "입금 안내 다시 보기" : "입금 안내 보기"}</Button>
       : null}
-    {item.status === "PENDING" ? <Button className="mt-3" disabled={withdrawing} fullWidth onClick={onWithdraw} size="medium" variant="neutral">신청 철회</Button> : null}
+    {canLeave(item) ? <Button className="mt-3" disabled={withdrawing} fullWidth onClick={onWithdraw} size="medium" variant="neutral">{item.status === "PENDING" ? "신청 철회" : "참가 취소"}</Button> : null}
   </article>;
+}
+
+/**
+ * 검토 중이면 철회할 수 있고, 수락된 참가는 시작 전까지 취소할 수 있다.
+ * 코트 매칭은 입금·환불이 걸려 있어 코트 매칭 화면에서만 취소한다.
+ */
+function canLeave(item: SentApplication) {
+  if (item.match.courtSource === "PARTNER_COURT") return false;
+  if (item.status === "PENDING") return true;
+  return item.status === "ACCEPTED"
+    && item.match.status !== "CANCELLED"
+    && new Date(item.match.startsAt).getTime() > Date.now();
 }
 
 function ContactButton({ contact }: { contact: NonNullable<SentApplication["contact"]> }) {
   return contact.href ? <Button as={Link} className="mt-3" fullWidth href={contact.href}>{contact.label}</Button> : <p className="mt-3 text-center text-sm text-[var(--tm-text-secondary)]">채팅방을 준비하고 있어요.</p>;
 }
 
-function WithdrawalConfirm({ busy, onCancel, onConfirm }: { busy: boolean; onCancel: () => void; onConfirm: () => void }) {
+function WithdrawalConfirm({ busy, mode, onCancel, onConfirm }: { busy: boolean; mode: "PENDING" | "ACCEPTED"; onCancel: () => void; onConfirm: () => void }) {
+  const copy = mode === "ACCEPTED"
+    ? { heading: "참가를 취소할까요?", description: "자리는 바로 비워지고 모집자에게 알려요. 취소하면 다시 신청하지 못할 수 있어요.", confirm: "네, 취소할게요" }
+    : { heading: "신청을 철회할까요?", description: "철회하면 다시 신청하지 못할 수 있어요.", confirm: "네, 철회할게요" };
   return <Modal open onOpenChange={(next) => { if (!next) onCancel(); }}>
     <ModalContainer variant="bottom">
       <ModalContent>
         <ModalContentItem>
           <ModalSummary>한 번만 확인해요</ModalSummary>
-          <ModalHeading>신청을 철회할까요?</ModalHeading>
-          <ModalDescription>철회하면 다시 신청하지 못할 수 있어요.</ModalDescription>
+          <ModalHeading>{copy.heading}</ModalHeading>
+          <ModalDescription>{copy.description}</ModalDescription>
         </ModalContentItem>
       </ModalContent>
       <ActionArea variant="strong">
-        <ActionAreaButton disabled={busy} loading={busy} onClick={onConfirm} variant="main">네, 철회할게요</ActionAreaButton>
+        <ActionAreaButton disabled={busy} loading={busy} onClick={onConfirm} variant="main">{copy.confirm}</ActionAreaButton>
         <ActionAreaButton buttonColor="assistive" disabled={busy} onClick={onCancel} variant="alternative">돌아가기</ActionAreaButton>
       </ActionArea>
     </ModalContainer>
