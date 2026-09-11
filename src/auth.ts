@@ -86,8 +86,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       });
       if (existingAccount) {
         // 카카오에서 사진을 바꿨을 수 있으니 기본값을 최신으로 유지한다.
-        await getPrisma().user.update({
-          where: { id: existingAccount.userId },
+        await getPrisma().user.updateMany({
+          where: { id: existingAccount.userId, status: "ACTIVE" },
           data: { kakaoProfileImageUrl: kakaoProfileImageUrl(profile as Record<string, unknown>) },
         }).catch(() => undefined);
         return true;

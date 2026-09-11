@@ -1864,3 +1864,9 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 | POST `/api/v1/operator/support-inquiries/{id}` | 대조 요청에 OPERATOR_REPLY. 내부 담당자에게만 전달 |
 
 문의 처리 본문은 `{action, body(2~2000자), expectedVersion, clientRequestId}`다. 서로 다른 본문에 같은 요청 ID를 쓰거나 오래된 버전이면 `SUPPORT_STATE_CONFLICT`(409). 회원에게 답변한 뒤에만 해결 완료로 닫으며 연결 신청의 환불 잔액·처리 중·확인 필요가 남으면 종료를 거절한다. 사용자 역할은 서버 세션에서 읽고 클라이언트가 선택하지 않는다.
+
+## 탈퇴·제한 거래 접근 및 내부 인계 (2026-09-11)
+
+탈퇴 POST는 본인 GET 미리보기의 `{token}`을 요구하며 변경된 상태/반환액은 `WITHDRAWAL_PREVIEW_CHANGED` 409로 재확인한다. 비활성 계정은 일반 인증 API에서 계속 403이며 `/api/v1/me/transactions`와 그 문의 경로, 본인 신청의 refund-account에만 별도 인증을 적용한다. 내부 `/api/internal/court-handoffs` 및 `/api/internal/court-handoff-applications`는 DB의 현재 INTERNAL_REVIEWER 역할과 해당 건 배정을 확인하고, 원래 운영자 권한을 가장하지 않는다.
+
+상세 경로·입력·권한·재요청 계약은 [03-10 §5](03-10-account-transaction-continuity.md#5-데이터api)를 따른다.

@@ -1,3 +1,5 @@
+import { lockAccountTransactions, assertActiveTransactionUser } from "./account-transaction-lock";
+import { assertHandoffAccess } from "./court-transaction-handoff";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { z } from "zod";
 import { lockApplicationMatch, reconcileCourtMatch } from "./court-match-service";
@@ -13,13 +15,16 @@ const include = {
 } satisfies Prisma.MatchApplicationInclude;
 
 async function readLocked(tx: Prisma.TransactionClient, applicationId: string) {
+  await lockAccountTransactions(tx);
   await lockApplicationMatch(tx, applicationId);
   const a = await tx.matchApplication.findUnique({ where: { id: applicationId }, include });
   if (!a) throw new DomainError("APPLICATION_NOT_FOUND", 404, "신청을 찾을 수 없어요.");
   if (a.match.courtSource !== "PARTNER_COURT") throw new DomainError("NOT_A_COURT_MATCH", 409, "코트 매칭 신청만 처리할 수 있어요.");
   return a;
 }
-function assertOperator(a: Awaited<ReturnType<typeof readLocked>>, id: string) {
+async function assertOperator(tx: Prisma.TransactionClient, a: Awaited<ReturnType<typeof readLocked>>, id: string, handoff: boolean) {
+  if (handoff) { await assertHandoffAccess(tx, id, a.match.id); return; }
+  await assertActiveTransactionUser(tx, id);
   if (a.match.hostUserId !== id || a.match.courtSlot?.courtUnit.court.operatorApplication.applicantUserId !== id) {
     throw new DomainError("COURT_MATCH_OPERATOR_REQUIRED", 403, "이 코트 매칭의 운영자만 처리할 수 있어요.");
   }
@@ -34,10 +39,10 @@ async function reconcile(prisma: PrismaClient, applicationId: string) {
 }
 
 /** 종료 상태에도 수령 기록을 추가한다. 누적 금액이므로 동일 입금을 여러 번 더하지 않는다. */
-export async function recordCourtReceipt(prisma: PrismaClient, operator: { id: string }, applicationId: string, input: z.infer<typeof courtReceiptInputSchema>) {
+export async function recordCourtReceipt(prisma: PrismaClient, operator: { id: string }, applicationId: string, input: z.infer<typeof courtReceiptInputSchema>, handoff = false) {
   await reconcile(prisma, applicationId);
   return prisma.$transaction(async (tx) => {
-    const a = await readLocked(tx, applicationId); assertOperator(a, operator.id);
+    const a = await readLocked(tx, applicationId); await assertOperator(tx, a, operator.id, handoff);
     const receivedAt = input.receivedAt ? new Date(input.receivedAt) : null;
     // 참가비 충족 시각을 별도로 기록해 이후 초과 입금이 정시 입금을 무효화하지 않게 한다.
     const feeReceivedAt = receivedAt && input.amountKrw >= (a.match.totalCourtFeeKrw ?? 0)
@@ -79,10 +84,10 @@ export async function submitCourtMatchRefundAccount(prisma: PrismaClient, viewer
   });
 }
 
-export async function startCourtRefund(prisma: PrismaClient, operator: { id: string }, applicationId: string, input: z.infer<typeof courtRefundStartInputSchema>) {
+export async function startCourtRefund(prisma: PrismaClient, operator: { id: string }, applicationId: string, input: z.infer<typeof courtRefundStartInputSchema>, handoff = false) {
   await reconcile(prisma, applicationId);
   return prisma.$transaction(async (tx) => {
-    const a = await readLocked(tx, applicationId); assertOperator(a, operator.id);
+    const a = await readLocked(tx, applicationId); await assertOperator(tx, a, operator.id, handoff);
     const existing = a.refundAttempts.find((r) => r.clientRequestId === input.clientRequestId);
     if (existing) {
       if (existing.actorUserId !== operator.id || existing.amountKrw !== input.amountKrw || existing.accountVersion !== input.accountVersion) conflict();
@@ -101,9 +106,9 @@ export async function startCourtRefund(prisma: PrismaClient, operator: { id: str
   });
 }
 
-export async function completeCourtMatchRefund(prisma: PrismaClient, operator: { id: string }, applicationId: string, input: z.infer<typeof courtRefundResultInputSchema>) {
+export async function completeCourtMatchRefund(prisma: PrismaClient, operator: { id: string }, applicationId: string, input: z.infer<typeof courtRefundResultInputSchema>, handoff = false) {
   return prisma.$transaction(async (tx) => {
-    const a = await readLocked(tx, applicationId); assertOperator(a, operator.id);
+    const a = await readLocked(tx, applicationId); await assertOperator(tx, a, operator.id, handoff);
     const attempt = a.refundAttempts.find((r) => r.id === input.attemptId);
     if (!attempt) throw new DomainError("REFUND_NOT_FOUND", 404, "환불 건을 찾을 수 없어요.");
     const existing = await tx.courtRefundEvent.findUnique({ where: { attemptId_clientRequestId: { attemptId: attempt.id, clientRequestId: input.clientRequestId } } });

@@ -34,7 +34,7 @@ type Where = { OR?: Where[]; confirmationDueAt?: { lte: Date } | null; id?: stri
 // 실제 서비스 함수를 실행하며, 트랜잭션이 예외로 끝나면 저장 상태를 되돌린다.
 function fixture(status = "PENDING", confirmed = 0) {
   const match = {
-    id: "match", hostUserId: operator.id, courtSource: "PARTNER_COURT", title: "테스트 코트",
+    id: "match", host: { status: "ACTIVE" }, hostUserId: operator.id, courtSource: "PARTNER_COURT", title: "테스트 코트",
     status: "OPEN", startsAt: start, recruitCount: 4, maleRecruitCount: null, femaleRecruitCount: null,
     courtSlot: { id: "slot", status: "AVAILABLE", approvalMode: "OPERATOR", minParticipantCount: 2,
       courtUnit: { court: { status: "ACTIVE", operatorApplication: { applicantUserId: operator.id, status: "PUBLISH_APPROVED" } } } },
@@ -52,6 +52,7 @@ function fixture(status = "PENDING", confirmed = 0) {
   };
   const tx = {
     $queryRaw: vi.fn().mockResolvedValue([]),
+    user: { findUnique: vi.fn().mockResolvedValue({ status: "ACTIVE" }) },
     match: {
       findUnique: vi.fn(async () => ({ ...match })), findMany: vi.fn(async () => [{ ...match }]),
       update: vi.fn(async ({ data }: { data: object }) => Object.assign(match, data)),

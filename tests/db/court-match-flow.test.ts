@@ -1,7 +1,11 @@
+import { previewWithdrawal, withdrawAccount } from "@/server/domain/account-service";
+import { getMyCourtTransactions } from "@/server/domain/court-match-view";
+import { assertHandoffAccess, claimCourtHandoff, cancelHandedOffCourtMatch, listCourtHandoffs } from "@/server/domain/court-transaction-handoff";
+import { getPublicCourtSlots, publishCourtSlot } from "@/server/domain/court-slot-service";
 import { randomUUID } from "node:crypto";
 
 import { PrismaPg } from "@prisma/adapter-pg";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PrismaClient } from "@/generated/prisma/client";
 import { getApplicationDeadline, getJudgementAt, getRefundAmountKrw, getRefundPercent } from "@/server/domain/court-match";
@@ -888,6 +892,150 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     await actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", { action: "REPLY", body: "환불을 준비 중입니다.", expectedVersion: 2, clientRequestId: randomUUID() });
     await expect(actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", { action: "RESOLVE", body: "처리 완료입니다.", expectedVersion: 3, clientRequestId: randomUUID() })).rejects.toMatchObject({ code: "SUPPORT_STATE_CONFLICT" });
     expect((await listMySupportInquiries(prisma, participant.id)).items[0].status).toBe("ANSWERED");
+  });
+
+  async function withdraw(userId: string) {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const preview = await previewWithdrawal(prisma, userId);
+    return withdrawAccount(prisma, user, preview.token);
+  }
+  async function makeReviewer(name: string) {
+    const user = await makeUser(name, "FEMALE");
+    return prisma.user.update({ where: { id: user.id }, data: { role: "INTERNAL_REVIEWER" } });
+  }
+  it("탈퇴 시 미확정 입금을 전액 반환 대상으로 남기고 자기 계좌·문의만 처리한다", async () => {
+    const op = await makeUser("탈퇴운영자", "MALE"); const member = await makeUser("탈퇴참가자", "FEMALE"); const other = await makeUser("다른거래회원", "MALE");
+    const m = await makeCourtMatch(op.id); const a = await applyToCourtMatch(prisma, member.viewer, m.matchId, {});
+    await recordCourtReceipt(prisma, op, a.id, { amountKrw: 12000, receivedAt: new Date().toISOString(), note: "미확정 실제 입금 확인", expectedVersion: 0, clientRequestId: randomUUID() });
+    const preview = await previewWithdrawal(prisma, member.id);
+    expect(preview.items[0]).toMatchObject({ cancel: true, money: { outstandingKrw: 12000 } });
+    await withdraw(member.id);
+    expect(await prisma.user.findUnique({ where: { id: member.id } })).toMatchObject({ status: "WITHDRAWN", kakaoProfileImageUrl: null });
+    expect(await prisma.matchApplication.findUnique({ where: { id: a.id } })).toMatchObject({ status: "WITHDRAWN", receivedAmountKrw: 12000 });
+    await submitCourtMatchRefundAccount(prisma, member, a.id, { bank: "테스트은행", accountNumber: "111-222", accountHolder: "회원" });
+    await expect(submitCourtMatchRefundAccount(prisma, other, a.id, { bank: "테스트은행", accountNumber: "111-222", accountHolder: "회원" })).rejects.toMatchObject({ code: "APPLICATION_NOT_FOUND" });
+    expect((await getMyCourtTransactions(prisma, member.id)).items).toHaveLength(1);
+    expect((await getMyCourtTransactions(prisma, other.id)).items).toHaveLength(0);
+    await createSupportInquiry(prisma, member.id, { matchId: m.matchId, message: "탈퇴 후 미확인 입금 반환 문의입니다." }, true);
+    await expect(createSupportInquiry(prisma, other.id, { matchId: m.matchId, message: "다른 회원의 거래 문의를 시도합니다." }, true)).rejects.toMatchObject({ code: "SUPPORT_TRANSACTION_REQUIRED" });
+    await expect(createSupportInquiry(prisma, member.id, { message: "거래 없는 임의 문의를 시도합니다." }, true)).rejects.toMatchObject({ code: "SUPPORT_TRANSACTION_REQUIRED" });
+  });
+  it("탈퇴 미리보기 뒤 입금 기록이 바뀌면 계정을 닫지 않고 재확인을 요구한다", async () => {
+    const op = await makeUser("변경운영자", "MALE"); const member = await makeUser("변경회원", "FEMALE"); const m = await makeCourtMatch(op.id);
+    const a = await applyToCourtMatch(prisma, member.viewer, m.matchId, {}); const preview = await previewWithdrawal(prisma, member.id);
+    await recordCourtReceipt(prisma, op, a.id, { amountKrw: 10000, receivedAt: new Date().toISOString(), note: "추가 입금 확인", expectedVersion: 0, clientRequestId: randomUUID() });
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: member.id } });
+    await expect(withdrawAccount(prisma, user, preview.token)).rejects.toMatchObject({ code: "WITHDRAWAL_PREVIEW_CHANGED" });
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: member.id } })).status).toBe("ACTIVE");
+    await withdraw(member.id);
+    await expect(withdrawAccount(prisma, user, preview.token)).resolves.toHaveProperty("withdrawnAt");
+  });
+  it("탈퇴와 새 신청의 경쟁에서 비활성 계정에 활성 신청이 남지 않는다", async () => {
+    const op = await makeUser("경쟁운영자", "MALE"); const member = await makeUser("경쟁회원", "FEMALE"); const m = await makeCourtMatch(op.id);
+    const preview = await previewWithdrawal(prisma, member.id); const user = await prisma.user.findUniqueOrThrow({ where: { id: member.id } });
+    await Promise.allSettled([withdrawAccount(prisma, user, preview.token), applyToCourtMatch(prisma, member.viewer, m.matchId, {})]);
+    const state = await prisma.user.findUniqueOrThrow({ where: { id: member.id } });
+    if (state.status === "ACTIVE") await withdraw(member.id);
+    expect(await prisma.matchApplication.count({ where: { applicantUserId: member.id, status: { in: ["PENDING", "ACCEPTED", "CONFIRMED"] } } })).toBe(0);
+    await expect(applyToCourtMatch(prisma, member.viewer, m.matchId, {})).rejects.toMatchObject({ code: "ACCOUNT_INACTIVE" });
+  });
+  it("탈퇴 후에는 지연된 운영자 승인으로 자리를 되살릴 수 없다", async () => {
+    const op = await makeUser("승인운영자", "MALE"); const member = await makeUser("승인탈퇴회원", "FEMALE"); const m = await makeCourtMatch(op.id, { approvalMode: "OPERATOR" });
+    const a = await applyToCourtMatch(prisma, member.viewer, m.matchId, {});
+    await withdraw(member.id);
+    await expect(decideCourtMatchApplication(prisma, op, a.id, { accept: true })).rejects.toMatchObject({ code: "ACCOUNT_INACTIVE" });
+  });
+  it("운영자 탈퇴 후 공개 목록·신청·재공개를 막고 참가 이력은 남긴다", async () => {
+    const op = await makeUser("퇴임운영자", "MALE"); const member = await makeUser("남은회원", "FEMALE"); const next = await makeUser("신규회원", "MALE"); const m = await makeCourtMatch(op.id);
+    await applyToCourtMatch(prisma, member.viewer, m.matchId, {});
+    await withdraw(op.id);
+    expect((await getPublicCourtSlots(prisma, true)).items).toHaveLength(0);
+    await expect(applyToCourtMatch(prisma, next.viewer, m.matchId, {})).rejects.toMatchObject({ code: "COURT_MATCH_UNAVAILABLE" });
+    expect((await getCourtMatchParticipation(prisma, member.viewer, m.matchId))).toMatchObject({ operationsPaused: true, settlementAccount: null });
+    expect((await getMyCourtTransactions(prisma, member.id)).items).toHaveLength(1);
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: m.matchId } })).hostUserId).toBe(op.id);
+    await prisma.courtSlot.update({ where: { id: m.slotId }, data: { status: "DRAFT", visibility: "PRIVATE" } });
+    await expect(publishCourtSlot(prisma, op, m.slotId)).rejects.toBeDefined();
+  });
+  it("인계 담당자만 늦은 입금과 반환을 기록하고 원래 운영자·실제 행위자를 구분한다", async () => {
+    const op = await makeUser("인계운영자", "MALE"); const member = await makeUser("인계회원", "FEMALE"); const reviewer = await makeReviewer("인계담당자"); const stranger = await makeReviewer("미배정담당자"); const m = await makeCourtMatch(op.id);
+    const a = await applyToCourtMatch(prisma, member.viewer, m.matchId, {}); await cancelCourtMatchApplication(prisma, member, a.id); await withdraw(op.id);
+    const caseInfo = (await listCourtHandoffs(prisma, reviewer.id)).items[0];
+    const input = { expectedVersion: caseInfo.version, clientRequestId: randomUUID(), note: "원래 운영자 업무 중단 및 은행 내역 인계 확인" };
+    await expect(assertHandoffAccess(prisma, stranger.id, m.matchId)).rejects.toMatchObject({ code: "HANDOFF_REQUIRED" });
+    await claimCourtHandoff(prisma, reviewer.id, m.matchId, input); await claimCourtHandoff(prisma, reviewer.id, m.matchId, input);
+    await expect(recordCourtReceipt(prisma, stranger, a.id, { amountKrw: 9000, receivedAt: new Date().toISOString(), expectedVersion: 0, clientRequestId: randomUUID(), note: "권한 없는 대조" }, true)).rejects.toMatchObject({ code: "HANDOFF_REQUIRED" });
+    await recordCourtReceipt(prisma, reviewer, a.id, { amountKrw: 9000, receivedAt: new Date().toISOString(), expectedVersion: 0, clientRequestId: randomUUID(), note: "인계 후 늦은 입금 확인" }, true);
+    await submitCourtMatchRefundAccount(prisma, member, a.id, { bank: "테스트은행", accountNumber: "123-456", accountHolder: "반환회원" });
+    const attempt = await startCourtRefund(prisma, reviewer, a.id, { amountKrw: 9000, accountVersion: 2, clientRequestId: randomUUID() }, true);
+    await completeCourtMatchRefund(prisma, reviewer, a.id, { attemptId: attempt.id, expectedVersion: 1, clientRequestId: randomUUID(), status: "PAID", transferredAt: new Date().toISOString(), note: "은행 송금 및 본인 계좌 대조 확인" }, true);
+    const row = await prisma.matchApplication.findUniqueOrThrow({ where: { id: a.id }, include: { receiptRecords: true, refundAttempts: true, match: true } });
+    expect(row.match.hostUserId).toBe(op.id); expect(row.receiptRecords[0].actorUserId).toBe(reviewer.id); expect(row.refundAttempts[0].actorUserId).toBe(reviewer.id);
+    expect(row.status).toBe("WITHDRAWN"); expect(row.refundCompletedAt).not.toBeNull();
+  });
+  it("환불 처리 중 참가자와 담당자가 탈퇴해도 고정 계좌와 송금 잠금을 유지한다", async () => {
+    const op = await makeUser("송금운영자", "MALE"); const member = await makeUser("송금회원", "FEMALE"); const reviewer = await makeReviewer("이전담당자"); const next = await makeReviewer("새담당자"); const m = await makeCourtMatch(op.id);
+    const a = await applyToCourtMatch(prisma, member.viewer, m.matchId, {}); await receiveAndConfirm(op, a.id); await cancelCourtMatchApplication(prisma, member, a.id);
+    await submitCourtMatchRefundAccount(prisma, member, a.id, { bank: "고정은행", accountNumber: "111-222", accountHolder: "고정회원" });
+    const started = await startCourtRefund(prisma, op, a.id, { amountKrw: 36000, accountVersion: 2, clientRequestId: randomUUID() });
+    await withdraw(member.id); await withdraw(op.id);
+    await claimCourtHandoff(prisma, reviewer.id, m.matchId, { expectedVersion: 1, clientRequestId: randomUUID(), note: "운영자 탈퇴 후 기존 송금 내역 인계" });
+    await withdraw(reviewer.id);
+    await claimCourtHandoff(prisma, next.id, m.matchId, { expectedVersion: 2, clientRequestId: randomUUID(), note: "이전 담당자 탈퇴로 송금 확인 업무 재인계" });
+    await expect(startCourtRefund(prisma, next, a.id, { amountKrw: 36000, accountVersion: 2, clientRequestId: randomUUID() }, true)).rejects.toMatchObject({ code: "MONEY_STATE_CONFLICT" });
+    await expect(submitCourtMatchRefundAccount(prisma, member, a.id, { bank: "바뀐은행", accountNumber: "333-444", accountHolder: "회원" })).rejects.toMatchObject({ code: "MONEY_STATE_CONFLICT" });
+    expect(await prisma.courtRefundAttempt.findUnique({ where: { id: started.id } })).toMatchObject({ status: "PROCESSING", bank: "고정은행", amountKrw: 36000 });
+    await completeCourtMatchRefund(prisma, next, a.id, { attemptId: started.id, expectedVersion: 1, clientRequestId: randomUUID(), status: "PAID", transferredAt: new Date().toISOString(), note: "인계 전 송금이 완료된 것을 은행 대조로 확인" }, true);
+  });
+  it("비활성 문의 담당자를 재배정하고 이전·이후 담당자를 감사 이력에 남긴다", async () => {
+    const member = await makeUser("문의회원", "FEMALE"); const old = await makeReviewer("문의이전담당"); const next = await makeReviewer("문의새담당");
+    const inquiry = await createSupportInquiry(prisma, member.id, { message: "기존 담당자가 처리하던 문의입니다." });
+    await actOnSupportInquiry(prisma, old, inquiry.id, "reviewer", { action: "CLAIM", body: "최초 담당 배정", expectedVersion: 1, clientRequestId: randomUUID() });
+    await expect(actOnSupportInquiry(prisma, next, inquiry.id, "reviewer", { action: "CLAIM", body: "활성 담당자 업무 탈취", expectedVersion: 2, clientRequestId: randomUUID() })).rejects.toMatchObject({ code: "SUPPORT_STATE_CONFLICT" });
+    await withdraw(old.id);
+    const input = { action: "CLAIM" as const, body: "이전 담당자 비활성으로 업무 인계", expectedVersion: 2, clientRequestId: randomUUID() };
+    await actOnSupportInquiry(prisma, next, inquiry.id, "reviewer", input); await actOnSupportInquiry(prisma, next, inquiry.id, "reviewer", input);
+    const row = await prisma.supportInquiry.findUniqueOrThrow({ where: { id: inquiry.id }, include: { messages: true } });
+    expect(row.assigneeUserId).toBe(next.id); expect(row.messages.find((m) => m.clientRequestId === input.clientRequestId)).toMatchObject({ previousAssigneeUserId: old.id, nextAssigneeUserId: next.id });
+  });
+  it("인계 거래의 제공 불가 취소는 현재 참가자를 전액 반환하고 과거 자발 취소 기록은 보존한다", async () => {
+    const op = await makeUser("중단운영자", "MALE"); const member = await makeUser("중단참가자", "FEMALE"); const reviewer = await makeReviewer("취소담당자"); const m = await makeCourtMatch(op.id);
+    const a = await applyToCourtMatch(prisma, member.viewer, m.matchId, {}); await receiveAndConfirm(op, a.id); await withdraw(op.id);
+    await claimCourtHandoff(prisma, reviewer.id, m.matchId, { expectedVersion: 1, clientRequestId: randomUUID(), note: "운영자 업무 중단과 실제 제공 불가 확인" });
+    const input = { expectedVersion: 2, clientRequestId: randomUUID(), note: "시설 연락으로 운영자 대신 경기 진행 불가 확인" };
+    await cancelHandedOffCourtMatch(prisma, reviewer.id, m.matchId, input); await cancelHandedOffCourtMatch(prisma, reviewer.id, m.matchId, input);
+    const row = await prisma.matchApplication.findUniqueOrThrow({ where: { id: a.id } });
+    expect(row).toMatchObject({ status: "CANCELLED", refundAmountKrw: null, participantCancelledAt: null });
+    expect((await getMyCourtTransactions(prisma, member.id)).items[0].application?.money.outstandingKrw).toBe(36000);
+  });
+
+  it("자정 경계로 탈퇴 취소 반환액이 달라지면 다시 확인받는다", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2030-04-02T14:59:59.000Z")); // KST 4/2 23:59:59
+      const op = await makeUser("자정운영자", "MALE"); const member = await makeUser("자정회원", "FEMALE");
+      const m = await makeCourtMatch(op.id, { startsAt: new Date("2030-04-03T10:00:00.000Z") });
+      const a = await applyToCourtMatch(prisma, member.viewer, m.matchId, {}); await receiveAndConfirm(op, a.id);
+      const preview = await previewWithdrawal(prisma, member.id);
+      expect(preview.items[0].money.outstandingKrw).toBe(18000);
+      vi.setSystemTime(new Date("2030-04-02T15:00:01.000Z"));
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: member.id } });
+      await expect(withdrawAccount(prisma, user, preview.token)).rejects.toMatchObject({ code: "WITHDRAWAL_PREVIEW_CHANGED" });
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: member.id } })).status).toBe("ACTIVE");
+      expect((await previewWithdrawal(prisma, member.id)).items[0].money.outstandingKrw).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+  it("계정은 활성이어도 담당 권한이 종료된 사람의 문의·거래를 인계받을 수 있다", async () => {
+    const op = await makeUser("권한운영자", "MALE"); const member = await makeUser("권한회원", "FEMALE"); const old = await makeReviewer("권한이전담당"); const next = await makeReviewer("권한새담당");
+    const m = await makeCourtMatch(op.id); await withdraw(op.id);
+    await claimCourtHandoff(prisma, old.id, m.matchId, { expectedVersion: 1, clientRequestId: randomUUID(), note: "최초 운영 거래 담당 인계 확인" });
+    const inquiry = await createSupportInquiry(prisma, member.id, { message: "담당 권한 변경을 확인할 문의입니다." });
+    await actOnSupportInquiry(prisma, old, inquiry.id, "reviewer", { action: "CLAIM", body: "최초 담당 배정", expectedVersion: 1, clientRequestId: randomUUID() });
+    await prisma.user.update({ where: { id: old.id }, data: { role: "MEMBER" } });
+    expect((await listCourtHandoffs(prisma, next.id)).items[0].canClaim).toBe(true);
+    await claimCourtHandoff(prisma, next.id, m.matchId, { expectedVersion: 2, clientRequestId: randomUUID(), note: "이전 담당자 업무 권한 종료 후 인계" });
+    await actOnSupportInquiry(prisma, next, inquiry.id, "reviewer", { action: "CLAIM", body: "이전 담당자 업무 권한 종료 후 인계", expectedVersion: 2, clientRequestId: randomUUID() });
+    await expect(assertHandoffAccess(prisma, old.id, m.matchId)).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
 });

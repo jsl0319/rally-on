@@ -54,6 +54,7 @@ function courtMatch(overrides: Record<string, unknown> = {}) {
   return {
     id: "match-id",
     hostUserId: "operator-user-id",
+    host: { status: "ACTIVE" },
     title: "마포 테니스파크 2번 코트",
     status: "OPEN",
     startsAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -86,7 +87,7 @@ function transactionFor(match: ReturnType<typeof courtMatch>, seatCount: number)
       update: vi.fn().mockResolvedValue({}),
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
-    user: { findUnique: vi.fn().mockResolvedValue({ matchNotificationsEnabled: true }) },
+    user: { findUnique: vi.fn().mockResolvedValue({ matchNotificationsEnabled: true, status: "ACTIVE" }) },
     notification: { create: vi.fn() },
   };
 }

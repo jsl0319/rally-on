@@ -17,9 +17,10 @@ export async function requireOnboardedPage(returnTo: string) {
 
   const user = await getPrisma().user.findUnique({
     where: { id: userId },
-    select: { onboardingCompletedAt: true },
+    select: { onboardingCompletedAt: true, status: true },
   });
 
+  if (user && user.status !== "ACTIVE") redirect("/account/transactions");
   if (!user?.onboardingCompletedAt) redirect(getOnboardingPath(returnTo));
 }
 
@@ -31,7 +32,8 @@ export async function requireActivePage(returnTo: string) {
   if (!userId) redirect(getLoginPath(returnTo));
 
   const user = await getPrisma().user.findUnique({ where: { id: userId }, select: { status: true } });
-  if (!user || user.status !== "ACTIVE") redirect(getLoginPath(returnTo));
+  if (!user) redirect(getLoginPath(returnTo));
+  if (user.status !== "ACTIVE") redirect("/account/transactions");
 }
 
 /**
@@ -65,6 +67,7 @@ export async function requireInternalReviewerPage(returnTo: string) {
     where: { id: userId },
     select: { status: true, role: true },
   });
-  if (!user || user.status !== "ACTIVE") redirect(getLoginPath(returnTo));
+  if (!user) redirect(getLoginPath(returnTo));
+  if (user.status !== "ACTIVE") redirect("/account/transactions");
   if (user.role !== "INTERNAL_REVIEWER") redirect("/");
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { ActionArea, ActionAreaButton, Modal, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalHeading, ModalSummary, Switch } from "@wanteddev/wds";
+import { Switch } from "@wanteddev/wds";
+import { WithdrawalModal } from "./withdrawal-modal";
 import { signOut } from "next-auth/react";
 import Image from "next/image";
 import Link from "next/link";
@@ -70,8 +71,6 @@ export function M8MyPage() {
   const [pendingSentCount, setPendingSentCount] = useState(0);
   const [pendingReceivedCount, setPendingReceivedCount] = useState(0);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
-  const [withdrawing, setWithdrawing] = useState(false);
-  const [withdrawalError, setWithdrawalError] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -116,19 +115,6 @@ export function M8MyPage() {
     }
   };
 
-  const withdraw = async () => {
-    setWithdrawing(true);
-    setWithdrawalError("");
-    try {
-      const response = await fetch("/api/v1/me/withdrawal", { method: "POST" });
-      const body: unknown = await response.json();
-      if (!response.ok) throw new Error(getErrorMessage(body, "회원 탈퇴를 처리하지 못했어요."));
-      await signOut({ callbackUrl: "/login" });
-    } catch (caught) {
-      setWithdrawalError(caught instanceof Error ? caught.message : "회원 탈퇴를 처리하지 못했어요.");
-      setWithdrawing(false);
-    }
-  };
 
   return <main className="flex min-h-svh flex-col bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]">
     <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col">
@@ -185,7 +171,7 @@ export function M8MyPage() {
     </section>
 
     <BottomNavigation />
-    {withdrawalOpen ? <WithdrawalModal busy={withdrawing} error={withdrawalError} onCancel={() => { setWithdrawalOpen(false); setWithdrawalError(""); }} onConfirm={() => void withdraw()} /> : null}
+    {withdrawalOpen ? <WithdrawalModal onCancel={() => setWithdrawalOpen(false)} /> : null}
   </main>;
 }
 
@@ -274,23 +260,4 @@ function ToggleRow({ description, icon, title, toggle }: { description?: string;
 function CountBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return <span className="inline-flex min-h-6 shrink-0 items-center rounded-full bg-[var(--tm-action-primary)] px-2 text-xs font-bold text-white">{count}</span>;
-}
-
-function WithdrawalModal({ busy, error, onCancel, onConfirm }: { busy: boolean; error: string; onCancel: () => void; onConfirm: () => void }) {
-  return <Modal open onOpenChange={(next) => { if (!next) onCancel(); }}>
-    <ModalContainer variant="bottom">
-      <ModalContent>
-        <ModalContentItem>
-          <ModalSummary>한 번만 확인해요</ModalSummary>
-          <ModalHeading>정말 탈퇴할까요?</ModalHeading>
-          <ModalDescription>탈퇴하면 더 이상 로그인할 수 없고, 만든 매칭과 신청 내역에도 접근할 수 없어요.</ModalDescription>
-        </ModalContentItem>
-        {error ? <p className="px-1 pb-2 text-sm text-[var(--tm-status-error-text)]">{error}</p> : null}
-      </ModalContent>
-      <ActionArea variant="strong">
-        <ActionAreaButton disabled={busy} loading={busy} onClick={onConfirm} variant="main">네, 탈퇴할게요</ActionAreaButton>
-        <ActionAreaButton buttonColor="assistive" disabled={busy} onClick={onCancel} variant="alternative">돌아가기</ActionAreaButton>
-      </ActionArea>
-    </ModalContainer>
-  </Modal>;
 }

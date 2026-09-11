@@ -11,7 +11,7 @@ const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 const localInput = (value: string) => new Date(new Date(value).getTime() + 9 * 60 * 60_000).toISOString().slice(0, 19);
 const statusLabels = { PROCESSING: "송금 처리 중", PAID: "송금 완료 기록", FAILED: "미송금 확인", REVIEW: "송금 여부 확인 필요" };
 
-export function OperatorMoneyPanel({ application: a, refresh }: { application: Application; refresh: () => Promise<void> }) {
+export function OperatorMoneyPanel({ application: a, refresh, endpoint = "/api/v1/court-match-applications" }: { endpoint?: string; application: Application; refresh: () => Promise<void> }) {
   const [amount, setAmount] = useState(String(a.money.receivedKrw));
   const [receivedAt, setReceivedAt] = useState(a.lastReceivedAt ? localInput(a.lastReceivedAt) : "");
   const [feeAt, setFeeAt] = useState(a.feeReceivedAt ? localInput(a.feeReceivedAt) : "");
@@ -26,7 +26,7 @@ export function OperatorMoneyPanel({ application: a, refresh }: { application: A
     requests.current.set(key, clientRequestId);
     setBusy(true); setError("");
     try {
-      const response = await fetch(`/api/v1/court-match-applications/${a.id}/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, clientRequestId }) });
+      const response = await fetch(`${endpoint}/${a.id}/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, clientRequestId }) });
       const data: unknown = await response.json();
       if (!response.ok) throw new Error(apiMessage(data, "처리하지 못했어요."));
       await refresh(); requests.current.delete(key); return true;

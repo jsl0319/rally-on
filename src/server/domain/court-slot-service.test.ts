@@ -86,6 +86,8 @@ describe("Court Partner time supply authorization and state transitions", () => 
   it("allows a draft-approved operator to create only a private slot draft with an audit record", async () => {
     const created = { ...ownedSlot("DRAFT_ACCESS_GRANTED"), statusChangedAt: new Date(), usageNote: slotInput.usageNote };
     const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      user: { findUnique: vi.fn().mockResolvedValue({ status: "ACTIVE" }) },
       courtUnit: { findUnique: vi.fn().mockResolvedValue({ id: "unit-id" }) },
       courtSlot: {
         findFirst: vi.fn().mockResolvedValue(null),
@@ -158,7 +160,7 @@ describe("Court Partner time supply authorization and state transitions", () => 
         title: "마포 테니스파크 2번 코트",
         recruitCount: 4,
         partnerPreference: "COMPLETE_BEGINNER_WELCOME",
-        host: { nickname: "마포테니스파크" },
+        host: { status: "ACTIVE", nickname: "마포테니스파크" },
         purposes: [],
         _count: { applications: 0 },
       },
@@ -186,7 +188,7 @@ describe("Court Partner time supply authorization and state transitions", () => 
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         visibility: "PUBLIC",
-        courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
+        courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED", applicant: { status: "ACTIVE" } } } },
       }),
     }));
   });
@@ -216,7 +218,7 @@ describe("Court Partner time supply authorization and state transitions", () => 
         title: "편하게 랠리해요",
         recruitCount: 3,
         partnerPreference: "COMPLETE_BEGINNER_WELCOME",
-        host: { nickname: "민지" },
+        host: { status: "ACTIVE", nickname: "민지" },
         purposes: [{ purpose: "RALLY_PRACTICE" }],
         _count: { applications: 1 },
       },
@@ -283,7 +285,7 @@ describe("Court Partner time supply authorization and state transitions", () => 
         title: "마포 테니스파크 2번 코트",
         recruitCount: 4,
         partnerPreference: "COMPLETE_BEGINNER_WELCOME",
-        host: { nickname: "마포테니스파크" },
+        host: { status: "ACTIVE", nickname: "마포테니스파크" },
         purposes: [],
         _count: { applications: 0 },
       },
@@ -369,6 +371,8 @@ describe("Court Partner time supply authorization and state transitions", () => 
     };
     const blockedSlot = { ...allocatedSlot, status: "BLOCKED", version: 5, statusChangedAt: new Date("2026-01-03T00:00:00.000Z") };
     const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      user: { findUnique: vi.fn().mockResolvedValue({ status: "ACTIVE" }) },
       courtSlot: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         findUniqueOrThrow: vi.fn().mockResolvedValue(blockedSlot),
@@ -423,6 +427,8 @@ describe("Court Partner time supply authorization and state transitions", () => 
       match: { id: "match-id", hostUserId: "operator-user-id", status: "OPEN" },
     };
     const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      user: { findUnique: vi.fn().mockResolvedValue({ status: "ACTIVE" }) },
       courtSlot: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
       match: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
       matchApplication: {
@@ -483,6 +489,8 @@ describe("Court Partner time supply authorization and state transitions", () => 
       match: { id: "match-id", hostUserId: "host-user-id", status: "CANCELLED" },
     };
     const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      user: { findUnique: vi.fn().mockResolvedValue({ status: "ACTIVE" }) },
       courtSlot: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       courtSlotStatusHistory: { create: vi.fn() },
     };
@@ -507,6 +515,8 @@ describe("Court Partner time supply authorization and state transitions", () => 
       match: { id: "match-id", hostUserId: "host-user-id", status: "OPEN" },
     };
     const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      user: { findUnique: vi.fn().mockResolvedValue({ status: "ACTIVE" }) },
       courtSupplyIncident: { create: vi.fn().mockResolvedValue({ id: "incident-id" }) },
     };
     const prisma = {
@@ -538,6 +548,8 @@ describe("Court Partner time supply authorization and state transitions", () => 
       },
     };
     const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      user: { findUnique: vi.fn().mockResolvedValue({ status: "ACTIVE" }) },
       courtSlot: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
       match: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
       matchApplication: {

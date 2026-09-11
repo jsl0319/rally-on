@@ -27,6 +27,7 @@ export function SupportQueue({ audience }: { audience: "reviewer" | "operator" }
   useEffect(() => { const timer = setTimeout(() => void load(), 0); return () => clearTimeout(timer); }, [load]);
   return <main className="min-h-svh bg-slate-50 px-5 py-8 text-slate-800"><div className="mx-auto max-w-[640px]">
     <Link href={audience === "reviewer" ? "/internal/operator-applications" : "/partner"} className="inline-block min-h-11 text-sm text-blue-600">← 돌아가기</Link>
+    {audience === "reviewer" ? <Link className="mb-4 block text-sm font-semibold text-blue-700" href="/internal/court-handoffs">비활성 운영자 거래 인계 →</Link> : null}
     <h1 className="text-2xl font-bold">{audience === "reviewer" ? "1:1 문의 처리" : "담당자 대조 요청"}</h1>
     <label className="mt-5 block text-sm">처리 상태<select className="ml-3 rounded-xl border border-slate-200 bg-white p-3" value={status} onChange={(e) => setStatus(e.target.value)}>{[["", "전체"], ["OPEN", "접수됨"], ["IN_PROGRESS", "검토 중"], ["WAITING_OPERATOR", "운영자 확인 중"], ["ANSWERED", "답변 완료"], ["RESOLVED", "해결 완료"]].map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select></label>
     <Button className="mt-3" disabled={busy} size="medium" variant="secondary" onClick={() => void load()}>새로고침</Button>

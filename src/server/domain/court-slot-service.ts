@@ -1,3 +1,4 @@
+import { lockAccountTransactions, assertActiveTransactionUser } from "./account-transaction-lock";
 import { Prisma } from "@/generated/prisma/client";
 import type { CourtSlotStatus, MatchStatus, PrismaClient } from "@/generated/prisma/client";
 
@@ -58,7 +59,7 @@ const publicCourtSlotInclude = {
       title: true,
       recruitCount: true,
       partnerPreference: true,
-      host: { select: { nickname: true } },
+      host: { select: { nickname: true, status: true } },
       purposes: { select: { purpose: true } },
       _count: { select: { applications: { where: { status: { in: [...seatHoldingStatuses] } } } } },
     },
@@ -193,12 +194,13 @@ function toPublicCourtSlotView(slot: PublicCourtSlotWithRelations, now = new Dat
 
   return {
     ...base,
-    statusLabel: publicSlotStatusLabels[slot.status],
+    statusLabel: match?.host.status !== "ACTIVE" ? "운영 중단" : publicSlotStatusLabels[slot.status],
+    availableAction: match?.host.status !== "ACTIVE" ? "READ_ONLY" as const : base.availableAction,
     durationMinutes: Math.round((slot.endsAt.getTime() - slot.startsAt.getTime()) / 60_000),
     session: match && base.session
       ? {
           ...base.session,
-          statusLabel: publicSessionStatusLabels[match.status],
+          statusLabel: match.host.status !== "ACTIVE" ? "운영 중단" : publicSessionStatusLabels[match.status],
           title: match.title,
           hostNickname: match.host.nickname,
           recruitCount: match.recruitCount,
@@ -564,13 +566,15 @@ async function transitionSlot(
     throw new DomainError("COURT_SLOT_TOO_LATE_TO_PUBLISH", 409, "입금과 확인 시간을 확보하려면 시작 4시간 전까지 공개해 주세요.");
   }
   const result = await prisma.$transaction(async (transaction) => {
+    await lockAccountTransactions(transaction);
+    await assertActiveTransactionUser(transaction, viewer.id);
     const updated = await transaction.courtSlot.updateMany({
       where: {
         id: slot.id,
         status: slot.status,
         visibility: slot.visibility,
         version: slot.version,
-        courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
+        courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED", applicant: { status: "ACTIVE" } } } },
       },
       data: {
         status: nextStatus,
@@ -785,7 +789,7 @@ export async function getPublicCourtSlots(prisma: PrismaClient, availableOnly: b
     where: {
       visibility: "PUBLIC",
       match: { is: { courtSource: "PARTNER_COURT" } },
-      courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
+      courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED", applicant: { status: "ACTIVE" } } } },
       ...(availableOnly ? { status: "AVAILABLE", startsAt: { gt: now } } : { endsAt: { gt: now } }),
     },
     include: publicCourtSlotInclude,
@@ -803,7 +807,7 @@ export async function getPublicCourtSlot(prisma: PrismaClient, slotId: string, v
       id: slotId,
       visibility: "PUBLIC",
       OR: [
-        { courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } } },
+        { courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED", applicant: { status: "ACTIVE" } } } } },
         ...(viewerId ? [{ match: { is: { OR: [{ hostUserId: viewerId }, { applications: { some: { applicantUserId: viewerId } } }] } } }] : []),
       ],
     },

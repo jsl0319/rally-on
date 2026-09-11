@@ -1322,3 +1322,9 @@ Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_
 환불 상태는 `PROCESSING / PAID / FAILED / REVIEW`다. 한 신청에서 PROCESSING 또는 REVIEW인 건은 부분 유일 인덱스로 최대 하나만 허용한다. 해당 송금 중에는 계좌와 수령 기록을 수정하지 못한다. 실제 은행 거래를 자동 확인하는 테이블이 아니다.
 
 기존 확정 건은 당시 참가비를 과거 수령 기록으로 이관하되 은행 수령 시각을 만들어 넣지 않는다. 기존 완료 환불은 별도 과거 지급액으로 보존한다. 신규 누적액·송금 건은 0 이상/양수 제약을 적용한다. 공유 DB 적용은 배포 단계에서 별도 수행한다.
+
+## 계정 탈퇴 이후 거래 인계 (2026-09-11)
+
+`CourtTransactionHandoff`는 Match당 하나의 잔여 업무 배정이며 `Match.hostUserId`를 바꾸지 않는다. `CourtTransactionHandoffEvent`에 실제 작성자·이전 담당자·요청 UUID·근거·시각을 저장한다. SupportInquiryMessage에는 이전·이후 담당자 참조값을 추가한다. 기존 영수·환불 원장의 실제 actorUserId와 PROCESSING/REVIEW 상태는 인계 뒤에도 유지한다. migration은 `20260911070000_account_transaction_continuity`다.
+
+상세 경로·입력·권한·재요청 계약은 [03-10 §5](03-10-account-transaction-continuity.md#5-데이터api)를 따른다.

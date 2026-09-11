@@ -1,3 +1,4 @@
+import { assertHandoffAccess } from "./court-transaction-handoff";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { DomainError } from "./profile-service";
 import { reconcileCourtMatch } from "./court-match-service";
@@ -21,6 +22,7 @@ const applicationSelect = {
 const matchInclude = {
   applications: { select: applicationSelect, orderBy: { createdAt: "asc" } },
   conversation: { select: { status: true } },
+  host: { select: { status: true } },
   courtSlot: { include: { courtUnit: { include: { court: { include: { operatorApplication: { select: { applicantUserId: true } } } } } } } },
 } satisfies Prisma.MatchInclude;
 
@@ -108,6 +110,7 @@ export async function getCourtMatchParticipation(prisma: PrismaClient, viewer: {
   const legacy = !match.courtSlot || match.courtSlot.courtUnit.court.operatorApplication.applicantUserId !== match.hostUserId;
   let blockedReason: string | null = null;
   if (legacy) blockedReason = "이전 방식으로 개설된 코트 매칭은 새 신청을 받지 않아요.";
+  else if (match.host.status !== "ACTIVE") blockedReason = "운영이 중단되어 신규 신청을 받지 않아요.";
   else if (isOperator) blockedReason = "내가 개설한 코트 매칭이에요.";
   else if (application) blockedReason = "이미 신청한 코트 매칭이에요.";
   else if (match.status !== "OPEN" || match.courtSlot?.status !== "AVAILABLE") blockedReason = "지금은 참가 신청을 받지 않아요.";
@@ -116,7 +119,8 @@ export async function getCourtMatchParticipation(prisma: PrismaClient, viewer: {
   else if (info.remainingSpots === 0) blockedReason = "남은 자리가 없어요.";
   else if (info.remainingGenderSpots && (viewer.profile.gender === "MALE" ? info.remainingGenderSpots.male : info.remainingGenderSpots.female) === 0) blockedReason = "해당 성별의 자리가 모두 찼어요.";
 
-  const canSeeAccount = application?.status === "ACCEPTED" || application?.status === "CONFIRMED";
+  const operationsPaused = match.host.status !== "ACTIVE";
+  const canSeeAccount = !operationsPaused && (application?.status === "ACCEPTED" || application?.status === "CONFIRMED");
   // 취소는 시작 전까지 언제든 되지만, 지금 누르면 얼마가 돌아오는지 먼저 보여 준다(§3.7).
   const now = new Date();
   const cancellable = application !== undefined
@@ -124,7 +128,7 @@ export async function getCourtMatchParticipation(prisma: PrismaClient, viewer: {
     && match.status !== "CANCELLED"
     && now < match.startsAt;
   return {
-    ...info, isOperator, legacy, canApply: blockedReason === null, blockedReason,
+    ...info, isOperator, legacy, operationsPaused, canApply: blockedReason === null, blockedReason,
     application: application ? toApplication(application, info.guestFeeKrw) : null,
     cancellation: cancellable && application
       ? {
@@ -139,12 +143,13 @@ export async function getCourtMatchParticipation(prisma: PrismaClient, viewer: {
   };
 }
 
-export async function getOperatorCourtMatch(prisma: PrismaClient, viewer: { id: string }, matchId: string) {
+export async function getOperatorCourtMatch(prisma: PrismaClient, viewer: { id: string }, matchId: string, handoff = false) {
+  if (handoff) await assertHandoffAccess(prisma, viewer.id, matchId);
   const match = await readMatch(prisma, matchId);
-  if (match.hostUserId !== viewer.id || match.courtSlot?.courtUnit.court.operatorApplication.applicantUserId !== viewer.id) {
+  if (!handoff && (match.hostUserId !== viewer.id || match.courtSlot?.courtUnit.court.operatorApplication.applicantUserId !== viewer.id)) {
     throw new DomainError("COURT_MATCH_OPERATOR_REQUIRED", 403, "이 코트 매칭을 연 운영자만 조회할 수 있어요.");
   }
-  const showProfile = match.courtSlot.approvalMode === "OPERATOR";
+  const showProfile = !handoff && match.courtSlot?.approvalMode === "OPERATOR";
   return {
     ...summary(match),
     applications: match.applications.map((application) => ({
@@ -156,3 +161,14 @@ export async function getOperatorCourtMatch(prisma: PrismaClient, viewer: { id: 
 
 export type CourtMatchParticipation = Awaited<ReturnType<typeof getCourtMatchParticipation>>;
 export type OperatorCourtMatch = Awaited<ReturnType<typeof getOperatorCourtMatch>>;
+
+export async function getMyCourtTransactions(prisma: PrismaClient, userId: string) {
+  const matches = await prisma.match.findMany({ where: { courtSource: "PARTNER_COURT", OR: [{ hostUserId: userId }, { applications: { some: { applicantUserId: userId } } }] }, orderBy: [{ startsAt: "desc" }, { id: "asc" }], select: { id: true, title: true, startsAt: true, hostUserId: true, totalCourtFeeKrw: true } });
+  for (const match of matches) await reconcileCourtMatch(prisma, match.id);
+  const applications = await prisma.matchApplication.findMany({ where: { applicantUserId: userId, match: { courtSource: "PARTNER_COURT" } }, select: { ...applicationSelect, matchId: true } });
+  return { items: matches.map((m) => {
+    const a = applications.find((a) => a.matchId === m.id);
+    return { id: m.id, title: m.title, startsAt: m.startsAt.toISOString(), isHost: m.hostUserId === userId, application: a ? toApplication(a, m.totalCourtFeeKrw ?? 0) : null };
+  }) };
+}
+export type MyCourtTransactions = Awaited<ReturnType<typeof getMyCourtTransactions>>;

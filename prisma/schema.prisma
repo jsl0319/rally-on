@@ -313,6 +313,8 @@ model User {
   courtReceiptRecords                CourtReceiptRecord[]
   courtRefundAttempts                CourtRefundAttempt[]
   courtRefundEvents                  CourtRefundEvent[]
+  assignedCourtHandoffs CourtTransactionHandoff[] @relation("CourtHandoffAssignee")
+  courtHandoffEvents CourtTransactionHandoffEvent[]
 
   @@map("users")
 }
@@ -479,6 +481,8 @@ model SupportInquiryMessage {
   authorUserId    String                   @map("author_user_id") @db.Uuid
   clientRequestId String                   @map("client_request_id") @db.Uuid
   action String @default("REPLY") @db.VarChar(32)
+  previousAssigneeUserId String? @map("previous_assignee_user_id") @db.Uuid
+  nextAssigneeUserId String? @map("next_assignee_user_id") @db.Uuid
   visibility      SupportMessageVisibility
   body            String                   @db.VarChar(2000)
   createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -542,6 +546,7 @@ model Match {
   supplyNoticeRecipients MatchSupplyNoticeRecipient[]
   conversation MatchConversation?
   supportInquiries SupportInquiry[]
+  transactionHandoff CourtTransactionHandoff?
 
   @@unique([hostUserId, clientRequestId])
   @@index([status, startsAt])
@@ -1106,4 +1111,33 @@ model OperatorApplicationVerificationAttempt {
 
   @@index([applicationId, attemptedAt(sort: Desc)])
   @@map("operator_application_verification_attempts")
+}
+
+// Original responsibility stays on Match.hostUserId; only residual work is assigned.
+model CourtTransactionHandoff {
+  id                String                         @id @default(uuid()) @db.Uuid
+  matchId           String                         @unique @map("match_id") @db.Uuid
+  assigneeUserId    String?                        @map("assignee_user_id") @db.Uuid
+  version           Int                            @default(1)
+  createdAt         DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
+  match             Match                          @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  assignee          User?                          @relation("CourtHandoffAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
+  events            CourtTransactionHandoffEvent[]
+
+  @@map("court_transaction_handoffs")
+}
+
+model CourtTransactionHandoffEvent {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  handoffId              String                  @map("handoff_id") @db.Uuid
+  actorUserId            String                  @map("actor_user_id") @db.Uuid
+  previousAssigneeUserId String?                 @map("previous_assignee_user_id") @db.Uuid
+  clientRequestId        String                  @map("client_request_id") @db.Uuid
+  note                   String                  @db.VarChar(500)
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  handoff                CourtTransactionHandoff @relation(fields: [handoffId], references: [id], onDelete: Restrict)
+  actor                  User                    @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([handoffId, clientRequestId])
+  @@map("court_transaction_handoff_events")
 }

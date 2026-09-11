@@ -37,6 +37,7 @@ function courtMatch(overrides: Record<string, unknown> = {}, applications = [app
   return {
     id: "match-id",
     hostUserId: operatorId,
+    host: { status: "ACTIVE" },
     courtSource: "PARTNER_COURT",
     courtSlotId: "slot-id",
     title: "마포 테니스파크",
