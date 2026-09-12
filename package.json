@@ -22,6 +22,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:e2e": "DATABASE_URL_UNPOOLED=\"$E2E_DATABASE_URL\" DATABASE_URL=\"$E2E_DATABASE_URL\" prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "role:reviewer": "tsx prisma/grant-internal-reviewer.ts",
     "db:seed:m3": "tsx prisma/seed-m3-matches.ts",
     "db:seed:announcements": "tsx prisma/seed-announcements.ts",
     "db:seed:court-match": "tsx prisma/seed-court-match.ts",
