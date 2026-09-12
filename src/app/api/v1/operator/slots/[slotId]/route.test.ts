@@ -23,7 +23,7 @@ const validBody = {
   endsAt: "2030-01-02T03:00:00.000Z",
   priceKrw: 40_000,
   maxParticipantCount: 4,
-  minParticipantCount: 2,
+  minParticipantCount: 4,
   gameType: "MIXED_DOUBLES",
   maleCapacity: 2,
   femaleCapacity: 2,

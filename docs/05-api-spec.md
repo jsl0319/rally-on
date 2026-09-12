@@ -1480,6 +1480,7 @@ POST /api/v1/court-match-applications/{id}/receipt            운영자 실제 �
 POST /api/v1/court-match-applications/{id}/refund/start       운영자 환불 처리 시작
 POST /api/v1/court-match-applications/{id}/refund             운영자 송금 결과·정정
 GET  /api/v1/operator/court-matches/{matchId}                 운영자 신청 목록
+POST /api/v1/operator/court-matches/{matchId}/composition-cancel  구성 부족 제공 불가 취소
 
 PUT  /api/v1/operator/courts/{courtId}/settlement-account     운영자 입금 계좌
 ```
@@ -1871,3 +1872,20 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 탈퇴 POST는 본인 GET 미리보기의 `{token}`을 요구하며 변경된 상태/반환액은 `WITHDRAWAL_PREVIEW_CHANGED` 409로 재확인한다. 비활성 계정은 일반 인증 API에서 계속 403이며 `/api/v1/me/transactions`와 그 문의 경로, 본인 신청의 refund-account에만 별도 인증을 적용한다. 내부 `/api/internal/court-handoffs` 및 `/api/internal/court-handoff-applications`는 DB의 현재 INTERNAL_REVIEWER 역할과 해당 건 배정을 확인하고, 원래 운영자 권한을 가장하지 않는다.
 
 상세 경로·입력·권한·재요청 계약은 [03-10 §5](03-10-account-transaction-continuity.md#5-데이터api)를 따른다.
+
+
+## 경기 구성 판정·제공 불가 취소 (2026-09-12)
+
+[03-11](03-11-court-match-composition.md)을 따른다. 새 Slot 초안 입력 및 최초 공개는 혼복/남복/여복 최소 4명, 기타 최소 2명, 혼복 남녀 정원 각각 2명 이상을 검증한다. 잘못된 입력은 422 VALIDATION_FAILED, 과거 초안의 최초 공개 검증 실패는 409 COURT_COMPOSITION_INVALID다. 이미 공개된 Slot/Match에는 적용하지 않는다.
+
+참가자 participation과 운영자 상세는 `composition`을 반환한다: `enabled`, `phase`(LEGACY/BEFORE_JUDGEMENT/PASSED/ACTION_REQUIRED/STARTED/CANCELLED), `passedAt`, `required`/`counts`/`missing`(total·male·female), `requirementLabel`, `missingLabel`, `ready`. LEGACY의 계산 값은 새로운 진행 조건으로 사용하지 않는다. `lateConfirmationDeadline`은 추가 모집 승인자의 최종 대조 기한(T-30분)이다. 운영자 상세는 Match의 `version`, `canCancelForComposition`을 함께 반환한다. `/operator/slots`의 `actions.compositionNeedsAction`은 구성 확인이 필요한 경기를 운영자 홈과 시간 관리에서 찾도록 한다.
+
+`POST /api/v1/operator/court-matches/{matchId}/composition-cancel`
+
+- 본문: `{ expectedVersion: 양의 정수, clientRequestId: UUID, note: 10~450자 확인 근거 }`.
+- ACTIVE인 실제 Match 모집자이면서 연결 코트 운영자 본인에게만 허용한다. 다른 운영자·일반 회원은 403, 비로그인은 401.
+- Match 행 잠금 아래 재검증: 새 정책 버전 1, 최초 진행 판정 통과, 현재 구성 부족, OPEN/CLOSED, 시작 전, 예상 버전 일치.
+- 구성이 회복됐거나 상태·버전·시각이 달라졌으면 409 COMPOSITION_CANCEL_CONFLICT. 최초 자동 판정에서 이미 취소되면 409 MATCH_CANCELLED(자동 취소는 커밋).
+- 성공은 `{ id, status: "CANCELLED" }`. 감사 기록 1건·현재 남은 신청 취소·전액 반환 의무·채팅 읽기 전용·참가자 취소 안내를 같은 트랜잭션에서 기록한다.
+- 같은 대상·처리자·clientRequestId·근거의 재시도는 성공 응답을 재사용한다. 다른 취소 요청은 409. 이전 자발적 취소 및 PROCESSING/REVIEW 송금 금액·계좌는 변경하지 않는다. 자동 송금 기능은 없다.
+- Slot의 공급 상태를 바꾸거나 시설 사고로 기록하지 않는다. 연결 Match의 취소 상태가 상세에 표시되며 자동 재공개되지 않는다.

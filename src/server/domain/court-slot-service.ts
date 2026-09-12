@@ -5,6 +5,8 @@ import type { CourtSlotStatus, MatchStatus, PrismaClient } from "@/generated/pri
 import { DomainError } from "@/server/domain/profile-service";
 import { purposeLabels } from "@/server/domain/profile";
 import { gameTypeLabels } from "@/matches/game-type";
+import { courtCompositionIssues, courtCompositionPolicyVersion } from "@/matches/court-composition";
+import { describeCourtComposition } from "./court-match-composition";
 import { courtMoneySummary } from "./court-match-money";
 import { makeConversationReadOnly } from "@/server/domain/match-chat-service";
 import { canAcceptCourtApplication, seatHoldingStatuses } from "./court-match";
@@ -411,22 +413,30 @@ export async function createCourtSlot(prisma: PrismaClient, viewer: { id: string
  * 이 값이 없으면 운영자는 알림을 놓쳤을 때 코트 매칭을 하나씩 열어봐야 한다.
  */
 async function getOperatorActionCounts(prisma: PrismaClient, matchIds: string[]) {
-  const counts = new Map<string, { pendingApproval: number; depositToConfirm: number; refundToComplete: number; confirmed: number }>();
+  const counts = new Map<string, { pendingApproval: number; depositToConfirm: number; refundToComplete: number; confirmed: number; compositionNeedsAction: boolean }>();
   if (matchIds.length === 0) return counts;
 
   const applications = await prisma.matchApplication.findMany({
     where: { matchId: { in: matchIds } },
-    select: { matchId: true, status: true, depositClaimedAt: true, confirmedAt: true, refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, receivedAmountKrw: true, legacyRefundPaidKrw: true, refundAttempts: { select: { status: true, amountKrw: true } }, match: { select: { totalCourtFeeKrw: true } } },
+    select: { matchId: true, applicantGender: true, status: true, depositClaimedAt: true, confirmedAt: true, refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, receivedAmountKrw: true, legacyRefundPaidKrw: true, refundAttempts: { select: { status: true, amountKrw: true } }, match: { select: { totalCourtFeeKrw: true, status: true, startsAt: true, gameType: true, courtCompositionPolicyVersion: true, courtCompositionPassedAt: true, courtSlot: { select: { minParticipantCount: true } } } } },
   });
+  const compositions = new Map<string, typeof applications>();
   for (const application of applications) {
+    const group = compositions.get(application.matchId) ?? [];
+    group.push(application);
+    compositions.set(application.matchId, group);
     const entry = counts.get(application.matchId)
-      ?? { pendingApproval: 0, depositToConfirm: 0, refundToComplete: 0, confirmed: 0 };
+      ?? { pendingApproval: 0, depositToConfirm: 0, refundToComplete: 0, confirmed: 0, compositionNeedsAction: false };
     if (application.status === "PENDING") entry.pendingApproval += 1;
     if (application.status === "ACCEPTED" && application.depositClaimedAt) entry.depositToConfirm += 1;
     if (application.status === "CONFIRMED") entry.confirmed += 1;
     // 환불 대기 중이면서 참가자가 계좌까지 넣은 건만 운영자가 지금 처리할 수 있다.
     if (courtMoneySummary(application, application.match.totalCourtFeeKrw ?? 0).outstandingKrw > 0 && application.refundRequestedAt) entry.refundToComplete += 1;
     counts.set(application.matchId, entry);
+  }
+  const now = new Date();
+  for (const [id, group] of compositions) {
+    counts.get(id)!.compositionNeedsAction = describeCourtComposition({ ...group[0].match, applications: group }, now).phase === "ACTION_REQUIRED";
   }
   return counts;
 }
@@ -456,7 +466,7 @@ export async function getMyCourtSlots(prisma: PrismaClient, viewer: { id: string
     items: slots.map((slot) => ({
       ...toCourtSlotView(slot, now),
       actions: (slot.match && actionCounts.get(slot.match.id))
-        || { pendingApproval: 0, depositToConfirm: 0, refundToComplete: 0, confirmed: 0 },
+        || { pendingApproval: 0, depositToConfirm: 0, refundToComplete: 0, confirmed: 0, compositionNeedsAction: false },
     })),
     supplyRestriction: restriction
       ? { active: true, triggeredAt: restriction.triggeredAt.toISOString(), reasonCode: restriction.reasonCode }
@@ -543,6 +553,8 @@ async function transitionSlot(
     if (slot.status !== "DRAFT" || slot.visibility !== "PRIVATE") {
       throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "비공개 초안 시간대만 공개할 수 있어요.");
     }
+    const compositionIssue = courtCompositionIssues(slot)[0];
+    if (compositionIssue) throw new DomainError("COURT_COMPOSITION_INVALID", 409, compositionIssue.message);
     if (slot.startsAt <= new Date()) {
       throw new DomainError("COURT_SLOT_ALREADY_STARTED", 409, "이미 시작된 시간대는 공개할 수 없어요.");
     }
@@ -619,6 +631,7 @@ async function transitionSlot(
           maleRecruitCount: slot.maleCapacity,
           femaleRecruitCount: slot.femaleCapacity,
           gameType: slot.gameType,
+          courtCompositionPolicyVersion,
           partnerPreference: "COMPLETE_BEGINNER_WELCOME",
           totalCourtFeeKrw: slot.priceKrw,
           settlementBank: court.settlementBank,

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { activeGameTypes } from "@/matches/game-type";
-import { needsGenderQuota } from "@/matches/recruitment";
+import { courtCompositionIssues } from "@/matches/court-composition";
 
 const isoDateTimeSchema = z.string().datetime({ offset: true });
 
@@ -52,18 +52,8 @@ export const courtSlotCreateInputSchema = z.object({
     context.addIssue({ code: "custom", path: ["minParticipantCount"], message: "최소 인원은 모집 정원보다 많을 수 없어요." });
   }
 
-  const male = input.maleCapacity;
-  const female = input.femaleCapacity;
-  if (male != null || female != null || needsGenderQuota(input.gameType)) {
-    if (male == null || female == null || male + female !== input.maxParticipantCount) {
-      context.addIssue({ code: "custom", path: ["maxParticipantCount"], message: "남자·여자 정원의 합계가 모집 정원과 같아야 해요." });
-    }
-    if (input.gameType === "MENS_DOUBLES" && female !== 0) {
-      context.addIssue({ code: "custom", path: ["femaleCapacity"], message: "남복은 남자 자리만 모집할 수 있어요." });
-    }
-    if (input.gameType === "WOMENS_DOUBLES" && male !== 0) {
-      context.addIssue({ code: "custom", path: ["maleCapacity"], message: "여복은 여자 자리만 모집할 수 있어요." });
-    }
+  for (const issue of courtCompositionIssues(input)) {
+    context.addIssue({ code: "custom", path: [issue.path], message: issue.message });
   }
 });
 

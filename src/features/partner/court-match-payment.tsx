@@ -72,6 +72,7 @@ export function CourtMatchPayment({ participation, onRefresh }: { participation:
     {participation.cancellation ? <div className="mt-5 rounded-2xl border border-slate-100 p-4">
       {cancelOpen ? <div>
         <p className="text-sm font-semibold">참가를 취소할까요?</p>
+        {participation.composition.phase === "ACTION_REQUIRED" ? <p className="mt-2 rounded-xl bg-amber-50 p-3 text-sm leading-6">경기 구성 문제는 운영자에게 확인해 주세요. 아래 버튼은 본인 사유의 취소예요. 운영자가 제공 불가로 취소하는 경우에는 실제 입금액을 전액 반환해요.</p> : null}
         <p className="mt-2 text-sm leading-6 text-slate-600">
           {participation.cancellation.refundAmountKrw > 0
             ? <>환불 예정 금액은 <strong className="font-semibold">{participation.cancellation.refundAmountKrw.toLocaleString("ko-KR")}원</strong>이에요. 취소한 뒤 환불받을 계좌를 입력하면 운영자가 보내요.</>

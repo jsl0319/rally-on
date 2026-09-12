@@ -1,3 +1,4 @@
+import { checkCourtComposition, countCourtComposition, courtCompositionPolicyVersion } from "@/matches/court-composition";
 import { Prisma } from "@/generated/prisma/client";
 import type { PrismaClient } from "@/generated/prisma/client";
 
@@ -64,6 +65,10 @@ export const courtMatchSelect = {
   status: true,
   startsAt: true,
   courtSource: true,
+  gameType: true,
+  courtCompositionPolicyVersion: true,
+  courtCompositionPassedAt: true,
+  courtCompositionSnapshot: true,
   totalCourtFeeKrw: true,
   recruitCount: true,
   maleRecruitCount: true,
@@ -519,12 +524,29 @@ async function expireOverdueDeposits(transaction: Transaction, matchId: string, 
 
 async function cancelForShortfall(transaction: Transaction, match: CourtMatch, now: Date) {
   const minimum = match.courtSlot?.minParticipantCount ?? 0;
-  const confirmed = await countConfirmedAtJudgement(transaction, match.id, getJudgementAt(match.startsAt));
-  if (confirmed >= minimum) return false;
+  const currentPolicy = match.courtCompositionPolicyVersion === courtCompositionPolicyVersion;
+  // A passed judgement remains passed, including cancellation at the same millisecond.
+  if (currentPolicy && match.courtCompositionPassedAt) return false;
+  const judgementAt = getJudgementAt(match.startsAt);
+  if (currentPolicy) {
+    const applications = await transaction.matchApplication.findMany({
+      where: { matchId: match.id, confirmedAt: { lte: judgementAt }, OR: [
+        { status: "CONFIRMED" }, { status: "CANCELLED", participantCancelledAt: { gt: judgementAt } },
+      ] }, select: { applicantGender: true },
+    });
+    const composition = checkCourtComposition(match.gameType, minimum, countCourtComposition(applications));
+    if (composition.ready) {
+      await transaction.match.update({ where: { id: match.id }, data: {
+        courtCompositionPassedAt: now,
+        courtCompositionSnapshot: { gameType: match.gameType, judgementAt: judgementAt.toISOString(), required: composition.required, counts: composition.counts },
+      } });
+      return false;
+    }
+  } else if (await countConfirmedAtJudgement(transaction, match.id, judgementAt) >= minimum) return false;
 
   await transaction.match.update({
     where: { id: match.id },
-    data: { status: "CANCELLED", cancelledAt: now, cancellationReason: "인원이 모이지 않아 자동으로 취소됐어요." },
+    data: { status: "CANCELLED", cancelledAt: now, cancellationReason: currentPolicy ? "진행에 필요한 경기 구성이 모이지 않아 취소됐어요." : "인원이 모이지 않아 자동으로 취소됐어요." },
   });
   const affected = await transaction.matchApplication.findMany({
     where: { matchId: match.id, status: { in: ["PENDING", "ACCEPTED", "CONFIRMED"] } },

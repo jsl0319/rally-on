@@ -32,6 +32,10 @@ export function getConfirmationDueAt(paymentDueAt: Date) {
   return new Date(paymentDueAt.getTime() + confirmationWindowMinutes * 60_000);
 }
 
+export function getLateConfirmationDeadline(startsAt: Date) {
+  return getConfirmationDueAt(getPaymentDueAt(getJudgementAt(startsAt), startsAt));
+}
+
 export function canAcceptCourtApplication(now: Date, startsAt: Date) {
   return now < getApplicationDeadline(startsAt) && getPaymentDueAt(now, startsAt).getTime() - now.getTime() >= 30 * 60_000;
 }

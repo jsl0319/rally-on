@@ -13,7 +13,7 @@ const slotInput = courtSlotCreateInputSchema.parse({
   endsAt: futureEndsAt.toISOString(),
   priceKrw: 40_000,
   maxParticipantCount: 4,
-  minParticipantCount: 2,
+  minParticipantCount: 4,
   gameType: "MIXED_DOUBLES",
   maleCapacity: 2,
   femaleCapacity: 2,
@@ -50,7 +50,7 @@ function ownedSlot(applicationStatus: "DRAFT_ACCESS_GRANTED" | "PUBLISH_APPROVED
     endsAt: futureEndsAt,
     priceKrw: 40_000,
     maxParticipantCount: 4,
-    minParticipantCount: 2,
+    minParticipantCount: 4,
     gameType: "MIXED_DOUBLES",
     maleCapacity: 2,
     femaleCapacity: 2,
@@ -269,7 +269,7 @@ describe("Court Partner time supply authorization and state transitions", () => 
 
     const result = await getMyCourtSlots(prisma, viewer);
 
-    expect(result.items[0].actions).toEqual({ pendingApproval: 1, depositToConfirm: 1, refundToComplete: 1, confirmed: 1 });
+    expect(result.items[0].actions).toEqual({ pendingApproval: 1, depositToConfirm: 1, refundToComplete: 1, confirmed: 1, compositionNeedsAction: false });
   });
 
   it("keeps a blocked slot read-only even though a session is still linked", async () => {

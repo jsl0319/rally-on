@@ -1,7 +1,8 @@
+import { cancelCourtMatchForComposition } from "@/server/domain/court-match-composition-service";
 import { previewWithdrawal, withdrawAccount } from "@/server/domain/account-service";
 import { getMyCourtTransactions } from "@/server/domain/court-match-view";
 import { assertHandoffAccess, claimCourtHandoff, cancelHandedOffCourtMatch, listCourtHandoffs } from "@/server/domain/court-transaction-handoff";
-import { getPublicCourtSlots, publishCourtSlot } from "@/server/domain/court-slot-service";
+import { getMyCourtSlots, getPublicCourtSlots, publishCourtSlot } from "@/server/domain/court-slot-service";
 import { randomUUID } from "node:crypto";
 
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -84,6 +85,7 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     minParticipantCount?: number;
     maxParticipantCount?: number;
     genderQuota?: boolean;
+    compositionPolicyVersion?: number;
   };
 
   async function makeCourtMatch(operatorId: string, options: MatchOptions = {}) {
@@ -116,17 +118,18 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
         courtUnitId: unit.id, startsAt, endsAt, priceKrw: 36_000,
         maxParticipantCount: max, minParticipantCount: min,
         gameType: options.genderQuota ? "MIXED_DOUBLES" : "OTHER",
-        maleCapacity: options.genderQuota ? 1 : null, femaleCapacity: options.genderQuota ? 1 : null,
+        maleCapacity: options.genderQuota ? (options.compositionPolicyVersion === 1 ? max / 2 : 1) : null, femaleCapacity: options.genderQuota ? (options.compositionPolicyVersion === 1 ? max / 2 : 1) : null,
         approvalMode: options.approvalMode ?? "AUTO", visibility: "PUBLIC", status: "AVAILABLE",
         publishedAt: now, statusChangedAt: now,
       },
     });
     const match = await prisma.match.create({
       data: {
+        courtCompositionPolicyVersion: options.compositionPolicyVersion ?? 0,
         hostUserId: operatorId, clientRequestId: slot.id, title: "DB 코트 매칭",
         startsAt, endsAt, courtSource: "PARTNER_COURT", courtSlotId: slot.id,
         recruitCount: max,
-        maleRecruitCount: options.genderQuota ? 1 : null, femaleRecruitCount: options.genderQuota ? 1 : null,
+        maleRecruitCount: options.genderQuota ? (options.compositionPolicyVersion === 1 ? max / 2 : 1) : null, femaleRecruitCount: options.genderQuota ? (options.compositionPolicyVersion === 1 ? max / 2 : 1) : null,
         gameType: options.genderQuota ? "MIXED_DOUBLES" : "OTHER",
         partnerPreference: "COMPLETE_BEGINNER_WELCOME", totalCourtFeeKrw: 36_000,
         settlementBank: "DB은행", settlementAccountNumber: "111-222-333", settlementAccountHolder: "DB테니스장",
@@ -150,6 +153,142 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
   }
 
   const errorCode = (caught: unknown) => (caught as { code?: string }).code;
+
+  // R05: 새 공개 경기의 실제 구성, 통과 이력, 제공 불가 취소.
+  async function compositionFixture(genders: Array<"MALE" | "FEMALE"> = ["MALE", "MALE", "FEMALE", "FEMALE"]) {
+    const operator = await makeUser("구성 운영자", "MALE");
+    const m = await makeCourtMatch(operator.id, { startsAt: new Date(Date.now() + 2 * HOUR), minParticipantCount: 4, maxParticipantCount: 8, genderQuota: true, compositionPolicyVersion: 1 });
+    const beforeJudgement = new Date(getJudgementAt(m.startsAt).getTime() - HOUR);
+    const members = [];
+    for (const gender of genders) {
+      const user = await makeUser(`구성 참가자${members.length}`, gender);
+      const a = await fillSeat(m.matchId, user, "CONFIRMED");
+      await prisma.matchApplication.update({ where: { id: a.id }, data: { confirmedAt: beforeJudgement, receivedAmountKrw: 36000, lastReceivedAt: beforeJudgement, feeReceivedAt: beforeJudgement } });
+      members.push({ user, id: a.id });
+    }
+    return { ...m, operator, members };
+  }
+  async function compositionCancelInput(matchId: string) {
+    const m = await prisma.match.findUniqueOrThrow({ where: { id: matchId } });
+    return { expectedVersion: m.version, clientRequestId: randomUUID(), note: "추가 참가자와 연락했으나 실제 경기 구성 보충이 불가능함을 확인했습니다." };
+  }
+
+  it("새 공개는 정책 버전을 남기며 기존 공개 경기의 인원 설정은 바꾸지 않는다", async () => {
+    const op = await makeUser("공개 운영자", "MALE");
+    const old = await makeCourtMatch(op.id, { genderQuota: true, minParticipantCount: 1 });
+    await reconcileCourtMatch(prisma, old.matchId);
+    expect(await prisma.match.findUnique({ where: { id: old.matchId } })).toMatchObject({ courtCompositionPolicyVersion: 0, maleRecruitCount: 1 });
+    // 과거에 만들어 두었던 미공개 슬롯의 최초 공개도 서버에서 재검증한다.
+    await prisma.match.delete({ where: { id: old.matchId } });
+    await prisma.courtSlot.update({ where: { id: old.slotId }, data: { status: "DRAFT", visibility: "PRIVATE", publishedAt: null } });
+    await expect(publishCourtSlot(prisma, op, old.slotId)).rejects.toMatchObject({ code: "COURT_COMPOSITION_INVALID" });
+    expect(await prisma.courtSlot.findUnique({ where: { id: old.slotId } })).toMatchObject({ status: "DRAFT", visibility: "PRIVATE" });
+    expect(await prisma.match.count()).toBe(0);
+    await prisma.courtSlot.update({ where: { id: old.slotId }, data: { minParticipantCount: 4, maxParticipantCount: 4, maleCapacity: 2, femaleCapacity: 2 } });
+    await publishCourtSlot(prisma, op, old.slotId);
+    expect(await prisma.match.findFirst({ where: { courtSlotId: old.slotId } })).toMatchObject({ courtCompositionPolicyVersion: 1, maleRecruitCount: 2, femaleRecruitCount: 2 });
+  });
+
+  it("혼복은 총원만 충족해도 여자 확정이 없으면 진행 판정에서 취소한다", async () => {
+    const f = await compositionFixture(["MALE", "MALE", "MALE", "MALE"]);
+    await reconcileCourtMatch(prisma, f.matchId);
+    expect(await prisma.match.findUnique({ where: { id: f.matchId } })).toMatchObject({ status: "CANCELLED", courtCompositionPassedAt: null });
+    const view = await getCourtMatchParticipation(prisma, f.members[0].user.viewer, f.matchId);
+    expect(view.application).toMatchObject({ status: "CANCELLED", money: { availableKrw: 36000 } });
+  });
+
+  it("판정 통과 뒤 취소는 조치 필요로 표시하고 성별 구성을 보충하면 해제한다", async () => {
+    const f = await compositionFixture();
+    await reconcileCourtMatch(prisma, f.matchId);
+    const passed = await prisma.match.findUniqueOrThrow({ where: { id: f.matchId } });
+    expect(passed.courtCompositionSnapshot).toMatchObject({ counts: { total: 4, male: 2, female: 2 } });
+    expect(passed.courtCompositionPassedAt).not.toBeNull();
+    await cancelCourtMatchApplication(prisma, f.members[3].user, f.members[3].id);
+    await reconcileCourtMatch(prisma, f.matchId);
+    expect((await getOperatorCourtMatch(prisma, f.operator, f.matchId)).composition).toMatchObject({ phase: "ACTION_REQUIRED", counts: { total: 3, female: 1 } });
+    expect((await getMyCourtSlots(prisma, f.operator)).items[0].actions.compositionNeedsAction).toBe(true);
+    const replacement = await makeUser("보충 여자 참가자", "FEMALE");
+    const a = await applyToCourtMatch(prisma, replacement.viewer, f.matchId);
+    await receiveAndConfirm(f.operator, a.id);
+    const view = await getOperatorCourtMatch(prisma, f.operator, f.matchId);
+    expect(view).toMatchObject({ composition: { phase: "PASSED" }, canCancelForComposition: false });
+    expect((await prisma.match.findUniqueOrThrow({ where: { id: f.matchId } })).courtCompositionPassedAt).toEqual(passed.courtCompositionPassedAt);
+    await expect(cancelCourtMatchForComposition(prisma, f.operator, f.matchId, await compositionCancelInput(f.matchId))).rejects.toMatchObject({ code: "COMPOSITION_CANCEL_CONFLICT" });
+  });
+
+  it("운영자 취소는 남은 실제 입금 전액을 반환 대상으로 하되 과거 자발적 취소·진행 중 송금은 보존한다", async () => {
+    const f = await compositionFixture();
+    await reconcileCourtMatch(prisma, f.matchId);
+    const leaver = f.members[3];
+    await cancelCourtMatchApplication(prisma, leaver.user, leaver.id);
+    const earlier = await prisma.matchApplication.findUniqueOrThrow({ where: { id: leaver.id } });
+    const member = f.members[0];
+    await recordCourtReceipt(prisma, f.operator, member.id, { amountKrw: 48000, expectedVersion: 0, receivedAt: new Date().toISOString(), clientRequestId: randomUUID(), note: "초과 입금 내역을 대조했습니다." });
+    await submitCourtMatchRefundAccount(prisma, member.user, member.id, { bank: "고정은행", accountNumber: "12345-678", accountHolder: "참가자" });
+    const row = await prisma.matchApplication.findUniqueOrThrow({ where: { id: member.id } });
+    const attempt = await startCourtRefund(prisma, f.operator, member.id, { amountKrw: 12000, accountVersion: row.refundAccountVersion, clientRequestId: randomUUID() });
+    const outsider = await makeUser("다른 운영자", "MALE");
+    const input = await compositionCancelInput(f.matchId);
+    await expect(cancelCourtMatchForComposition(prisma, outsider, f.matchId, input)).rejects.toMatchObject({ status: 403 });
+    await expect(cancelCourtMatchForComposition(prisma, f.operator, f.matchId, { ...input, expectedVersion: input.expectedVersion + 1 })).rejects.toMatchObject({ code: "COMPOSITION_CANCEL_CONFLICT" });
+    await cancelCourtMatchForComposition(prisma, f.operator, f.matchId, input);
+    await cancelCourtMatchForComposition(prisma, f.operator, f.matchId, input);
+    await expect(cancelCourtMatchForComposition(prisma, f.operator, f.matchId, { ...input, clientRequestId: randomUUID() })).rejects.toMatchObject({ code: "COMPOSITION_CANCEL_CONFLICT" });
+    expect(await prisma.courtMatchCompositionCancellation.count({ where: { matchId: f.matchId } })).toBe(1);
+    expect(await prisma.courtMatchCompositionCancellation.findUnique({ where: { matchId: f.matchId } })).toMatchObject({ actorUserId: f.operator.id, note: input.note, compositionSnapshot: { counts: { total: 3, male: 2, female: 1 } } });
+    expect(await prisma.matchApplication.findUnique({ where: { id: leaver.id } })).toMatchObject({ participantCancelledAt: earlier.participantCancelledAt, refundAmountKrw: earlier.refundAmountKrw });
+    expect(await prisma.courtRefundAttempt.findUnique({ where: { id: attempt.id } })).toMatchObject({ status: "PROCESSING", amountKrw: 12000, bank: "고정은행", accountNumber: "12345-678" });
+    const view = await getCourtMatchParticipation(prisma, member.user.viewer, f.matchId);
+    expect(view.application).toMatchObject({ status: "CANCELLED", money: { availableKrw: 36000, reservedKrw: 12000 } });
+    expect(view.chatHref).toBeNull();
+    expect((await getCourtMatchParticipation(prisma, f.members[1].user.viewer, f.matchId)).application).toMatchObject({ money: { availableKrw: 36000 } });
+  });
+
+  it("신청 마감 후에도 기존 승인자는 대조 기한 안에 구성을 보충할 수 있다", async () => {
+    const f = await compositionFixture();
+    await reconcileCourtMatch(prisma, f.matchId);
+    await cancelCourtMatchApplication(prisma, f.members[3].user, f.members[3].id);
+    const replacement = await makeUser("기존 승인 여자", "FEMALE");
+    const a = await applyToCourtMatch(prisma, replacement.viewer, f.matchId);
+    const at = new Date(Date.now() + 40 * 60000); // 현재 시각을 T-80까지 이동, 입금 T-60 / 확인 T-30
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(at);
+    try {
+      await receiveAndConfirm(f.operator, a.id);
+      const view = await getOperatorCourtMatch(prisma, f.operator, f.matchId);
+      expect(view).toMatchObject({ status: "CLOSED", composition: { phase: "PASSED" } });
+      const newcomer = await makeUser("기한 후 신청자", "FEMALE");
+      await expect(applyToCourtMatch(prisma, newcomer.viewer, f.matchId)).rejects.toMatchObject({ code: "COURT_MATCH_APPLICATION_CLOSED" });
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("입금 확인과 제공 불가 취소가 동시에 와도 구성 회복과 취소가 함께 확정되지 않는다", async () => {
+    const f = await compositionFixture();
+    await reconcileCourtMatch(prisma, f.matchId);
+    await cancelCourtMatchApplication(prisma, f.members[3].user, f.members[3].id);
+    const replacement = await makeUser("동시 보충 여자", "FEMALE");
+    const a = await applyToCourtMatch(prisma, replacement.viewer, f.matchId);
+    await recordCourtReceipt(prisma, f.operator, a.id, { amountKrw: 36000, expectedVersion: 0, receivedAt: new Date().toISOString(), clientRequestId: randomUUID(), note: "보충 참가자 입금 대조" });
+    const input = await compositionCancelInput(f.matchId);
+    const results = await whileMatchLocked(f.matchId, () => [confirmCourtMatchDeposit(prisma, f.operator, a.id), cancelCourtMatchForComposition(prisma, f.operator, f.matchId, input)]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const m = await prisma.match.findUniqueOrThrow({ where: { id: f.matchId } });
+    const app = await prisma.matchApplication.findUniqueOrThrow({ where: { id: a.id } });
+    expect(["OPEN:CONFIRMED", "CANCELLED:CANCELLED"]).toContain(`${m.status}:${app.status}`);
+    expect(await prisma.courtMatchCompositionCancellation.count()).toBe(m.status === "CANCELLED" ? 1 : 0);
+  });
+
+  it("기존 정책 경기와 시작 시각이 지난 경기는 구성 부족 취소로 변경할 수 없다", async () => {
+    const f = await compositionFixture();
+    await reconcileCourtMatch(prisma, f.matchId);
+    await cancelCourtMatchApplication(prisma, f.members[3].user, f.members[3].id);
+    const input = await compositionCancelInput(f.matchId);
+    await prisma.match.update({ where: { id: f.matchId }, data: { courtCompositionPolicyVersion: 0 } });
+    await expect(cancelCourtMatchForComposition(prisma, f.operator, f.matchId, input)).rejects.toMatchObject({ code: "COMPOSITION_CANCEL_CONFLICT" });
+    await prisma.match.update({ where: { id: f.matchId }, data: { courtCompositionPolicyVersion: 1 } });
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(f.startsAt.getTime() + 1));
+    try { await expect(cancelCourtMatchForComposition(prisma, f.operator, f.matchId, input)).rejects.toMatchObject({ code: "COMPOSITION_CANCEL_CONFLICT" }); }
+    finally { vi.useRealTimers(); }
+  });
 
   // ── §6 상태·권한 ─────────────────────────────────────────────
 

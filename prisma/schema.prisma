@@ -315,6 +315,7 @@ model User {
   courtRefundEvents                  CourtRefundEvent[]
   assignedCourtHandoffs CourtTransactionHandoff[] @relation("CourtHandoffAssignee")
   courtHandoffEvents CourtTransactionHandoffEvent[]
+  courtCompositionCancellations CourtMatchCompositionCancellation[]
 
   @@map("users")
 }
@@ -529,6 +530,10 @@ model Match {
   maleRecruitCount     Int?              @map("male_recruit_count")
   femaleRecruitCount   Int?              @map("female_recruit_count")
   gameType             MatchGameType?    @map("game_type")
+  /// 0 preserves previously published matches; 1 validates the advertised game composition.
+  courtCompositionPolicyVersion Int @default(0) @map("court_composition_policy_version")
+  courtCompositionPassedAt DateTime? @map("court_composition_passed_at") @db.Timestamptz(6)
+  courtCompositionSnapshot Json? @map("court_composition_snapshot") @db.JsonB
   settlementBank       String?           @map("settlement_bank") @db.VarChar(50)
   settlementAccountNumber String?        @map("settlement_account_number") @db.VarChar(40)
   settlementAccountHolder String?        @map("settlement_account_holder") @db.VarChar(50)
@@ -552,11 +557,27 @@ model Match {
   conversation MatchConversation?
   supportInquiries SupportInquiry[]
   transactionHandoff CourtTransactionHandoff?
+  compositionCancellation CourtMatchCompositionCancellation?
 
   @@unique([hostUserId, clientRequestId])
   @@index([status, startsAt])
   @@index([hostUserId, status, startsAt])
   @@map("matches")
+}
+
+model CourtMatchCompositionCancellation {
+  id String @id @default(uuid()) @db.Uuid
+  matchId String @unique @map("match_id") @db.Uuid
+  actorUserId String @map("actor_user_id") @db.Uuid
+  clientRequestId String @map("client_request_id") @db.Uuid
+  note String @db.VarChar(500)
+  compositionSnapshot Json @map("composition_snapshot") @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@map("court_match_composition_cancellations")
 }
 
 model CourtImageUpload {

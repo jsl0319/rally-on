@@ -1328,3 +1328,20 @@ Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_
 `CourtTransactionHandoff`는 Match당 하나의 잔여 업무 배정이며 `Match.hostUserId`를 바꾸지 않는다. `CourtTransactionHandoffEvent`에 실제 작성자·이전 담당자·요청 UUID·근거·시각을 저장한다. SupportInquiryMessage에는 이전·이후 담당자 참조값을 추가한다. 기존 영수·환불 원장의 실제 actorUserId와 PROCESSING/REVIEW 상태는 인계 뒤에도 유지한다. migration은 `20260911070000_account_transaction_continuity`다.
 
 상세 경로·입력·권한·재요청 계약은 [03-10 §5](03-10-account-transaction-continuity.md#5-데이터api)를 따른다.
+
+
+## 코트 매칭의 실제 경기 구성 (2026-09-12)
+
+[03-11](03-11-court-match-composition.md)의 R05 정책을 따른다. 마이그레이션은 `20260912030000_court_match_composition`이다.
+
+| 모델·필드 | 의미 |
+| --- | --- |
+| Match.courtCompositionPolicyVersion | 기본 0: 기존 공개 경기 유지. 새 운영자 공개만 1을 저장 |
+| Match.courtCompositionPassedAt | 시작 3시간 전 기준 최초 판정을 통과한 처리 시각 |
+| Match.courtCompositionSnapshot | gameType, judgementAt, required/당시 counts(total·male·female). 최초 통과 후 덮어쓰지 않음 |
+| CourtMatchCompositionCancellation | Match당 1건의 제공 불가 취소 감사 기록 |
+| matchId / actorUserId | 실제 대상·처리자. 외래키 삭제 제한, matchId 유일 |
+| clientRequestId / note / createdAt | UUID 재시도 식별자, 10~450자 확인 근거(API), 처리 시각 |
+| compositionSnapshot | 취소 시 정책 버전·최초 통과 시각·필요 구성·현재 확정 구성 |
+
+현재 구성은 신청 당시 `applicantGender`와 현재 `CONFIRMED`로 계산한다. 현재 구성의 상태 컬럼은 추가하지 않는다. 최초 통과만 영속 기록하고 현재 구성은 조회 때 계산하므로 보충 시 자동으로 조치 필요 표시가 해제된다. 기존 신청의 자발적 취소 환불액·입금 원장·송금 시도는 수정하지 않는다. 전체 취소 당시 남은 신청만 CANCELLED 및 refundAmountKrw=null(실제 입금 전액 기준)로 전환한다.

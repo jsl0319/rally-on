@@ -1,8 +1,9 @@
+import { describeCourtComposition } from "./court-match-composition";
 import { assertHandoffAccess } from "./court-transaction-handoff";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { DomainError } from "./profile-service";
 import { reconcileCourtMatch } from "./court-match-service";
-import { getApplicationDeadline, getJudgementAt, getRefundAmountKrw, getRefundPercent, canAcceptCourtApplication, seatHoldingStatuses } from "./court-match";
+import { getApplicationDeadline, getLateConfirmationDeadline, getJudgementAt, getRefundAmountKrw, getRefundPercent, canAcceptCourtApplication, seatHoldingStatuses } from "./court-match";
 
 import { courtMoneySummary } from "./court-match-money";
 
@@ -76,7 +77,9 @@ function summary(match: Match) {
   const seats = match.applications.filter((a) => seatHoldingStatuses.some((s) => s === a.status));
   const confirmed = match.applications.filter((a) => a.status === "CONFIRMED");
   return {
-    id: match.id, slotId: match.courtSlotId, status: match.status,
+    id: match.id, slotId: match.courtSlotId, status: match.status, version: match.version,
+    composition: describeCourtComposition(match, new Date()),
+    lateConfirmationDeadline: getLateConfirmationDeadline(match.startsAt).toISOString(),
     title: match.courtSlot?.courtUnit.court.name ?? match.title,
     startsAt: match.startsAt.toISOString(), endsAt: match.endsAt.toISOString(),
     guestFeeKrw: match.totalCourtFeeKrw ?? 0,
@@ -152,6 +155,7 @@ export async function getOperatorCourtMatch(prisma: PrismaClient, viewer: { id: 
   const showProfile = !handoff && match.courtSlot?.approvalMode === "OPERATOR";
   return {
     ...summary(match),
+    canCancelForComposition: !handoff && match.host.status === "ACTIVE" && ["OPEN", "CLOSED"].includes(match.status) && describeCourtComposition(match, new Date()).phase === "ACTION_REQUIRED",
     applications: match.applications.map((application) => ({
       ...toApplication(application, match.totalCourtFeeKrw ?? 0, true),
       ...(showProfile ? { profileSnapshot: application.profileSnapshot, message: application.message } : {}),

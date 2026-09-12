@@ -13,6 +13,8 @@ import type { OperatorCourtMatch } from "@/server/domain/court-match-view";
 import { apiMessage, formatStatusChangedAt } from "./partner-session";
 
 import { OperatorMoneyPanel } from "./operator-money-panel";
+import { CourtCompositionNotice } from "./court-composition-notice";
+import { CourtCompositionCancel } from "./court-composition-cancel";
 
 type Application = OperatorCourtMatch["applications"][number] & {
   profileSnapshot?: unknown;
@@ -107,11 +109,13 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
           <Stat label="자리 잡음" value={`${match.seatCount}/${match.maxParticipantCount}명`} />
           <Stat label="최소 인원" value={`${match.minParticipantCount}명`} />
         </div>
-        {match.status === "OPEN" ? <p className={`mt-4 rounded-2xl px-4 py-3 text-sm leading-6 ${shortfall > 0 ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-600"}`}>
+        {!match.composition.enabled && match.status === "OPEN" ? <p className={`mt-4 rounded-2xl px-4 py-3 text-sm leading-6 ${shortfall > 0 ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-600"}`}>
           {shortfall > 0
             ? `${formatStatusChangedAt(match.judgementAt)}까지 입금 확인 인원이 ${shortfall}명 더 필요해요. 못 채우면 자동으로 취소돼요.`
             : `최소 인원을 채웠어요. ${formatStatusChangedAt(match.applicationDeadline)}까지 추가 신청을 받을 수 있어요.`}
         </p> : null}
+        <CourtCompositionNotice match={match} operator />
+        <CourtCompositionCancel match={match} refresh={load} />
         {match.cancellationReason ? <p className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700">{match.cancellationReason}</p> : null}
         {actionError ? <p className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700" role="alert">{actionError}</p> : null}
       </section>
