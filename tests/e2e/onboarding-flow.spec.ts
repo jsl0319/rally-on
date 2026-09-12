@@ -63,8 +63,8 @@ test("가입 직후 온보딩을 마치면 홈에 도착한다", async ({ browse
   await page.getByRole("button", { name: "여자" }).click();
   await page.getByRole("button", { name: "프로필 완성하기" }).click();
 
-  await expect(page.getByRole("button", { name: "추천 매치 보기" })).toBeVisible({ timeout: 20_000 });
-  await page.getByRole("button", { name: "추천 매치 보기" }).click();
+  await expect(page.getByRole("button", { name: "추천 매칭 보기" })).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("button", { name: "추천 매칭 보기" }).click();
 
   // 여기서 막히면 신규 가입자는 서비스를 한 번도 보지 못한다.
   await expect(page.getByRole("heading", { name: "매칭 둘러보기" })).toBeVisible({ timeout: 15_000 });

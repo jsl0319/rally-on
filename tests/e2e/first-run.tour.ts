@@ -24,6 +24,21 @@ const newcomer = { id: "20000000-0000-4000-8000-000000000009", nickname: "새사
 let fixture: E2eFixture;
 /** 둘러볼 매칭이 하나도 없으면 목록 화면의 인상을 볼 수 없다. 공개 매칭을 만들어 둔다. */
 let browseTitle = "";
+let cancelledMatchId = "";
+
+/** 실제 신청이 남기는 스냅샷과 같은 모양. 라벨이 없으면 모집자 화면이 빈 상자가 된다. */
+const tourSnapshot = {
+  schemaVersion: 1,
+  profileVersion: 1,
+  gender: "MALE",
+  experienceRange: "MONTHS_6_TO_12",
+  experienceLabel: "6개월~1년",
+  rallyLevel: "SHORT_RALLY",
+  rallyLevelLabel: "몇 번씩 주고받을 수 있어요",
+  gameExperience: "KNOWS_RULES",
+  gameExperienceLabel: "규칙은 알고 있어요",
+  playPurposes: [{ code: "RALLY_PRACTICE", label: "랠리" }],
+};
 
 async function visit(page: Page, url: string) {
   // 이 앱은 배지와 채팅을 주기적으로 다시 불러온다. networkidle은 영영 오지 않는다.
@@ -91,12 +106,49 @@ test.beforeAll(async () => {
       purposes: { create: { purpose: "STROKE_PRACTICE" } },
     },
   });
+  // 취소된 매칭과 거절당한 신청도 화면에서 어떻게 보이는지 봐야 한다.
+  const cancelledStartsAt = new Date(Date.now() + 4 * day);
+  cancelledMatchId = (await prisma.match.create({
+    data: {
+      hostUserId: e2eUsers.host.id, clientRequestId: crypto.randomUUID(), title: "서울숲 테니스코트",
+      startsAt: cancelledStartsAt, endsAt: new Date(cancelledStartsAt.getTime() + 2 * 60 * 60 * 1000),
+      courtSource: "EXTERNAL_RESERVED", externalCourtName: "서울숲 테니스코트", externalCourtAddress: "서울시 성동구 뚝섬로 273",
+      recruitCount: 2, partnerPreference: "SIMILAR_LEVEL", totalCourtFeeKrw: 20_000,
+      status: "CANCELLED", cancelledAt: new Date(), cancellationReason: "코트 예약이 취소됐어요.",
+      purposes: { create: { purpose: "GAME" } },
+      // 취소된 매칭은 신청한 적 없는 사람에게는 일부러 보이지 않는다. 신청했던 사람의
+      // 눈으로 봐야 실제 화면이 나온다.
+      applications: {
+        create: {
+          applicantUserId: e2eUsers.applicant.id, applicantGender: "FEMALE",
+          status: "CANCELLED", cancelledAt: new Date(), profileSnapshot: tourSnapshot,
+        },
+      },
+    },
+  })).id;
+  const rejectedStartsAt = new Date(Date.now() + 2 * day);
+  const rejectedMatch = await prisma.match.create({
+    data: {
+      hostUserId: e2eUsers.host.id, clientRequestId: crypto.randomUUID(), title: "잠실 실내 테니스장",
+      startsAt: rejectedStartsAt, endsAt: new Date(rejectedStartsAt.getTime() + 2 * 60 * 60 * 1000),
+      courtSource: "EXTERNAL_RESERVED", externalCourtName: "잠실 실내 테니스장", externalCourtAddress: "서울시 송파구 올림픽로 25",
+      recruitCount: 1, partnerPreference: "GAME_CAPABLE", totalCourtFeeKrw: 18_000,
+      purposes: { create: { purpose: "GAME" } },
+    },
+  });
+  await prisma.matchApplication.create({
+    data: {
+      matchId: rejectedMatch.id, applicantUserId: e2eUsers.applicant.id, applicantGender: "FEMALE",
+      status: "REJECTED", decidedAt: new Date(), profileSnapshot: tourSnapshot,
+    },
+  });
+
   // 모집자 화면에 검토할 신청이 있어야 신청자 목록까지 볼 수 있다.
   await prisma.matchApplication.create({
     data: {
       matchId: browseMatch.id, applicantUserId: e2eUsers.outsider.id, applicantGender: "MALE",
       status: "PENDING", message: "초보인데 같이 쳐도 될까요? 천천히 배우고 있어요.",
-      profileSnapshot: { source: "tour" },
+      profileSnapshot: tourSnapshot,
     },
   });
 
@@ -155,10 +207,10 @@ test("2. 프로필이 없는 사람의 온보딩", async ({ browser }) => {
     await page.getByText("편하게 공 주고받기").click();
     await page.getByRole("button", { name: "여자" }).click();
     await page.getByRole("button", { name: "프로필 완성하기" }).click();
-    await page.getByRole("button", { name: "추천 매치 보기" }).waitFor({ timeout: 20_000 });
+    await page.getByRole("button", { name: "추천 매칭 보기" }).waitFor({ timeout: 20_000 });
   });
   await step(page, "09-첫-홈", async () => {
-    await page.getByRole("button", { name: "추천 매치 보기" }).click();
+    await page.getByRole("button", { name: "추천 매칭 보기" }).click();
     await page.getByRole("heading", { name: "매칭 둘러보기" }).waitFor({ timeout: 15_000 });
   });
   await context.close();
@@ -199,4 +251,38 @@ test("4. 매칭을 만드는 사람", async ({ browser }) => {
   await step(page, "21-채팅방", async () => { await visit(page, `/chats/${fixture.fullMatchId}`); });
   await step(page, "22-공지", async () => { await visit(page, "/notices"); });
   await context.close();
+});
+
+test("5. 아무것도 없는 사람이 보는 화면", async ({ browser }) => {
+  // 2번에서 온보딩을 마친 새 사용자. 신청도 매칭도 알림도 없다.
+  const context = await browser.newContext();
+  await signInAs(context, newcomer.id);
+  const page = await context.newPage();
+  await step(page, "23-빈-보낸신청", async () => { await visit(page, "/activity/sent"); });
+  await step(page, "24-빈-만든매칭", async () => { await visit(page, "/activity/received"); });
+  await step(page, "25-빈-알림", async () => { await visit(page, "/my/notifications"); });
+  await step(page, "26-없는-매칭-주소", async () => { await visit(page, "/matches/20000000-0000-4000-8000-000000000099"); });
+  await context.close();
+});
+
+test("6. 덜 다듬어졌을 화면", async ({ browser }) => {
+  const context = await browser.newContext();
+  await signInAs(context, e2eUsers.applicant.id);
+  const page = await context.newPage();
+  await step(page, "27-프로필-편집", async () => { await visit(page, "/my/profile"); });
+  await step(page, "28-문의-쓰기", async () => { await visit(page, "/support/inquiry"); });
+  await step(page, "29-취소된-매칭", async () => { await visit(page, `/matches/${cancelledMatchId}`); });
+  await context.close();
+
+  const hostContext = await browser.newContext();
+  await signInAs(hostContext, e2eUsers.host.id);
+  const hostPage = await hostContext.newPage();
+  await step(hostPage, "30-신청자-상세", async () => {
+    await visit(hostPage, "/activity/received");
+    await hostPage.getByRole("link", { name: /신청/ }).first().click();
+    await hostPage.waitForTimeout(1_200);
+    await hostPage.getByRole("link").filter({ hasText: /보기|상세|E2E외부인/ }).first().click();
+    await hostPage.waitForTimeout(1_200);
+  });
+  await hostContext.close();
 });

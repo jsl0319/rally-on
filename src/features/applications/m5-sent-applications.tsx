@@ -66,7 +66,7 @@ function nextStepMessage(status: string, matchStatus: string, wasAccepted = fals
   return ({
     PENDING: "모집자가 프로필을 확인하고 있어요.",
     ACCEPTED: "같이 치게 됐어요. 매칭 정보를 확인해 주세요.",
-    REJECTED: "이번에는 함께하기 어려워요. 다른 추천 매치를 찾아볼 수 있어요.",
+    REJECTED: "이번에는 함께하기 어려워요. 다른 매칭을 찾아볼 수 있어요.",
     WITHDRAWN: wasAccepted ? "참가를 취소했어요." : "신청을 철회했어요.",
     CANCELLED: matchStatus === "CANCELLED"
       ? "모집자가 매칭을 취소했어요."
@@ -140,7 +140,7 @@ function LoadError({ error, onRetry }: { error: string; onRetry: () => Promise<v
 }
 
 function EmptySentApplications() {
-  return <section className="mt-10 rounded-3xl border border-dashed border-[var(--tm-border-strong)] bg-white px-5 py-10 text-center"><p className="text-2xl">🎾</p><h2 className="mt-4 font-bold">아직 보낸 신청이 없어요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">마음에 드는 매치를 찾아 부담 없이 신청해 보세요.</p><Button as={Link} className="mt-5" href="/" size="medium">매치 찾아보기</Button></section>;
+  return <section className="mt-10 rounded-3xl border border-dashed border-[var(--tm-border-strong)] bg-white px-5 py-10 text-center"><p className="text-2xl">🎾</p><h2 className="mt-4 font-bold">아직 보낸 신청이 없어요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">마음에 드는 매칭을 찾아 부담 없이 신청해 보세요.</p><Button as={Link} className="mt-5" href="/" size="medium">매칭 찾아보기</Button></section>;
 }
 
 /** 지난 일정임을 카드 안에서 바로 알 수 있게 한다. 목록은 다가오는 것부터 보여 준다. */
