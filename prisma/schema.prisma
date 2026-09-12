@@ -621,6 +621,9 @@ model MatchApplication {
   message                String?           @db.VarChar(200)
   profileSnapshot        Json              @map("profile_snapshot") @db.JsonB
   profileSnapshotVersion Int               @default(1) @map("profile_snapshot_version")
+  courtNoticeVersion     String?           @map("court_notice_version") @db.VarChar(64)
+  courtNoticeSnapshot    Json?             @map("court_notice_snapshot") @db.JsonB
+  courtNoticeAcceptedAt  DateTime?         @map("court_notice_accepted_at") @db.Timestamptz(6)
   decidedAt              DateTime?         @map("decided_at") @db.Timestamptz(6)
   withdrawnAt            DateTime?         @map("withdrawn_at") @db.Timestamptz(6)
   cancelledAt            DateTime?         @map("cancelled_at") @db.Timestamptz(6)

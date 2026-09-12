@@ -1,3 +1,4 @@
+import { buildCourtApplicationNotice } from "./court-application-notice";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -5,7 +6,13 @@ import {
   getJudgementAt,
   getPaymentDueAt,
 } from "./court-match";
-import { applyToCourtMatch } from "./court-match-service";
+import { applyToCourtMatch as rawApplyToCourtMatch } from "./court-match-service";
+
+async function applyToCourtMatch(db: Parameters<typeof rawApplyToCourtMatch>[0], viewer: Parameters<typeof rawApplyToCourtMatch>[1], id: string) {
+  const match = await db.match.findUnique({ where: { id } });
+  const notice = buildCourtApplicationNotice(match as unknown as Parameters<typeof buildCourtApplicationNotice>[0]);
+  return rawApplyToCourtMatch(db, viewer, id, { noticeAccepted: true, noticeFingerprint: notice.fingerprint });
+}
 
 const startsAt = new Date("2030-01-02T10:00:00.000Z");
 
@@ -57,6 +64,7 @@ function courtMatch(overrides: Record<string, unknown> = {}) {
     host: { status: "ACTIVE" },
     title: "마포 테니스파크 2번 코트",
     status: "OPEN",
+    endsAt: new Date("2031-01-01T12:00:00Z"), gameType: "OTHER" as const, totalCourtFeeKrw: 36000, courtCompositionPolicyVersion: 0,
     startsAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     courtSource: "PARTNER_COURT",
     recruitCount: 4,
@@ -66,9 +74,9 @@ function courtMatch(overrides: Record<string, unknown> = {}) {
       id: "slot-id",
       status: "AVAILABLE",
       approvalMode: "AUTO",
-      minParticipantCount: 2,
+      minParticipantCount: 2, usageNote: null,
       // 서비스는 이 코트 매칭이 실제로 그 시설 운영자의 것인지 다시 확인한다.
-      courtUnit: { court: { status: "ACTIVE", operatorApplication: { applicantUserId: "operator-user-id", status: "PUBLISH_APPROVED" } } },
+      courtUnit: { name: "1번", court: { name: "코트", address: "서울", status: "ACTIVE", operatorApplication: { applicantUserId: "operator-user-id", status: "PUBLISH_APPROVED" } } },
     },
     ...overrides,
   };
@@ -94,6 +102,7 @@ function transactionFor(match: ReturnType<typeof courtMatch>, seatCount: number)
 
 function prismaFor(transaction: ReturnType<typeof transactionFor>) {
   return {
+    match: transaction.match,
     $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
   } as unknown as Parameters<typeof applyToCourtMatch>[0];
 }

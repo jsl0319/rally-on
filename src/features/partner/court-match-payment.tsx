@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { CourtApplicationNoticeRecord } from "./court-application-notice";
 import { Button } from "@/components/ui/button";
 import { MatchBadge } from "@/features/matches/match-presentation";
 import type { CourtMatchParticipation } from "@/server/domain/court-match-view";
@@ -54,6 +55,7 @@ export function CourtMatchPayment({ participation, onRefresh }: { participation:
     } catch (caught) { setError(caught instanceof Error ? caught.message : "저장하지 못했어요."); } finally { setBusy(false); }
   };
   return <div>
+    <CourtApplicationNoticeRecord notice={application.applicationNotice} acceptedAt={application.noticeAcceptedAt} />
     {participation.operationsPaused ? <p className="mb-4 rounded-xl bg-amber-50 p-3 text-sm">운영이 중단됐어요. 추가 입금하지 말고 거래 문의로 확인해 주세요. 내부 담당자가 기존 거래를 이어서 처리해요.</p> : null}
     <MatchBadge tone={application.status === "CONFIRMED" ? "green" : application.awaitingRefund ? "amber" : "blue"}>{application.statusLabel}</MatchBadge>
     {application.status === "PENDING" ? <p className="mt-3 text-sm leading-6 text-slate-600">운영자가 신청을 검토하고 있어요. 승인되면 입금 계좌와 기한을 안내해요.</p> : null}

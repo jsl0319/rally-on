@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { CourtApplicationNoticeRecord } from "./court-application-notice";
 import { Button } from "@/components/ui/button";
 import type { OperatorCourtMatch } from "@/server/domain/court-match-view";
 import { apiMessage, formatStatusChangedAt } from "./partner-session";
@@ -34,6 +35,7 @@ export function OperatorMoneyPanel({ application: a, refresh, endpoint = "/api/v
     finally { setBusy(false); }
   };
   return <div className="mt-4 border-t border-slate-100 pt-4 text-sm">
+    <CourtApplicationNoticeRecord notice={a.applicationNotice} acceptedAt={a.noticeAcceptedAt} />
     <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 tabular-nums">
       <p>실제 수령 <strong className="block mt-1">{won(a.money.receivedKrw)}</strong></p>
       <p>남은 반환 <strong className="block mt-1 text-blue-700">{won(a.money.outstandingKrw)}</strong></p>

@@ -1,3 +1,4 @@
+import { buildCourtApplicationNotice } from "./court-application-notice";
 import { checkCourtComposition, countCourtComposition, courtCompositionPolicyVersion } from "@/matches/court-composition";
 import { Prisma } from "@/generated/prisma/client";
 import type { PrismaClient } from "@/generated/prisma/client";
@@ -64,6 +65,7 @@ export const courtMatchSelect = {
   title: true,
   status: true,
   startsAt: true,
+  endsAt: true,
   courtSource: true,
   gameType: true,
   courtCompositionPolicyVersion: true,
@@ -73,7 +75,7 @@ export const courtMatchSelect = {
   recruitCount: true,
   maleRecruitCount: true,
   femaleRecruitCount: true,
-  courtSlot: { select: { id: true, status: true, approvalMode: true, minParticipantCount: true, courtUnit: { select: { court: { select: { status: true, operatorApplication: { select: { applicantUserId: true, status: true } } } } } } } },
+  courtSlot: { select: { id: true, status: true, approvalMode: true, minParticipantCount: true, usageNote: true, courtUnit: { select: { name: true, court: { select: { name: true, address: true, status: true, operatorApplication: { select: { applicantUserId: true, status: true } } } } } } } },
 } satisfies Prisma.MatchSelect;
 
 type CourtMatch = Prisma.MatchGetPayload<{ select: typeof courtMatchSelect }>;
@@ -227,7 +229,7 @@ export async function applyToCourtMatch(
   prisma: PrismaClient,
   viewer: { id: string; profile: ProfileWithRelations },
   matchId: string,
-  input: { message?: string } = {},
+  input: { message?: string; noticeAccepted?: boolean; noticeFingerprint?: string } = {},
 ) {
   return withCurrentCourtMatch(prisma, { matchId }, async (transaction, now) => {
     await assertActiveTransactionUser(transaction, viewer.id);
@@ -251,12 +253,18 @@ export async function applyToCourtMatch(
 
     await assertSeatAvailable(transaction, match, viewer.profile.gender);
 
+    if (input.noticeAccepted !== true || !input.noticeFingerprint) throw new DomainError("APPLICATION_NOTICE_REQUIRED", 409, "신청 조건과 환불 안내를 확인해 주세요.");
+    const applicationNotice = buildCourtApplicationNotice(match);
+    if (input.noticeFingerprint !== applicationNotice.fingerprint) throw new DomainError("APPLICATION_NOTICE_CHANGED", 409, "신청 조건이 바뀌었어요. 최신 안내를 확인한 뒤 다시 신청해 주세요.");
     const autoApprove = match.courtSlot?.approvalMode === "AUTO";
     const created = await transaction.matchApplication.create({
       data: {
         matchId,
         applicantUserId: viewer.id,
         applicantGender: viewer.profile.gender,
+        courtNoticeVersion: applicationNotice.version,
+        courtNoticeSnapshot: applicationNotice,
+        courtNoticeAcceptedAt: now,
         profileSnapshot: autoApprove ? {} : toProfileSnapshot(viewer.profile),
         message: autoApprove ? null : input.message?.trim() || null,
         profileSnapshotVersion: 1,

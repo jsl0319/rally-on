@@ -1490,6 +1490,22 @@ PUT  /api/v1/operator/courts/{courtId}/settlement-account     운영자 입금 �
 > `COURT_MATCH_APPLICATION_PATH`로 막는다. 코트 매칭은 운영자가 시간을 공개할 때
 > 서버가 함께 만든다. 자세한 규칙은 `03-2-court-match-operator-hosted-redesign.md`.
 
+`GET /partner-session-slots/{slotId}`의 `participation.applicationNotice`는 서버가 만든 현재 신청 안내다. `version`, `fingerprint`(SHA-256), `terms`(코트·일시·인원·비용·승인 방식·이용 안내·취소/입금 규칙 원문과 요약)를 포함한다. 현재 남은 자리나 조회 시각은 조건 해시에 포함하지 않는다.
+
+`POST /court-matches/{matchId}/applications`의 본문:
+
+```json
+{
+  "noticeAccepted": true,
+  "noticeFingerprint": "GET 응답의 64자리 소문자 해시",
+  "message": "선택: 운영자에게 보낼 자기소개"
+}
+```
+
+확인 체크 누락·false 또는 해시 형식 오류는 422다. 서버는 Match 잠금 안에서 최신 조건을 다시 만들고 비교한다. 달라졌으면 `409 APPLICATION_NOTICE_CHANGED`로 신청 생성을 거절한다. 클라이언트는 최신 상세를 다시 불러오고 확인 체크를 해제한다. 서버 도메인을 직접 호출해 확인을 누락해도 `409 APPLICATION_NOTICE_REQUIRED`로 거절한다. 조건 원문이나 금액을 클라이언트에서 받아 저장하지 않는다.
+
+성공 시 기존 신청 결과와 함께 신청 행에 안내 버전·서버 스냅샷·확인 시각을 원자적으로 저장한다. 본인 신청과 운영자/인계 조회의 각 신청에는 `applicationNotice`, `noticeAcceptedAt`을 반환한다. 기존 신청은 둘 다 null이며 다른 참가자의 기록을 반환하지 않는다. 승인 후 실제 입금·확인 기한은 기존 `paymentDueAt`, `confirmationDueAt`을 따른다. 일반 매칭 신청 API에는 이 필드를 요구하지 않는다. 상세는 [03-12](03-12-court-application-notice.md)를 따른다.
+
 `POST /court-match-applications/{id}/cancel`은 본인의 신청만 취소한다. 본문은 없다.
 참가 확정 전이면 `WITHDRAWN`이 되고 실제 수령액 전액이 반환 대상이다. 수령액이
 아직 기록되지 않았다면 0원을 반환하되, 이후 입금 대조로 반환 의무를 기록할 수 있다.

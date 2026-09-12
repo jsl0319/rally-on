@@ -1,3 +1,4 @@
+import { buildCourtApplicationNotice } from "./court-application-notice";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { ProfileWithRelations } from "./profile-service";
@@ -35,9 +36,9 @@ type Where = { OR?: Where[]; confirmationDueAt?: { lte: Date } | null; id?: stri
 function fixture(status = "PENDING", confirmed = 0) {
   const match = {
     id: "match", host: { status: "ACTIVE" }, hostUserId: operator.id, courtSource: "PARTNER_COURT", title: "테스트 코트",
-    status: "OPEN", startsAt: start, recruitCount: 4, maleRecruitCount: null, femaleRecruitCount: null,
-    courtSlot: { id: "slot", status: "AVAILABLE", approvalMode: "OPERATOR", minParticipantCount: 2,
-      courtUnit: { court: { status: "ACTIVE", operatorApplication: { applicantUserId: operator.id, status: "PUBLISH_APPROVED" } } } },
+    status: "OPEN", startsAt: start, endsAt: new Date("2030-01-01T12:00:00Z"), totalCourtFeeKrw: 36000, gameType: "OTHER" as const, courtCompositionPolicyVersion: 0, recruitCount: 4, maleRecruitCount: null, femaleRecruitCount: null,
+    courtSlot: { id: "slot", status: "AVAILABLE", approvalMode: "OPERATOR", minParticipantCount: 2, usageNote: null,
+      courtUnit: { name: "1번", court: { name: "코트", address: "서울", status: "ACTIVE", operatorApplication: { applicantUserId: operator.id, status: "PUBLISH_APPROVED" } } } },
   };
   const rows = [applicant("application", status), ...Array.from({ length: confirmed }, (_, i) => applicant(`confirmed-${i}`, "CONFIRMED"))];
   const matches = (row: Row, where: Where): boolean => {
@@ -106,7 +107,7 @@ describe("코트 매칭 시간 판정", () => {
     f.rows[0].paymentDueAt = new Date("2030-01-01T09:30:00Z");
     vi.setSystemTime(after);
     const request = () => {
-      if (action === "apply") return applyToCourtMatch(f.prisma, { ...viewer, id: "new-user" }, "match");
+      if (action === "apply") return applyToCourtMatch(f.prisma, { ...viewer, id: "new-user" }, "match", { noticeAccepted: true, noticeFingerprint: buildCourtApplicationNotice(f.match).fingerprint });
       if (action === "decision") return decideCourtMatchApplication(f.prisma, operator, "application", { accept: true });
       if (action === "deposit") return claimCourtMatchDeposit(f.prisma, viewer, "application", { depositorName: "참가자" });
       return confirmCourtMatchDeposit(f.prisma, operator, "application");
@@ -157,7 +158,7 @@ describe("코트 매칭 시간 판정", () => {
     f.rows[0].paymentDueAt = before;
     f.match.courtSlot.approvalMode = "AUTO";
     f.match.startsAt = new Date(start.getTime() + 24 * 60 * 60_000);
-    await expect(applyToCourtMatch(f.prisma, { ...viewer, id: "new-user" }, "match")).resolves.toMatchObject({ status: "ACCEPTED" });
+    await expect(applyToCourtMatch(f.prisma, { ...viewer, id: "new-user" }, "match", { noticeAccepted: true, noticeFingerprint: buildCourtApplicationNotice(f.match).fingerprint })).resolves.toMatchObject({ status: "ACCEPTED" });
     expect(f.rows[0].status).toBe("EXPIRED_UNPAID");
     expect(f.rows.filter((r) => ["ACCEPTED", "CONFIRMED"].includes(r.status))).toHaveLength(3);
   });

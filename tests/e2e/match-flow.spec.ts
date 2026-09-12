@@ -219,6 +219,7 @@ test("공개된 코트 매칭은 신청·입금 알림·운영자 확정·채팅
 
   await applicantPage.getByRole("button", { name: "같이 치기" }).click();
   const applyDialog = applicantPage.getByRole("dialog", { name: "같이 치기" });
+  await applyDialog.getByRole("checkbox", { name: "신청 조건과 취소·환불 안내를 확인했어요." }).check();
   await applyDialog.getByRole("button", { name: "신청 보내기" }).click();
 
   // 자동 승인이므로 바로 입금 안내가 뜬다. 식별코드는 서버가 발급한다.
@@ -271,6 +272,7 @@ test("확정한 참가자가 스스로 취소하면 환불 금액과 함께 환�
 
   await applicantPage.goto(`/partner-sessions/${fixture.partnerSlotId}`);
   await applicantPage.getByRole("button", { name: "같이 치기" }).click();
+  await applicantPage.getByRole("dialog", { name: "같이 치기" }).getByRole("checkbox", { name: "신청 조건과 취소·환불 안내를 확인했어요." }).check();
   await applicantPage.getByRole("dialog", { name: "같이 치기" }).getByRole("button", { name: "신청 보내기" }).click();
   await applicantPage.getByLabel("실제로 보낸 입금자명").fill("E2E입금자");
   await applicantPage.getByRole("button", { name: "입금했어요" }).click();
@@ -306,7 +308,7 @@ test("확정한 참가자가 스스로 취소하면 환불 금액과 함께 환�
   // 운영자에게는 보낼 금액과 참가자가 입력한 계좌가 보인다.
   await operatorPage.reload();
   await expect(operatorPage.getByRole("heading", { name: "반환·환불 처리" })).toBeVisible();
-  await expect(operatorPage.getByText("36,000원", { exact: false }).first()).toBeVisible();
+  await expect(operatorPage.getByText(/남은 반환\s*36,000원/)).toBeVisible();
   await expect(operatorPage.getByText("555-666-777")).toBeVisible();
   await saveAction(operatorPage, "환불 처리 시작 · 36,000원", "/refund/start", "POST");
   await expect(operatorPage.getByText("송금 처리 중 · 36,000원", { exact: true })).toBeVisible();
@@ -422,6 +424,7 @@ test("미확정 입금 문의를 운영자와 대조하고 전액 반환한 뒤 
   const [member, operator, reviewer] = contexts.map((c) => c.page);
   await member.goto(`/partner-sessions/${fixture.partnerSlotId}`);
   await member.getByRole("button", { name: "같이 치기" }).click();
+  await member.getByRole("dialog", { name: "같이 치기" }).getByRole("checkbox", { name: "신청 조건과 취소·환불 안내를 확인했어요." }).check();
   await member.getByRole("dialog", { name: "같이 치기" }).getByRole("button", { name: "신청 보내기" }).click();
   await member.getByRole("button", { name: "참가 취소", exact: true }).click();
   await member.getByRole("button", { name: "참가 취소하기" }).click();

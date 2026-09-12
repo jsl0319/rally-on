@@ -407,11 +407,16 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 | `message` | varchar(200) | X | 짧은 신청 메시지 |
 | `profileSnapshot` | jsonb | O | 신청 당시 프로필 |
 | `profileSnapshotVersion` | int | O | 스냅샷 스키마 버전 |
+| `courtNoticeVersion` | varchar(64) | X | 새 코트 매칭 신청 시 확인한 안내 버전 |
+| `courtNoticeSnapshot` | jsonb | X | 서버의 등록 조건·안내 원문·요약·조건 해시 |
+| `courtNoticeAcceptedAt` | timestamptz | X | 조건 확인 후 신청한 서버 시각 |
 | `decidedAt` | timestamptz | X | 수락·거절 시각 |
 | `withdrawnAt` | timestamptz | X | 대기 신청 철회 시각 |
 | `cancelledAt` | timestamptz | X | 조기 마감·매칭 취소·성사 없이 종료로 무효화된 시각 |
 | `createdAt` | timestamptz | O | 신청 시각 |
 | `updatedAt` | timestamptz | O | 수정 시각 |
+
+코트 신청 안내의 세 필드는 새 코트 매칭 신청 생성과 같은 트랜잭션에서 모두 기록한다. 일반 매칭 및 기존 신청은 NULL을 유지하며 과거 확인을 소급하지 않는다. 프로필 스냅샷과 별개이며, 본인·담당 운영자·거래 인계 담당자의 기존 권한 경로에서만 조회한다. 상세는 [03-12](03-12-court-application-notice.md)를 따른다.
 
 #### ApplicationStatus
 

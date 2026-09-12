@@ -1,3 +1,4 @@
+import { buildCourtApplicationNotice } from "@/server/domain/court-application-notice";
 import { cancelCourtMatchForComposition } from "@/server/domain/court-match-composition-service";
 import { previewWithdrawal, withdrawAccount } from "@/server/domain/account-service";
 import { getMyCourtTransactions } from "@/server/domain/court-match-view";
@@ -11,7 +12,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PrismaClient } from "@/generated/prisma/client";
 import { getApplicationDeadline, getJudgementAt, getRefundAmountKrw, getRefundPercent } from "@/server/domain/court-match";
 import {
-  applyToCourtMatch,
+  applyToCourtMatch as rawApplyToCourtMatch,
+  courtMatchSelect,
   cancelCourtMatchApplication,
   claimCourtMatchDeposit,
   confirmCourtMatchDeposit,
@@ -66,6 +68,11 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     });
     const profile = await getProfile(prisma, user.id);
     return { id: user.id, gender, profile: profile!, viewer: { id: user.id, profile: profile! } };
+  }
+
+  async function applyToCourtMatch(db: PrismaClient, viewer: Parameters<typeof rawApplyToCourtMatch>[1], matchId: string, input: { message?: string } = {}) {
+    const match = await db.match.findUniqueOrThrow({ where: { id: matchId }, select: courtMatchSelect });
+    return rawApplyToCourtMatch(db, viewer, matchId, { ...input, noticeAccepted: true, noticeFingerprint: buildCourtApplicationNotice(match).fingerprint });
   }
 
   async function receiveAndConfirm(operator: { id: string }, id: string) {
@@ -153,6 +160,30 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
   }
 
   const errorCode = (caught: unknown) => (caught as { code?: string }).code;
+
+  it("신청 조건 확인은 서버가 강제하고 당시 조건·시각을 신청과 함께 남긴다", async () => {
+    const op = await makeUser("고지 운영자", "MALE");
+    const user = await makeUser("고지 참가자", "FEMALE");
+    const other = await makeUser("다른 참가자", "MALE");
+    const m = await makeCourtMatch(op.id);
+    const first = await getCourtMatchParticipation(prisma, user.viewer, m.matchId);
+    await expect(rawApplyToCourtMatch(prisma, user.viewer, m.matchId)).rejects.toMatchObject({ code: "APPLICATION_NOTICE_REQUIRED" });
+    await expect(rawApplyToCourtMatch(prisma, user.viewer, m.matchId, { noticeAccepted: true, noticeFingerprint: "0".repeat(64) })).rejects.toMatchObject({ code: "APPLICATION_NOTICE_CHANGED" });
+    expect(await prisma.matchApplication.count()).toBe(0);
+    await prisma.courtSlot.update({ where: { id: m.slotId }, data: { usageNote: "현장 집합은 시작 10분 전입니다." } });
+    await expect(rawApplyToCourtMatch(prisma, user.viewer, m.matchId, { noticeAccepted: true, noticeFingerprint: first.applicationNotice.fingerprint })).rejects.toMatchObject({ code: "APPLICATION_NOTICE_CHANGED" });
+    const fresh = await getCourtMatchParticipation(prisma, user.viewer, m.matchId);
+    const a = await rawApplyToCourtMatch(prisma, user.viewer, m.matchId, { noticeAccepted: true, noticeFingerprint: fresh.applicationNotice.fingerprint });
+    const saved = await prisma.matchApplication.findUniqueOrThrow({ where: { id: a.id } });
+    expect(saved.courtNoticeSnapshot).toEqual(fresh.applicationNotice);
+    expect(saved.courtNoticeAcceptedAt).toBeInstanceOf(Date);
+    expect(saved.profileSnapshot).toEqual({}); // 자동 승인에서는 테니스 프로필을 추가 공개하지 않는다.
+    await prisma.courtSlot.update({ where: { id: m.slotId }, data: { usageNote: "이후 변경된 안내" } });
+    expect((await getCourtMatchParticipation(prisma, user.viewer, m.matchId)).application?.applicationNotice).toEqual(fresh.applicationNotice);
+    expect((await getOperatorCourtMatch(prisma, op, m.matchId)).applications[0].applicationNotice).toEqual(fresh.applicationNotice);
+    expect((await getCourtMatchParticipation(prisma, other.viewer, m.matchId)).application).toBeNull();
+    await expect(rawApplyToCourtMatch(prisma, user.viewer, m.matchId, { noticeAccepted: true, noticeFingerprint: fresh.applicationNotice.fingerprint })).rejects.toMatchObject({ code: "APPLICATION_ALREADY_EXISTS" });
+  });
 
   // R05: 새 공개 경기의 실제 구성, 통과 이력, 제공 불가 취소.
   async function compositionFixture(genders: Array<"MALE" | "FEMALE"> = ["MALE", "MALE", "FEMALE", "FEMALE"]) {

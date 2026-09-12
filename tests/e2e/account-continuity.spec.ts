@@ -15,7 +15,9 @@ async function session(browser: Browser, id: string, errors: string[]) {
   return { context, page };
 }
 async function apply(context: BrowserContext) {
-  const response = await context.request.post(`${E2E_BASE_URL}/api/v1/court-matches/${fixture.partnerMatchId}/applications`, { data: {} });
+  const detail = await context.request.get(`${E2E_BASE_URL}/api/v1/partner-session-slots/${fixture.partnerSlotId}`);
+  const notice = (await detail.json()).participation.applicationNotice;
+  const response = await context.request.post(`${E2E_BASE_URL}/api/v1/court-matches/${fixture.partnerMatchId}/applications`, { data: { noticeAccepted: true, noticeFingerprint: notice.fingerprint } });
   expect(response.ok(), await response.text()).toBeTruthy(); return response.json() as Promise<{ id: string }>;
 }
 async function withdraw(context: BrowserContext) {

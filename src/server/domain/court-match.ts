@@ -105,5 +105,7 @@ export const courtMatchDecisionInputSchema = z.object({
 export type CourtMatchDecisionInput = z.infer<typeof courtMatchDecisionInputSchema>;
 
 export const courtMatchApplicationInputSchema = z.object({
+  noticeAccepted: z.literal(true, { error: "신청 조건과 환불 안내를 확인해 주세요." }),
+  noticeFingerprint: z.string().regex(/^[a-f0-9]{64}$/, "최신 신청 조건을 다시 확인해 주세요."),
   message: z.string().trim().max(200, "자기소개는 200자까지 입력해 주세요.").optional(),
 });

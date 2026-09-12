@@ -1,3 +1,4 @@
+import { buildCourtApplicationNotice, readCourtApplicationNotice } from "./court-application-notice";
 import { describeCourtComposition } from "./court-match-composition";
 import { assertHandoffAccess } from "./court-transaction-handoff";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
@@ -8,6 +9,7 @@ import { getApplicationDeadline, getLateConfirmationDeadline, getJudgementAt, ge
 import { courtMoneySummary } from "./court-match-money";
 
 const applicationSelect = {
+  courtNoticeVersion: true, courtNoticeSnapshot: true, courtNoticeAcceptedAt: true,
   id: true, applicantUserId: true, applicantGender: true, status: true, createdAt: true,
   message: true, profileSnapshot: true, paymentDueAt: true, depositCode: true,
   depositorName: true, depositClaimedAt: true, confirmedAt: true,
@@ -43,6 +45,8 @@ function toApplication(application: Application, fee: number, operator = false) 
   const money = courtMoneySummary(application, fee);
   const activeRefund = application.refundAttempts.find((r) => r.status === "PROCESSING" || r.status === "REVIEW");
   return {
+    applicationNotice: readCourtApplicationNotice(application.courtNoticeSnapshot),
+    noticeAcceptedAt: application.courtNoticeAcceptedAt?.toISOString() ?? null,
     money, refundAccountVersion: application.refundAccountVersion,
     refundLocked: Boolean(activeRefund),
     receiptVersion: application.receiptVersion,
@@ -78,6 +82,7 @@ function summary(match: Match) {
   const confirmed = match.applications.filter((a) => a.status === "CONFIRMED");
   return {
     id: match.id, slotId: match.courtSlotId, status: match.status, version: match.version,
+    applicationNotice: buildCourtApplicationNotice(match),
     composition: describeCourtComposition(match, new Date()),
     lateConfirmationDeadline: getLateConfirmationDeadline(match.startsAt).toISOString(),
     title: match.courtSlot?.courtUnit.court.name ?? match.title,
