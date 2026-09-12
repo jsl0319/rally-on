@@ -1,7 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import type { PrismaClient } from "@/generated/prisma/client";
 
-import { buildNotificationContent, type NotificationType } from "@/server/domain/notification";
+import { buildNotificationContent, isAlwaysDeliveredNotification, type NotificationType } from "@/server/domain/notification";
 
 type Transaction = Prisma.TransactionClient;
 
@@ -19,7 +19,9 @@ export async function recordApplicationNotification(
     where: { id: input.recipientUserId },
     select: { matchNotificationsEnabled: true },
   });
-  if (!recipient || !recipient.matchNotificationsEnabled) return;
+  if (!recipient) return;
+  // 거래와 취소 안내는 설정과 무관하게 남긴다. 어떤 종류가 그런지는 notification.ts가 정한다.
+  if (!recipient.matchNotificationsEnabled && !isAlwaysDeliveredNotification(input.type)) return;
 
   const { title, body } = buildNotificationContent(input.type, input.matchTitle);
   await transaction.notification.create({
@@ -42,7 +44,10 @@ export async function recordApplicationNotifications(
   if (recipientUserIds.length === 0) return;
 
   const recipients = await transaction.user.findMany({
-    where: { id: { in: recipientUserIds }, matchNotificationsEnabled: true },
+    where: {
+      id: { in: recipientUserIds },
+      ...(isAlwaysDeliveredNotification(input.type) ? {} : { matchNotificationsEnabled: true }),
+    },
     select: { id: true },
   });
   if (recipients.length === 0) return;

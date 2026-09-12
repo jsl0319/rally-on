@@ -147,9 +147,9 @@ export function M8MyPage() {
         <SectionLabel>설정</SectionLabel>
         <Card>
           <ToggleRow
-            description="신청 · 수락 · 취소 같은 매칭 소식을 알림으로 받아요"
+            description="새 신청 · 수락 · 거절 소식을 받아요. 참가비와 취소 안내는 이 설정과 상관없이 알려 드려요."
             icon={<Bell aria-hidden="true" className="size-5 text-[var(--tm-text-muted)]" />}
-            title="매칭 알림"
+            title="매칭 소식 알림"
             toggle={<Switch checked={me.matchNotificationsEnabled} disabled={savingNotificationPref} onCheckedChange={(next) => void toggleMatchNotifications(next)} size="small" />}
           />
           <LinkRow href="/notices" icon={<Megaphone aria-hidden="true" className="size-5 text-[var(--tm-text-muted)]" />} title="공지사항" />

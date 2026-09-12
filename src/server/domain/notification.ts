@@ -17,6 +17,33 @@ export type NotificationType =
   | "MATCH_PARTICIPANT_LEFT";
 
 /**
+ * 알림 설정으로 끌 수 없는 종류.
+ *
+ * 돈이 오가거나 이미 잡아 둔 약속이 사라지는 일은 "소식"이 아니라 안내다. 입금 기한이
+ * 지나 자리를 잃은 것, 환불이 끝난 것, 매칭이 취소돼 그날 코트에 나갈 필요가 없어진
+ * 것을 모르는 채로 두면 사람이 돈이나 시간을 잃는다. 알림을 꺼 두었다는 이유로 이런
+ * 것까지 전하지 않는 것은 설정을 존중하는 게 아니라 책임을 미루는 것이다.
+ *
+ * 반대로 새 신청이 왔다거나 수락·거절됐다는 소식은 끌 수 있어야 한다. 그쪽은 활동
+ * 화면을 열면 언제든 같은 내용을 볼 수 있고, 알림함이 조용하길 바라는 사람이 있다.
+ */
+const alwaysDelivered = new Set<NotificationType>([
+  "COURT_MATCH_DEPOSIT_REQUIRED",
+  "COURT_MATCH_DEPOSIT_CLAIMED",
+  "COURT_MATCH_CONFIRMED",
+  "COURT_MATCH_DEPOSIT_EXPIRED",
+  "COURT_MATCH_CANCELLED",
+  "COURT_MATCH_PARTICIPANT_CANCELLED",
+  "COURT_MATCH_REFUND_COMPLETED",
+  "MATCH_CANCELLED",
+]);
+
+/** 이 알림이 수신 설정과 무관하게 전해져야 하는가. */
+export function isAlwaysDeliveredNotification(type: NotificationType) {
+  return alwaysDelivered.has(type);
+}
+
+/**
  * In-app notification copy. Keep beginner-friendly, no numbers or jargon,
  * consistent with the rest of the product's tone (see AGENTS.md 5.1).
  */
