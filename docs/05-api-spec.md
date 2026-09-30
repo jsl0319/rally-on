@@ -1506,7 +1506,16 @@ PUT  /api/v1/operator/courts/{courtId}/settlement-account     운영자 입금 �
 
 성공 시 기존 신청 결과와 함께 신청 행에 안내 버전·서버 스냅샷·확인 시각을 원자적으로 저장한다. 본인 신청과 운영자/인계 조회의 각 신청에는 `applicationNotice`, `noticeAcceptedAt`을 반환한다. 기존 신청은 둘 다 null이며 다른 참가자의 기록을 반환하지 않는다. 승인 후 실제 입금·확인 기한은 기존 `paymentDueAt`, `confirmationDueAt`을 따른다. 일반 매칭 신청 API에는 이 필드를 요구하지 않는다. 상세는 [03-12](03-12-court-application-notice.md)를 따른다.
 
-`POST /court-match-applications/{id}/cancel`은 본인의 신청만 취소한다. 본문은 없다.
+`GET /court-match-applications/{id}/cancel`은 본인의 최신 취소 미리보기를 반환한다(`no-store`).
+`fingerprint`, `policyVersion`, `validUntil`, `applicationStatus`, `refundPercent`,
+`refundAmountKrw`와 실제 수령·지급·처리 중 금액을 포함한다.
+`POST /court-match-applications/{id}/cancel`은 본인의 신청만 취소하며
+`{ "cancellationFingerprint": "미리보기의 64자리 해시" }`를 필수로 받는다.
+누락·잘못된 형식은 422(빈/잘못된 JSON은 400)이고, 최신 조건과 다르면
+`409 CANCELLATION_PREVIEW_CHANGED`로 개인 취소를 실행하지 않는다. 클라이언트는 GET으로
+새 금액을 읽고 다시 확인받는다. 서버는 잠금 획득 후 현재 시각으로 계산한다.
+본인이 이미 완료한 자발적 취소를 재요청하면 현재 미지급 반환액을 반환하고 취소 알림과
+자리·채팅 처리를 반복하지 않는다. 상세 계약은 [03-13](03-13-court-cancellation-reconfirmation.md)을 따른다.
 참가 확정 전이면 `WITHDRAWN`이 되고 실제 수령액 전액이 반환 대상이다. 수령액이
 아직 기록되지 않았다면 0원을 반환하되, 이후 입금 대조로 반환 의무를 기록할 수 있다.
 확정된 참가는 `CANCELLED`가 되며 정상 참가비는 매칭 시작일 기준 이틀 전까지 전액,

@@ -37,7 +37,9 @@ test("혼복 구성 부족을 목록과 상세에 알리고 운영자 취소 뒤
       const a = await prisma.matchApplication.create({ data: { matchId: fixture.partnerMatchId, applicantUserId: user.id, applicantGender: user.gender, status: "CONFIRMED", profileSnapshot: {}, profileSnapshotVersion: 1, confirmedAt, receivedAmountKrw: 36000, feeReceivedAt: confirmedAt, lastReceivedAt: confirmedAt, depositCode: String(501 + index) } });
       if (user.id === e2eUsers.reviewer.id) leaverId = a.id;
     }
-    const cancel = await leaver.context.request.post(`${E2E_BASE_URL}/api/v1/court-match-applications/${leaverId}/cancel`);
+    const preview = await leaver.context.request.get(`${E2E_BASE_URL}/api/v1/court-match-applications/${leaverId}/cancel`);
+    expect(preview.ok()).toBeTruthy();
+    const cancel = await leaver.context.request.post(`${E2E_BASE_URL}/api/v1/court-match-applications/${leaverId}/cancel`, { data: { cancellationFingerprint: (await preview.json()).fingerprint } });
     expect(cancel.ok(), await cancel.text()).toBeTruthy();
     await operator.page.goto("/partner/slots");
     await expect(operator.page.getByText("경기 구성 · 운영자 조치 필요", { exact: true })).toBeVisible();

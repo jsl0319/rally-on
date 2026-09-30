@@ -4,9 +4,10 @@ import { assertHandoffAccess } from "./court-transaction-handoff";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { DomainError } from "./profile-service";
 import { reconcileCourtMatch } from "./court-match-service";
-import { getApplicationDeadline, getLateConfirmationDeadline, getJudgementAt, getRefundAmountKrw, getRefundPercent, canAcceptCourtApplication, seatHoldingStatuses } from "./court-match";
+import { getApplicationDeadline, getLateConfirmationDeadline, getJudgementAt, canAcceptCourtApplication, seatHoldingStatuses } from "./court-match";
 
 import { courtMoneySummary } from "./court-match-money";
+import { buildCourtCancellationPreview } from "./court-cancellation-preview";
 
 const applicationSelect = {
   courtNoticeVersion: true, courtNoticeSnapshot: true, courtNoticeAcceptedAt: true,
@@ -139,11 +140,7 @@ export async function getCourtMatchParticipation(prisma: PrismaClient, viewer: {
     ...info, isOperator, legacy, operationsPaused, canApply: blockedReason === null, blockedReason,
     application: application ? toApplication(application, info.guestFeeKrw) : null,
     cancellation: cancellable && application
-      ? {
-        refundPercent: application.status === "CONFIRMED" ? getRefundPercent(now, match.startsAt) : 0,
-        refundAmountKrw: courtMoneySummary({ ...application, status: "CANCELLED", refundAmountKrw: application.status === "CONFIRMED" ? getRefundAmountKrw(info.guestFeeKrw, now, match.startsAt) : null }, info.guestFeeKrw).outstandingKrw,
-        paidBeforeConfirmation: application.status === "ACCEPTED" && application.depositClaimedAt !== null,
-      }
+      ? buildCourtCancellationPreview(application, match, now)
       : null,
     settlementAccount: canSeeAccount && match.settlementBank && match.settlementAccountNumber && match.settlementAccountHolder
       ? { bank: match.settlementBank, accountNumber: match.settlementAccountNumber, accountHolder: match.settlementAccountHolder } : null,

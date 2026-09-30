@@ -10,6 +10,7 @@ import type { ProfileWithRelations } from "./profile-service";
 import { toProfileSnapshot } from "./match-service";
 
 import { courtMoneySummary } from "./court-match-money";
+import { buildCourtCancellationPreview, courtCancellationInputSchema, type CourtCancellationInput } from "./court-cancellation-preview";
 
 import {
   getApplicationDeadline,
@@ -53,6 +54,7 @@ const applicantSelect = {
   confirmedAt: true,
   refundCompletedAt: true,
   refundAmountKrw: true,
+  participantCancelledAt: true,
   refundBank: true,
   legacyRefundPaidKrw: true,
   refundAttempts: { select: { amountKrw: true, status: true } },
@@ -457,23 +459,63 @@ async function reopenIfSeatFreed(transaction: Transaction, match: CourtMatch, no
   await transaction.match.updateMany({ where: { id: match.id, status: "CLOSED" }, data: { status: "OPEN", closedAt: null } });
 }
 
-export async function cancelCourtMatchApplication(prisma: PrismaClient, viewer: { id: string }, applicationId: string) {
-  return withCurrentCourtMatch(prisma, { applicationId }, (tx, now) => cancelCourtApplicationLocked(tx, viewer, applicationId, now), { allowAfterApplicationDeadline: true });
+async function readCancellationApplication(transaction: Transaction, viewer: { id: string }, applicationId: string) {
+  const application = await transaction.matchApplication.findUnique({
+    where: { id: applicationId }, select: { ...applicantSelect, match: { select: courtMatchSelect } },
+  });
+  if (!application || application.applicantUserId !== viewer.id) throw new DomainError("APPLICATION_NOT_FOUND", 404, "신청을 찾을 수 없어요.");
+  assertCourtMatch(application.match);
+  return application;
+}
+
+function assertCanCancel(application: Awaited<ReturnType<typeof readCancellationApplication>>, now: Date) {
+  if (application.match.status === "CANCELLED") throw new DomainError("MATCH_CANCELLED", 409, "이미 취소된 코트 매칭이에요.");
+  if (now >= application.match.startsAt) throw new DomainError("COURT_MATCH_ALREADY_STARTED", 409, "이미 시작한 코트 매칭이에요.");
+  if (!["PENDING", "ACCEPTED", "CONFIRMED"].includes(application.status)) throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "취소할 수 있는 상태가 아니에요.");
+}
+
+export async function previewCourtMatchCancellation(prisma: PrismaClient, viewer: { id: string }, applicationId: string) {
+  return withCurrentCourtMatch(prisma, { applicationId }, async (tx, now) => {
+    await assertActiveTransactionUser(tx, viewer.id);
+    const application = await readCancellationApplication(tx, viewer, applicationId);
+    assertCanCancel(application, now);
+    return buildCourtCancellationPreview(application, application.match, now);
+  }, { allowAfterApplicationDeadline: true });
+}
+
+export async function cancelCourtMatchApplication(prisma: PrismaClient, viewer: { id: string }, applicationId: string, input: CourtCancellationInput) {
+  const result = await prisma.$transaction(async (tx) => {
+    await lockAccountTransactions(tx);
+    await lockApplicationMatch(tx, applicationId);
+    const now = new Date();
+    await assertActiveTransactionUser(tx, viewer.id);
+    let application = await readCancellationApplication(tx, viewer, applicationId);
+    if (!courtCancellationInputSchema.safeParse(input).success) throw new DomainError("CANCELLATION_PREVIEW_REQUIRED", 409, "최신 취소 금액을 다시 확인해 주세요.");
+    // 성공 응답을 놓친 재시도에서도 취소·알림·채팅 퇴장을 반복하지 않는다.
+    if (application.participantCancelledAt && (application.status === "CANCELLED" || application.status === "WITHDRAWN")) {
+      return { value: { id: application.id, status: application.status, refundAmountKrw: courtMoneySummary(application, application.match.totalCourtFeeKrw ?? 0).outstandingKrw } };
+    }
+    await reconcileLockedCourtMatch(tx, application.match, now);
+    application = await readCancellationApplication(tx, viewer, applicationId);
+    // 자동 만료·전체 취소는 확정하되, 개인 취소는 별도로 거절한다.
+    try { assertCanCancel(application, now); }
+    catch (error) { if (error instanceof DomainError) return { error }; throw error; }
+    const preview = buildCourtCancellationPreview(application, application.match, now);
+    if (preview.fingerprint !== input.cancellationFingerprint || now >= new Date(preview.validUntil)) {
+      return { error: new DomainError("CANCELLATION_PREVIEW_CHANGED", 409, "신청 상태나 환불 금액이 바뀌었어요. 최신 내용을 확인한 뒤 다시 취소해 주세요.") };
+    }
+    return { value: await cancelCourtApplicationLocked(tx, viewer, applicationId, now) };
+  });
+  // 재확인을 요구해도 시간 경과에 따른 기존 상태 보정은 커밋한다.
+  if ("error" in result) throw result.error;
+  return result.value;
 }
 
 /** Caller owns the account gate and match row lock. */
 export async function cancelCourtApplicationLocked(transaction: Transaction, viewer: { id: string }, applicationId: string, now: Date) {
-    const application = await transaction.matchApplication.findUnique({
-      where: { id: applicationId },
-      select: { ...applicantSelect, match: { select: courtMatchSelect } },
-    });
-    if (!application || application.applicantUserId !== viewer.id) {
-      throw new DomainError("APPLICATION_NOT_FOUND", 404, "신청을 찾을 수 없어요.");
-    }
+    const application = await readCancellationApplication(transaction, viewer, applicationId);
     const match = application.match;
-    assertCourtMatch(match);
-    if (match.status === "CANCELLED") throw new DomainError("MATCH_CANCELLED", 409, "이미 취소된 코트 매칭이에요.");
-    if (now >= match.startsAt) throw new DomainError("COURT_MATCH_ALREADY_STARTED", 409, "이미 시작한 코트 매칭이에요.");
+    assertCanCancel(application, now);
 
     if (application.status === "PENDING" || application.status === "ACCEPTED") {
       await transaction.matchApplication.update({
