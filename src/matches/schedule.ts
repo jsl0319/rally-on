@@ -1,6 +1,14 @@
 const KST = "Asia/Seoul";
 const matchDayFormat = new Intl.DateTimeFormat("ko-KR", { timeZone: KST, month: "long", day: "numeric", weekday: "short" });
-const matchTimeFormat = new Intl.DateTimeFormat("ko-KR", { timeZone: KST, hour: "numeric", minute: "2-digit", hour12: true });
+const matchTimeFormat = new Intl.DateTimeFormat("en-US", { timeZone: KST, hour: "numeric", minute: "2-digit", hourCycle: "h23", numberingSystem: "latn" });
+
+function koreanTimeParts(date: Date) {
+  // Intl의 한국어 dayPeriod가 실행 환경에 따라 AM/PM이 될 수 있어 숫자만 가져온다.
+  const parts = matchTimeFormat.formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour")!.value);
+  const minute = parts.find((part) => part.type === "minute")!.value;
+  return { period: hour < 12 ? "오전" : "오후", clock: `${hour % 12 || 12}:${minute}` };
+}
 
 /**
  * 매칭 일정을 서비스 어디서나 같은 모양으로 읽히게 한다.
@@ -13,12 +21,13 @@ const matchTimeFormat = new Intl.DateTimeFormat("ko-KR", { timeZone: KST, hour: 
 export function matchScheduleParts(startsAt: string, endsAt?: string | null) {
   const start = new Date(startsAt);
   const day = matchDayFormat.format(start);
-  const startTime = matchTimeFormat.format(start);
+  const startParts = koreanTimeParts(start);
+  const startTime = `${startParts.period} ${startParts.clock}`;
   if (!endsAt) return { day, time: startTime };
 
-  const endTime = matchTimeFormat.format(new Date(endsAt));
-  const meridiem = (value: string) => value.slice(0, 2);
-  return { day, time: `${startTime}–${meridiem(startTime) === meridiem(endTime) ? endTime.slice(2).trim() : endTime}` };
+  const endParts = koreanTimeParts(new Date(endsAt));
+  const endTime = startParts.period === endParts.period ? endParts.clock : `${endParts.period} ${endParts.clock}`;
+  return { day, time: `${startTime}–${endTime}` };
 }
 
 /**
