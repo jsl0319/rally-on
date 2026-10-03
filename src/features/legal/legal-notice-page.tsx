@@ -10,6 +10,7 @@ type NoticeSection = {
 type LegalNoticePageProps = {
   title: string;
   summary: string;
+  updatedDate: string;
   sections: NoticeSection[];
   notice: string;
   /** 어디에서 들어왔는지. 마이에서 열었으면 마이로 돌아가야 한다. */
@@ -22,7 +23,7 @@ const backLabels: Record<string, string> = {
   "/my": "마이로 돌아가기",
 };
 
-export function LegalNoticePage({ title, summary, sections, notice, returnTo }: LegalNoticePageProps) {
+export function LegalNoticePage({ title, summary, updatedDate, sections, notice, returnTo }: LegalNoticePageProps) {
   const backHref = getSafeReturnTo(returnTo, "/");
   const backLabel = backLabels[backHref] ?? "돌아가기";
 
@@ -36,7 +37,7 @@ export function LegalNoticePage({ title, summary, sections, notice, returnTo }: 
           <p className="text-sm font-semibold text-[var(--tm-action-primary)]">Rally On 비공개 MVP 안내</p>
           <h1 className="mt-2 text-2xl font-bold leading-tight">{title}</h1>
           <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{summary}</p>
-          <p className="mt-3 text-xs text-[var(--tm-text-secondary)]">안내 갱신일 · 2026년 9월 13일</p>
+          <p className="mt-3 text-xs text-[var(--tm-text-secondary)]">안내 갱신일 · {updatedDate}</p>
         </header>
 
         <div className="mt-6 space-y-4">

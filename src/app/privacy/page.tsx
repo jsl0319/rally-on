@@ -6,6 +6,7 @@ export default async function PrivacyPage({ searchParams }: { searchParams: Prom
     <LegalNoticePage
       returnTo={returnTo}
       title="개인정보 처리방침"
+      updatedDate="2026년 10월 3일"
       summary="서비스 제공에 필요한 최소한의 정보만 처리하고, 다른 이용자에게 보여 주는 범위를 분명히 합니다."
       sections={[
         {
