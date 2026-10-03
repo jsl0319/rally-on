@@ -13,7 +13,8 @@ import { courtCompositionIssues, minimumForCourtGame } from "@/matches/court-com
 
 import { courtServiceScopeSchema, type CourtServiceScope } from "@/matches/court-service-scope";
 import { CourtServiceScopeContent, CourtServiceScopeFields } from "./court-service-scope";
-import type { CourtContact } from "@/matches/court-contact";
+import { formatCourtContactPhone, type CourtContact } from "@/matches/court-contact";
+import { OperatorContact, type ContactCourt } from "./operator-contact";
 
 type Application = {
   status: "DRAFT_ACCESS_GRANTED" | "PUBLISH_APPROVED" | "VERIFYING" | "UNDER_REVIEW" | "REVIEW_REQUIRED" | "CHANGES_REQUESTED" | "REJECTED" | "SUSPENDED" | "DRAFT";
@@ -29,6 +30,7 @@ type Court = {
   address: string;
   settlementAccount: { bank: string; accountNumber: string; accountHolder: string } | null;
   operatorContact: CourtContact | null;
+  contactVersion: number;
   region: { code: string; name: string };
   units: Array<{ id: string; name: string }>;
 };
@@ -199,7 +201,7 @@ export function OperatorDashboard() {
     <section className="mt-6 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5"><p className="text-sm font-semibold text-[var(--tm-action-primary)]">시간대 운영 원칙</p><h2 className="mt-2 text-lg font-bold">공개한 시간은 바로 바꾸지 않아요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">등록 실수는 공개 중지 후 새 초안으로 정정해요. 이미 세션에 연결된 시간은 운영상 문제 접수로만 안내할 수 있어요.</p></section>
     {court && !court.settlementAccount ? <section className="mt-6 rounded-3xl bg-[var(--tm-status-error-bg)] p-5"><p className="font-bold text-[var(--tm-status-error-text)]">입금 계좌를 먼저 등록해 주세요</p><p className="mt-2 text-sm leading-6 text-[var(--tm-status-error-text)]">참가비를 계좌이체로 받기 때문에, 계좌가 없으면 코트 매칭을 공개할 수 없어요.</p><Button as={Link} className="mt-4" href="/partner/settlement-account" size="medium" variant="secondary">입금 계좌 등록하기</Button></section> : null}
     {court && !court.operatorContact ? <section className="mt-4 rounded-3xl bg-white p-5"><h2 className="font-bold">운영자 연락처를 등록해 주세요</h2><p className="mt-2 text-sm leading-6">신청자가 문의할 전화번호와 연락 가능 시간이 있어야 새 코트 매칭을 공개할 수 있어요. 기존 경기는 유지돼요.</p><Button as={Link} className="mt-4" href="/partner/contact" variant="secondary">연락처 등록하기</Button></section> : null}
-    <div className="mt-6 grid gap-3"><Button as={Link} fullWidth href="/partner/slots/new">시간 등록하기</Button><Button as={Link} fullWidth href="/partner/slots" variant="secondary">시간 관리 보기</Button><Button as={Link} fullWidth href="/partner/settlement-account" variant="secondary">입금 계좌 관리</Button><Button as={Link} fullWidth href="/partner/contact" variant="secondary">운영자 연락처 관리</Button>{application.canPublish ? <Button as={Link} fullWidth href="/partner/court-photos" variant="secondary">대표 코트 사진 관리</Button> : null}</div>
+    <div className="mt-6 grid gap-3"><Button as={Link} fullWidth href="/partner/slots/new">{court ? "코트 매칭 등록하기" : "코트 기본정보 설정하기"}</Button><Button as={Link} fullWidth href="/partner/slots" variant="secondary">시간 관리 보기</Button><Button as={Link} fullWidth href="/partner/settlement-account" variant="secondary">입금 계좌 관리</Button><Button as={Link} fullWidth href="/partner/contact" variant="secondary">운영자 연락처 관리</Button>{application.canPublish ? <Button as={Link} fullWidth href="/partner/court-photos" variant="secondary">대표 코트 사진 관리</Button> : null}</div>
   </PageShell>;
 }
 
@@ -317,7 +319,16 @@ export function OperatorSlotForm({ slotId }: { slotId?: string }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [preparingCourt, setPreparingCourt] = useState(false);
+  const [setupError, setSetupError] = useState("");
+  const [contactOpen, setContactOpen] = useState(false);
+  const [contactBusy, setContactBusy] = useState(false);
+  const [contactNotice, setContactNotice] = useState("");
   const slot = useMemo(() => slots.find((item) => item.id === slotId) ?? null, [slotId, slots]);
+  const court = slot ? courts.find((item) => item.id === slot.court.id) : courts[0];
+  const updateContact = useCallback((updated: ContactCourt) => {
+    setCourts((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+  }, []);
   const load = useCallback(async () => {
     try {
       setLoading(true); setError("");
@@ -343,7 +354,22 @@ export function OperatorSlotForm({ slotId }: { slotId?: string }) {
     return () => window.clearTimeout(timer);
   }, [courts.length, regionQuery]);
   const set = <Key extends keyof SlotDraft>(key: Key, value: SlotDraft[Key]) => setDraft((current) => ({ ...current, [key]: value }));
+  const ensureCourt = async () => {
+    if (court) return court;
+    if (!selectedRegion) throw new Error("시설이 있는 시·군·구를 선택해 주세요.");
+    const created = await requestJson<Court>("/api/v1/operator/courts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ regionCode: selectedRegion.code }) });
+    setCourts((current) => [...current.filter((item) => item.id !== created.id), created]);
+    return created;
+  };
+  const prepareCourt = async () => {
+    if (preparingCourt || submitting || !application?.canCreatePrivateDraft) return;
+    setPreparingCourt(true); setSetupError("");
+    try { await ensureCourt(); setContactOpen(true); }
+    catch (caught) { setSetupError(caught instanceof Error ? caught.message : "코트 기본정보를 저장하지 못했어요."); }
+    finally { setPreparingCourt(false); }
+  };
   const submit = async () => {
+    if (submitting || preparingCourt || contactOpen) return;
     if (!application?.canCreatePrivateDraft) { setError("현재 심사 상태에서는 시간 초안을 저장할 수 없어요."); return; }
     setSubmitting(true); setError("");
     try {
@@ -378,24 +404,52 @@ export function OperatorSlotForm({ slotId }: { slotId?: string }) {
         if (!slot) throw new Error("시간 초안을 다시 불러와 주세요.");
         await requestJson(`/api/v1/operator/slots/${encodeURIComponent(slot.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, expectedVersion: slot.version }) });
       } else {
-        let courtId = courts[0]?.id;
-        if (!courtId) {
-          if (!selectedRegion) throw new Error("시설이 있는 시·군·구를 선택해 주세요.");
-          const court = await requestJson<Court>("/api/v1/operator/courts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ regionCode: selectedRegion.code }) });
-          courtId = court.id;
-        }
-        await requestJson(`/api/v1/operator/courts/${encodeURIComponent(courtId)}/slots`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const targetCourt = await ensureCourt();
+        await requestJson(`/api/v1/operator/courts/${encodeURIComponent(targetCourt.id)}/slots`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       }
       router.push("/partner/slots");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "시간 초안을 저장하지 못했어요."); } finally { setSubmitting(false); }
   };
   if (loading) return <PageShell><BackLink href="/partner/slots" /><CourtRallyLoader label="시간 입력을 준비하고 있어요." /></PageShell>;
   if (error && !application) return <PageShell><BackLink href="/partner/slots" /><LoadingOrError error={error} label="시간 입력을 준비하고 있어요." onRetry={() => void load()} /></PageShell>;
-  const canEdit = !slotId || slot?.status === "DRAFT";
-  return <PageShell><BackLink href="/partner/slots" /><p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">{slotId ? "시간 초안 수정" : "시간 등록"}</p><h1 className="mt-1 text-2xl font-bold">{slotId ? "초안 내용을 다시 확인해요" : "모집 가능한 시간을 등록해요"}</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">저장하면 비공개 초안으로 남아요. 이용자에게 보이기 전까지 내용을 수정할 수 있어요.</p>{courts[0] ? <section className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] p-4"><p className="text-xs text-[var(--tm-text-secondary)]">등록된 테니스장</p><p className="mt-1 font-semibold">{courts[0].name}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">{courts[0].address}</p></section> : <section className="mt-5 rounded-2xl border border-[var(--tm-border-default)] bg-white p-4"><p className="font-semibold">시설 위치를 먼저 확인해요</p><p className="mt-1 text-sm leading-6 text-[var(--tm-text-secondary)]">승인된 테니스장 정보는 그대로 사용하고, 이 시설이 있는 시·군·구만 선택해 주세요.</p><FormField className="mt-4"><FormLabel>시·군·구 검색</FormLabel><FormControl><SearchField onChange={(event) => { setRegionQuery(event.target.value); setSelectedRegion(null); }} onReset={() => { setRegionQuery(""); setSelectedRegion(null); }} placeholder="예) 마포구" value={regionQuery} /></FormControl></FormField>{selectedRegion ? <p className="mt-3 rounded-xl bg-[var(--tm-bg-subtle)] px-3 py-3 text-sm font-semibold text-[var(--tm-action-primary)]">선택: {selectedRegion.parentName ? `${selectedRegion.parentName} ` : ""}{selectedRegion.name}</p> : null}{regionQuery.trim() && regions.length ? <div className="mt-2 grid gap-2">{regions.map((region) => <button className="min-h-11 rounded-xl border border-[var(--tm-border-default)] px-3 text-left text-sm" key={region.code} onClick={() => { setSelectedRegion(region); setRegionQuery(`${region.parentName ? `${region.parentName} ` : ""}${region.name}`); setRegions([]); }} type="button">{region.parentName ? `${region.parentName} · ` : ""}{region.name}</button>)}</div> : null}</section>}<div className="mt-6 grid gap-4"><FormField><FormLabel>코트 면</FormLabel><FormControl><TextField disabled={!canEdit} maxLength={50} onChange={(event) => set("courtUnitName", event.target.value)} placeholder="예) 2번 코트" value={draft.courtUnitName} /></FormControl></FormField><FormField><FormLabel>날짜</FormLabel><FormControl><TextField disabled={!canEdit} onChange={(event) => set("date", event.target.value)} type="date" value={draft.date} /></FormControl></FormField><div className="grid grid-cols-2 gap-3"><FormField><FormLabel>시작 시간</FormLabel><FormControl><TextField disabled={!canEdit} onChange={(event) => set("startsAt", event.target.value)} type="time" value={draft.startsAt} /></FormControl></FormField><FormField><FormLabel>종료 시간</FormLabel><FormControl><TextField disabled={!canEdit} onChange={(event) => set("endsAt", event.target.value)} type="time" value={draft.endsAt} /></FormControl></FormField></div><FormField><FormLabel>게스트 참가비</FormLabel><FormControl><TextField disabled={!canEdit} inputMode="numeric" min="0" onChange={(event) => set("priceKrw", event.target.value)} placeholder="예) 40000" type="number" value={draft.priceKrw} /></FormControl></FormField><FormField><FormLabel>경기 유형</FormLabel><FormControl><div className="grid w-full grid-cols-2 gap-2">{activeGameTypes.map((value) => <button aria-pressed={draft.gameType === value} className={`min-h-12 rounded-xl border text-sm font-semibold disabled:opacity-50 ${draft.gameType === value ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white"}`} disabled={!canEdit} key={value} onClick={() => setDraft((current) => {
+  const canEdit = application?.canCreatePrivateDraft && (!slotId || slot?.status === "DRAFT");
+  return <PageShell>
+    <BackLink href="/partner/slots" />
+    <p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">{slotId ? "시간 초안 수정" : "코트 매칭 등록"}</p>
+    <h1 className="mt-1 text-2xl font-bold">{slotId ? "초안 내용을 다시 확인해요" : "이번 경기의 조건을 정해 주세요"}</h1>
+    <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">코트와 연락처는 저장된 정보를 사용해요. 경기 조건을 저장하면 비공개 초안으로 남아요.</p>
+    {court ? <>
+      <section className="mt-5 rounded-2xl bg-white p-5" aria-label="등록된 코트">
+        <p className="text-xs text-[var(--tm-text-secondary)]">내 코트</p><h2 className="mt-2 font-bold">{court.name}</h2><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">{court.address}</p>
+      </section>
+      <section className="mt-4 rounded-2xl bg-white p-5" aria-label="문의 연락처">
+        <div className="flex items-center justify-between gap-3"><h2 className="font-bold">문의 연락처</h2><button className="min-h-11 shrink-0 px-2 text-sm font-semibold text-blue-600 disabled:opacity-50" type="button" disabled={submitting || !application?.canCreatePrivateDraft} onClick={() => { setContactNotice(""); setContactOpen(true); }}>{court.operatorContact ? "변경" : "연락처 등록"}</button></div>
+        {court.operatorContact ? <><p className="mt-2 text-lg font-bold">{formatCourtContactPhone(court.operatorContact.phone)}</p><p className="mt-1 text-sm leading-6 text-[var(--tm-text-secondary)]">연락 가능 시간 · {court.operatorContact.hours}</p><p className="mt-3 text-xs text-[var(--tm-text-secondary)]">이 코트의 모든 매칭에서 함께 사용해요.</p></> : <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">한 번 등록하면 다음 매칭에도 사용해요. 초안은 먼저 저장할 수 있고, 새 공개 전에 연락처가 필요해요.</p>}
+        {contactNotice ? <p className="mt-3 text-sm text-blue-700" role="status">{contactNotice}</p> : null}
+      </section>
+    </> : <section className="mt-5 rounded-2xl border border-[var(--tm-border-default)] bg-white p-5" aria-label="최초 코트 설정">
+      <h2 className="font-bold">코트 기본정보를 한 번만 설정해요</h2>
+      <p className="mt-3 font-semibold">{application?.venue.name}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">{application?.venue.address}</p>
+      <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">등록한 코트 정보를 그대로 사용해요. 시·군·구를 확인한 뒤 문의 연락처를 등록해 주세요.</p>
+      <FormField className="mt-4"><FormLabel>시·군·구 검색</FormLabel><FormControl><SearchField disabled={preparingCourt || submitting} onChange={(event) => { setRegionQuery(event.target.value); setSelectedRegion(null); }} onReset={() => { setRegionQuery(""); setSelectedRegion(null); }} placeholder="예) 마포구" value={regionQuery} /></FormControl></FormField>
+      {selectedRegion ? <p className="mt-3 rounded-xl bg-[var(--tm-bg-subtle)] px-3 py-3 text-sm font-semibold text-[var(--tm-action-primary)]">선택: {selectedRegion.parentName ? `${selectedRegion.parentName} ` : ""}{selectedRegion.name}</p> : null}
+      {regionQuery.trim() && regions.length ? <div className="mt-2 grid gap-2">{regions.map((region) => <button className="min-h-11 rounded-xl border border-[var(--tm-border-default)] px-3 text-left text-sm" disabled={preparingCourt || submitting} key={region.code} onClick={() => { setSelectedRegion(region); setRegionQuery(`${region.parentName ? `${region.parentName} ` : ""}${region.name}`); setRegions([]); }} type="button">{region.parentName ? `${region.parentName} · ` : ""}{region.name}</button>)}</div> : null}
+      {setupError ? <p className="mt-3 text-sm text-rose-700" role="alert">{setupError}</p> : null}
+      <Button className="mt-4" fullWidth disabled={preparingCourt || submitting || !application?.canCreatePrivateDraft} loading={preparingCourt} onClick={() => void prepareCourt()}>코트 기본정보 저장·연락처 등록</Button>
+    </section>}
+    <div className="mt-6 grid gap-4"><FormField><FormLabel>코트 면</FormLabel><FormControl><TextField disabled={!canEdit} maxLength={50} onChange={(event) => set("courtUnitName", event.target.value)} placeholder="예) 2번 코트" value={draft.courtUnitName} /></FormControl></FormField><FormField><FormLabel>날짜</FormLabel><FormControl><TextField disabled={!canEdit} onChange={(event) => set("date", event.target.value)} type="date" value={draft.date} /></FormControl></FormField><div className="grid grid-cols-2 gap-3"><FormField><FormLabel>시작 시간</FormLabel><FormControl><TextField disabled={!canEdit} onChange={(event) => set("startsAt", event.target.value)} type="time" value={draft.startsAt} /></FormControl></FormField><FormField><FormLabel>종료 시간</FormLabel><FormControl><TextField disabled={!canEdit} onChange={(event) => set("endsAt", event.target.value)} type="time" value={draft.endsAt} /></FormControl></FormField></div><FormField><FormLabel>게스트 참가비</FormLabel><FormControl><TextField disabled={!canEdit} inputMode="numeric" min="0" onChange={(event) => set("priceKrw", event.target.value)} placeholder="예) 40000" type="number" value={draft.priceKrw} /></FormControl></FormField><FormField><FormLabel>경기 유형</FormLabel><FormControl><div className="grid w-full grid-cols-2 gap-2">{activeGameTypes.map((value) => <button aria-pressed={draft.gameType === value} className={`min-h-12 rounded-xl border text-sm font-semibold disabled:opacity-50 ${draft.gameType === value ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white"}`} disabled={!canEdit} key={value} onClick={() => setDraft((current) => {
           const min = Math.max(minimumForCourtGame(value), Number(current.minParticipantCount) || 0);
           const max = Math.max(min, Number(current.maxParticipantCount) || 0);
           const male = value === "WOMENS_DOUBLES" ? 0 : value === "MENS_DOUBLES" ? max : Math.floor(max / 2);
           return { ...current, gameType: value, minParticipantCount: String(min), maxParticipantCount: String(max), maleCapacity: String(male), femaleCapacity: String(max - male) };
-        })} type="button">{gameTypeLabels[value]}</button>)}</div></FormControl></FormField><div className="grid grid-cols-2 gap-3"><FormField><FormLabel>모집 정원</FormLabel><FormControl><TextField disabled={!canEdit} inputMode="numeric" min="2" onChange={(event) => set("maxParticipantCount", event.target.value)} type="number" value={draft.maxParticipantCount} /></FormControl></FormField><FormField><FormLabel>최소 인원</FormLabel><FormControl><TextField disabled={!canEdit} inputMode="numeric" min={minimumForCourtGame(draft.gameType)} onChange={(event) => set("minParticipantCount", event.target.value)} type="number" value={draft.minParticipantCount} /></FormControl></FormField></div><p className="-mt-2 text-xs leading-5 text-[var(--tm-text-secondary)]">운영자는 인원에 포함하지 않아요. 복식은 최소 4명, 혼복은 남 2명·여 2명 이상이 필요해요. 기타는 최소 2명이에요. 시작 3시간 전까지 해당 구성이 확정되지 않으면 취소돼요.</p>{needsGenderQuota(draft.gameType) ? <div className="grid grid-cols-2 gap-3"><FormField><FormLabel>남자 정원</FormLabel><FormControl><TextField disabled={!canEdit || draft.gameType === "WOMENS_DOUBLES"} inputMode="numeric" min="0" onChange={(event) => set("maleCapacity", event.target.value)} type="number" value={draft.maleCapacity} /></FormControl></FormField><FormField><FormLabel>여자 정원</FormLabel><FormControl><TextField disabled={!canEdit || draft.gameType === "MENS_DOUBLES"} inputMode="numeric" min="0" onChange={(event) => set("femaleCapacity", event.target.value)} type="number" value={draft.femaleCapacity} /></FormControl></FormField></div> : null}<FormField><FormLabel>참가 승인</FormLabel><FormControl><div className="grid w-full gap-2">{([["AUTO", "자동 승인", "조건이 맞으면 바로 자리를 잡아요. 입금 확인만 하면 돼요."], ["OPERATOR", "직접 승인", "신청을 하나씩 검토하고 승인해요."]] as const).map(([value, label, description]) => <button aria-pressed={draft.approvalMode === value} className={`rounded-xl border px-4 py-3 text-left disabled:opacity-50 ${draft.approvalMode === value ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)]" : "border-[var(--tm-border-default)] bg-white"}`} disabled={!canEdit} key={value} onClick={() => set("approvalMode", value)} type="button"><span className={`block text-sm font-semibold ${draft.approvalMode === value ? "text-[var(--tm-action-primary)]" : ""}`}>{label}</span><span className="mt-1 block text-xs leading-5 text-[var(--tm-text-secondary)]">{description}</span></button>)}</div></FormControl></FormField><CourtServiceScopeFields value={draft.serviceScope} disabled={!canEdit || submitting} onChange={(value) => { set("serviceScope", value); setError(""); }} /><FormField><FormLabel>이용 안내 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></FormLabel><FormControl><TextArea disabled={!canEdit} maxLength={500} onChange={(event) => set("usageNote", event.target.value)} placeholder="예) 실내 전용 테니스화를 준비해 주세요." value={draft.usageNote} /></FormControl></FormField></div>{!canEdit ? <p className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]">공개했거나 세션에 연결된 시간은 수정할 수 없어요. 새 초안을 등록해 주세요.</p> : null}{error ? <p className="mt-4 text-sm text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}{canEdit ? <Button className="fixed inset-x-5 bottom-7 mx-auto w-[calc(100%-40px)] max-w-[520px]" disabled={submitting} fullWidth loading={submitting} onClick={() => void submit()}>초안 저장하기</Button> : <Button as={Link} className="fixed inset-x-5 bottom-7 mx-auto w-[calc(100%-40px)] max-w-[520px]" fullWidth href="/partner/slots/new">새 초안 등록하기</Button>}</PageShell>;
+        })} type="button">{gameTypeLabels[value]}</button>)}</div></FormControl></FormField><div className="grid grid-cols-2 gap-3"><FormField><FormLabel>모집 정원</FormLabel><FormControl><TextField disabled={!canEdit} inputMode="numeric" min="2" onChange={(event) => set("maxParticipantCount", event.target.value)} type="number" value={draft.maxParticipantCount} /></FormControl></FormField><FormField><FormLabel>최소 인원</FormLabel><FormControl><TextField disabled={!canEdit} inputMode="numeric" min={minimumForCourtGame(draft.gameType)} onChange={(event) => set("minParticipantCount", event.target.value)} type="number" value={draft.minParticipantCount} /></FormControl></FormField></div><p className="-mt-2 text-xs leading-5 text-[var(--tm-text-secondary)]">운영자는 인원에 포함하지 않아요. 복식은 최소 4명, 혼복은 남 2명·여 2명 이상이 필요해요. 기타는 최소 2명이에요. 시작 3시간 전까지 해당 구성이 확정되지 않으면 취소돼요.</p>{needsGenderQuota(draft.gameType) ? <div className="grid grid-cols-2 gap-3"><FormField><FormLabel>남자 정원</FormLabel><FormControl><TextField disabled={!canEdit || draft.gameType === "WOMENS_DOUBLES"} inputMode="numeric" min="0" onChange={(event) => set("maleCapacity", event.target.value)} type="number" value={draft.maleCapacity} /></FormControl></FormField><FormField><FormLabel>여자 정원</FormLabel><FormControl><TextField disabled={!canEdit || draft.gameType === "MENS_DOUBLES"} inputMode="numeric" min="0" onChange={(event) => set("femaleCapacity", event.target.value)} type="number" value={draft.femaleCapacity} /></FormControl></FormField></div> : null}<FormField><FormLabel>참가 승인</FormLabel><FormControl><div className="grid w-full gap-2">{([["AUTO", "자동 승인", "조건이 맞으면 바로 자리를 잡아요. 입금 확인만 하면 돼요."], ["OPERATOR", "직접 승인", "신청을 하나씩 검토하고 승인해요."]] as const).map(([value, label, description]) => <button aria-pressed={draft.approvalMode === value} className={`rounded-xl border px-4 py-3 text-left disabled:opacity-50 ${draft.approvalMode === value ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)]" : "border-[var(--tm-border-default)] bg-white"}`} disabled={!canEdit} key={value} onClick={() => set("approvalMode", value)} type="button"><span className={`block text-sm font-semibold ${draft.approvalMode === value ? "text-[var(--tm-action-primary)]" : ""}`}>{label}</span><span className="mt-1 block text-xs leading-5 text-[var(--tm-text-secondary)]">{description}</span></button>)}</div></FormControl></FormField><CourtServiceScopeFields value={draft.serviceScope} disabled={!canEdit || submitting} onChange={(value) => { set("serviceScope", value); setError(""); }} /><FormField><FormLabel>이용 안내 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></FormLabel><FormControl><TextArea disabled={!canEdit} maxLength={500} onChange={(event) => set("usageNote", event.target.value)} placeholder="예) 실내 전용 테니스화를 준비해 주세요." value={draft.usageNote} /></FormControl></FormField></div>{!canEdit ? <p className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]">공개했거나 세션에 연결된 시간은 수정할 수 없어요. 새 초안을 등록해 주세요.</p> : null}{error ? <p className="mt-4 text-sm text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}{canEdit ? <Button className="fixed inset-x-5 bottom-7 mx-auto w-[calc(100%-40px)] max-w-[520px]" disabled={submitting || preparingCourt || contactOpen} fullWidth loading={submitting} onClick={() => void submit()}>초안 저장하기</Button> : <Button as={Link} className="fixed inset-x-5 bottom-7 mx-auto w-[calc(100%-40px)] max-w-[520px]" fullWidth href="/partner/slots/new">새 초안 등록하기</Button>}
+    {court && contactOpen ? <Modal open onOpenChange={(open) => { if (!open && !contactBusy) setContactOpen(false); }}>
+      <ModalContainer variant="bottom">
+        <ModalNavigation trailingContent={<ModalClose aria-label="닫기" disabled={contactBusy} />} />
+        <ModalContent><ModalContentItem><ModalHeading>코트 기본정보</ModalHeading></ModalContentItem><ModalContentItem>
+          <OperatorContact courtId={court.id} onCourtChange={updateContact} onBusyChange={setContactBusy} onDone={() => { setContactOpen(false); setContactNotice("연락처 정보를 반영했어요."); }} />
+        </ModalContentItem></ModalContent>
+      </ModalContainer>
+    </Modal> : null}
+  </PageShell>;
 }

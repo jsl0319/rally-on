@@ -1,6 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { encode } from "next-auth/jwt";
-import { expect, test, type Browser } from "@playwright/test";
+import { expect, test, type Browser, type Page } from "@playwright/test";
 import { PrismaClient } from "@/generated/prisma/client";
 import { E2E_AUTH_SECRET, E2E_BASE_URL, requireE2eDatabaseUrl } from "./e2e-environment";
 import { disconnectE2eDatabase, e2eUsers, resetE2eDatabase } from "./fixtures";
@@ -15,6 +15,131 @@ async function session(browser: Browser, id: string, errors: string[]) {
   const page = await context.newPage(); page.on("pageerror", (error) => errors.push(error.message));
   return { context, page };
 }
+
+async function fillSlot(page: Page, courtUnitName: string) {
+  await page.getByLabel("코트 면", { exact: true }).fill(courtUnitName);
+  await page.getByLabel("날짜", { exact: true }).fill("2030-01-02");
+  await page.getByLabel("시작 시간", { exact: true }).fill("10:00");
+  await page.getByLabel("종료 시간", { exact: true }).fill("12:00");
+  await page.getByLabel("게스트 참가비", { exact: true }).fill("15000");
+  await page.getByRole("button", { name: "기타", exact: true }).click();
+  for (const field of ["테니스공", "장비 대여", "레슨", "현장 경기 진행"]) {
+    await page.getByRole("group", { name: new RegExp(field) }).getByRole("radio", { name: "미포함", exact: true }).check();
+  }
+  await page.getByPlaceholder("예) 실내 전용 테니스화를 준비해 주세요.").fill("작성 중인 경기 안내");
+}
+
+test("연락처 변경·충돌 복구 중 매칭 입력을 보존하고 다음 매칭에도 재사용한다", async ({ browser }) => {
+  test.setTimeout(120000);
+  const fixture = await resetE2eDatabase();
+  const errors: string[] = [];
+  const operator = await session(browser, e2eUsers.operator.id, errors);
+  try {
+    const slot = await prisma.courtSlot.findUniqueOrThrow({ where: { id: fixture.partnerSlotId }, include: { courtUnit: true } });
+    const courtId = slot.courtUnit.courtId;
+    const endpoint = `/api/v1/operator/courts/${courtId}/contact`;
+    expect((await operator.context.request.put(endpoint, { data: { phone: "02-1234-5678", hours: "매일 09~18시", publicationAgreed: true, expectedVersion: 0 } })).ok()).toBeTruthy();
+    await operator.page.goto("/partner/slots/new");
+    const summary = operator.page.getByRole("region", { name: "문의 연락처", exact: true });
+    await expect(summary).toContainText("02-1234-5678");
+    await expect(operator.page.getByRole("checkbox")).toHaveCount(0);
+    await fillSlot(operator.page, "재사용 1번");
+    await summary.getByRole("button", { name: "변경", exact: true }).click();
+    const dialog = operator.page.getByRole("dialog");
+    await expect(dialog.getByLabel("운영자 전화번호", { exact: true })).toHaveValue("02-1234-5678");
+    await dialog.getByLabel("운영자 전화번호", { exact: true }).fill("031-111-2222");
+    await dialog.getByRole("button", { name: "닫기", exact: true }).click();
+    await expect(summary).toContainText("02-1234-5678");
+    await expect(operator.page.getByLabel("코트 면", { exact: true })).toHaveValue("재사용 1번");
+
+    await summary.getByRole("button", { name: "변경", exact: true }).click();
+    await expect(dialog.getByLabel("운영자 전화번호", { exact: true })).toHaveValue("02-1234-5678");
+    // 다른 창에서 먼저 저장한 변경을 덮어쓰지 않고 재조회 후 다시 확인한다.
+    expect((await operator.context.request.put(endpoint, { data: { phone: "031-222-3333", hours: "평일 10~19시", publicationAgreed: true, expectedVersion: 1 } })).ok()).toBeTruthy();
+    await dialog.getByLabel("운영자 전화번호", { exact: true }).fill("031-123-4567");
+    await dialog.getByRole("checkbox").check();
+    await dialog.getByRole("button", { name: "연락처 저장하기" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("다시 불러와 주세요");
+    await dialog.getByRole("button", { name: "최신 정보 다시 불러오기" }).click();
+    await expect(dialog.getByLabel("운영자 전화번호", { exact: true })).toHaveValue("031-222-3333");
+    await expect(dialog.getByRole("checkbox")).not.toBeChecked();
+    await dialog.getByLabel("운영자 전화번호", { exact: true }).fill("031-123-4567");
+    await dialog.getByRole("checkbox").check();
+    await dialog.screenshot({ path: "/tmp/rally-contact-inline-settings.png" });
+    await dialog.getByRole("button", { name: "연락처 저장하기" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(summary).toContainText("031-123-4567");
+    await expect(operator.page.getByLabel("날짜", { exact: true })).toHaveValue("2030-01-02");
+    await expect(operator.page.getByLabel("시작 시간", { exact: true })).toHaveValue("10:00");
+    await expect(operator.page.getByLabel("종료 시간", { exact: true })).toHaveValue("12:00");
+    await expect(operator.page.getByLabel("게스트 참가비", { exact: true })).toHaveValue("15000");
+    await expect(operator.page.getByPlaceholder("예) 실내 전용 테니스화를 준비해 주세요.")).toHaveValue("작성 중인 경기 안내");
+    await operator.page.getByRole("button", { name: "초안 저장하기" }).click();
+    await expect(operator.page).toHaveURL(/\/partner\/slots$/);
+
+    await operator.page.goto("/partner/slots/new");
+    await expect(summary).toContainText("031-123-4567");
+    await expect(operator.page.getByRole("checkbox")).toHaveCount(0);
+    await expect(operator.page.getByLabel("운영자 전화번호", { exact: true })).toHaveCount(0);
+    await operator.page.screenshot({ path: "/tmp/rally-contact-slot-reuse.png" });
+    await fillSlot(operator.page, "재사용 2번");
+    await operator.page.getByRole("button", { name: "초안 저장하기" }).click();
+    await expect(operator.page).toHaveURL(/\/partner\/slots$/);
+    const drafts = await prisma.courtSlot.findMany({ where: { courtUnit: { courtId, name: { startsWith: "재사용" } } } });
+    expect(drafts).toHaveLength(2);
+    for (const draft of drafts) {
+      expect(draft).toMatchObject({ priceKrw: 15000, usageNote: "작성 중인 경기 안내" });
+      const published = await operator.context.request.post(`/api/v1/operator/slots/${draft.id}/publish`);
+      expect(published.ok(), await published.text()).toBeTruthy();
+    }
+    expect(await prisma.court.findUnique({ where: { id: courtId } })).toMatchObject({ operatorContactPhone: "0311234567", contactVersion: 3 });
+    expect(errors).toEqual([]);
+  } finally { await operator.context.close(); }
+});
+
+test("최초 코트 설정에서 기존 이름·주소를 재사용하고 연락처 저장 실패 후 재시도한다", async ({ browser }) => {
+  test.setTimeout(120000);
+  await resetE2eDatabase();
+  const application = await prisma.courtOperatorApplication.create({ data: {
+    applicantUserId: e2eUsers.host.id, status: "DRAFT_ACCESS_GRANTED", businessName: "E2E 첫 운영자",
+    businessRegistrationNumberHash: "e2e-first-operator", venueName: "E2E 처음 등록한 코트", venueAddress: "서울시 E2E 마포구 10", normalizedVenueKey: "e2e-first-court",
+  } });
+  const errors: string[] = [];
+  const operator = await session(browser, e2eUsers.host.id, errors);
+  try {
+    await operator.page.goto("/partner/application");
+    await operator.page.getByRole("link", { name: "코트 기본정보 설정하기", exact: true }).click();
+    const setup = operator.page.getByRole("region", { name: "최초 코트 설정" });
+    await expect(setup).toContainText(application.venueName);
+    await expect(setup).toContainText(application.venueAddress);
+    await setup.getByRole("button", { name: "코트 기본정보 저장·연락처 등록" }).click();
+    await expect(setup.getByRole("alert")).toContainText("시·군·구");
+    await operator.page.getByPlaceholder("예) 마포구").fill("마포");
+    await setup.getByRole("button", { name: "E2E서울 · E2E 마포구", exact: true }).click();
+    await setup.getByRole("button", { name: "코트 기본정보 저장·연락처 등록" }).click();
+    const dialog = operator.page.getByRole("dialog");
+    await expect(dialog.getByLabel("운영자 전화번호", { exact: true })).toHaveValue("");
+    const court = await prisma.court.findUniqueOrThrow({ where: { operatorApplicationId: application.id } });
+    expect(court).toMatchObject({ name: application.venueName, address: application.venueAddress });
+    await dialog.getByLabel("운영자 전화번호", { exact: true }).fill("02-1234-5678");
+    await dialog.getByLabel("연락 가능 시간", { exact: true }).fill("매일 09~18시");
+    await dialog.getByRole("checkbox").check();
+    await operator.page.route(`**/api/v1/operator/courts/${court.id}/contact`, (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { message: "잠시 후 다시 시도해 주세요." } }) }), { times: 1 });
+    await dialog.getByRole("button", { name: "연락처 저장하기" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("잠시 후");
+    await expect(dialog.getByLabel("운영자 전화번호", { exact: true })).toHaveValue("02-1234-5678");
+    await dialog.getByRole("button", { name: "연락처 저장하기" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(operator.page.getByRole("region", { name: "문의 연락처", exact: true })).toContainText("02-1234-5678");
+    expect(await prisma.court.count({ where: { operatorApplicationId: application.id } })).toBe(1);
+    expect(await prisma.courtSlot.count({ where: { courtUnit: { courtId: court.id } } })).toBe(0);
+    for (const width of [320, 390]) {
+      await operator.page.setViewportSize({ width, height: 844 });
+      expect(await operator.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
+    expect(errors).toEqual([]);
+  } finally { await operator.context.close(); }
+});
 
 test("연락처 등록·공개 필수 검증과 신청 후 전화·변경·공개 중단을 모바일에서 연결한다", async ({ browser, request }) => {
   test.setTimeout(120000);

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rally On · 기본정보 재사용 시안</title>
+<style>
+:root{color-scheme:light;--blue:#0066ff;--text:#202d43;--muted:#61718b;--line:#e7edf5}*{box-sizing:border-box}body{margin:0;background:#f3f5f9;color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;word-break:keep-all}button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:3px solid #e5981c;outline-offset:3px}.workspace{max-width:1040px;margin:auto;padding:40px 24px;display:grid;grid-template-columns:1fr 420px;gap:64px;align-items:start}.brand{color:var(--blue);font-weight:700}h1{font-size:32px;line-height:1.35;letter-spacing:-.04em;margin:18px 0}h2{font-size:18px;line-height:1.5;margin:0 0 16px;letter-spacing:-.03em}p{margin:0}.muted{color:var(--muted)}.small{font-size:13px}.lead{color:var(--muted)}.guide{margin:26px 0;padding-left:20px;color:var(--muted)}.guide li{padding:5px 0}.controls{display:flex;gap:8px;flex-wrap:wrap;margin:26px 0 18px}.controls button{border:1px solid #d5deeb;padding:10px 14px;min-height:44px;border-radius:12px;background:white;color:var(--muted)}.controls button[aria-pressed="true"]{background:var(--text);border-color:var(--text);color:white}.note{border-top:1px solid #dfe5ee;padding-top:20px;margin-top:26px;color:var(--muted);font-size:13px}.phone{min-width:0;width:100%;background:white;border-radius:28px;overflow:hidden;box-shadow:0 18px 60px #1735560c}.nav{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:22px 24px 18px;border-bottom:1px solid var(--line)}.nav strong{font-size:15px}.section{padding:24px;border-bottom:7px solid #f4f6fa}.section:last-child{border-bottom:0}.eyebrow{font-size:12px;font-weight:600;color:var(--muted)}.court{font-size:22px;line-height:1.4;letter-spacing:-.03em;margin:8px 0}.chip{display:inline-block;border-radius:7px;background:#ecf3ff;color:#0055d8;font-size:12px;font-weight:600;padding:4px 8px}.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.section-head h2{margin:0}.text-button{border:0;background:none;color:var(--blue);min-height:44px;padding:8px 0 8px 12px;font-weight:600;font-size:13px;flex-shrink:0}.contact-number{font-size:21px;font-weight:700;letter-spacing:-.02em;overflow-wrap:anywhere}.contact-hint{margin-top:14px;font-size:12px;color:var(--muted)}dl{margin:0;display:grid;grid-template-columns:80px minmax(0,1fr);gap:14px 10px;font-size:14px}dt{color:var(--muted)}dd{margin:0;text-align:right;overflow-wrap:anywhere}.includes{display:flex;flex-wrap:wrap;gap:7px;font-size:13px}.includes span{background:#f4f6fa;padding:5px 9px;border-radius:8px;color:var(--muted)}.primary{background:var(--blue);color:white;border:0;border-radius:12px;padding:13px 16px;font-weight:700;min-height:48px;width:100%}.secondary{min-height:44px;padding:10px 14px;border:1px solid var(--line);color:var(--muted);background:white;border-radius:10px;width:100%}.primary:disabled{opacity:.45;cursor:default}.footer{padding:20px 24px}.status{margin-top:12px;font-size:13px;color:#0055d8}.formrow{margin:20px 0}label{display:block;font-size:13px;font-weight:600;margin-bottom:7px}input{display:block;min-width:0;width:100%;border:1px solid #d9e2ee;border-radius:10px;padding:11px 12px;color:var(--text);font-size:16px;background:white}.confirm{display:flex;align-items:flex-start;gap:10px;font-weight:400;margin:20px 0}.confirm input{width:18px;height:18px;flex-shrink:0;margin-top:4px;accent-color:var(--blue)}.info{background:#f4f6fa;border-radius:12px;padding:14px;font-size:13px;color:var(--muted)}.stack{display:grid;gap:10px}.call{margin-top:16px;background:#edf4ff;border:1px solid #ccddff;border-radius:12px;color:var(--blue);min-height:48px;font-weight:700;width:100%}[hidden]{display:none!important}dialog{width:min(400px,calc(100% - 32px));border:0;border-radius:22px;padding:24px;color:var(--text);box-shadow:0 24px 70px #1727432b}dialog::backdrop{background:#18263f66}dialog p{font-size:14px;margin:12px 0}.schedule{margin-top:16px;font-size:14px}.price{display:flex;justify-content:space-between;gap:12px;margin-bottom:14px}.price strong{font-size:20px}
+@media(max-width:760px){.workspace{max-width:470px;padding:24px 16px;display:block}h1{font-size:26px}.guide{display:none}.note{margin:18px 0 24px}.phone{border-radius:22px}.controls{gap:6px}.controls button{padding:9px 11px;font-size:13px}}@media(max-width:360px){.section,.nav,.footer{padding:20px}.contact-number{font-size:19px}dl{grid-template-columns:62px minmax(0,1fr);font-size:13px}}
+</style>
+</head>
+<body>
+<main class="workspace">
+<aside>
+<div class="brand">Rally On</div><h1>기본정보는 한 번만.<br>매칭마다 다시 쓰지 않아요.</h1>
+<p class="lead">저장된 코트와 연락처를 그대로 사용하고, 경기마다 달라지는 조건만 등록합니다.</p>
+<ol class="guide"><li>최초 코트 설정에서 연락처 등록</li><li>매칭 등록 시 저장된 정보 자동 사용</li><li>번호가 바뀔 때만 기본정보 수정</li></ol>
+<div class="controls" role="group" aria-label="화면 상태">
+<button type="button" data-mode="create" aria-pressed="true">매칭 등록</button><button type="button" data-mode="before" aria-pressed="false">신청 전</button><button type="button" data-mode="after" aria-pressed="false">신청 후</button><button type="button" data-mode="settings" aria-pressed="false">기본정보 관리</button>
+</div>
+<p class="small muted" id="state-description" aria-live="polite">코트와 연락처는 저장된 정보를 사용해요.</p>
+<p class="note"><strong>검토용 시안 · 모든 정보는 예시입니다.</strong><br>변경 내용은 이 화면에서만 반영됩니다. 실제 저장·신청·전화 발신은 하지 않습니다.</p>
+</aside>
+<article class="phone" aria-label="기본정보 재사용 화면 시안">
+<header class="nav"><span class="brand">Rally On</span><strong id="screen-name">코트 매칭 등록</strong><span class="small muted">시안</span></header>
+<div id="create-view">
+<section class="section"><p class="eyebrow">내 코트</p><h2 class="court">예시 테니스장</h2><p class="small muted">서울시 예시구 코트로 25</p></section>
+<section class="section"><h2>이번 매칭</h2><dl><dt>일시</dt><dd>10. 10. (토)<br>14:00–16:00</dd><dt>코트</dt><dd>2번 코트</dd><dt>게임 유형</dt><dd>혼복</dd><dt>모집 인원</dt><dd>남 2명 · 여 2명</dd><dt>참가비</dt><dd>1인 12,000원</dd></dl></section>
+<section class="section"><div class="section-head"><h2>문의 연락처</h2><button type="button" class="text-button" id="edit-contact">변경</button></div><p class="contact-number" data-phone></p><p class="small muted" data-hours></p><p class="contact-hint">코트 기본정보의 연락처를 사용해요.</p></section>
+<footer class="footer"><button type="button" class="primary" id="create-preview">등록 내용 확인</button><p class="status" id="create-status" aria-live="polite"></p></footer>
+</div>
+<div id="member-view" hidden>
+<section class="section"><span class="chip" id="match-state">모집 중</span><h2 class="court">예시 테니스장</h2><p class="small muted">서울 · 실내 하드코트</p><p class="schedule"><strong>10. 10. (토)</strong> 14:00–16:00 · 2번 코트</p></section>
+<section class="section"><h2>참가 조건</h2><div class="includes"><span>혼복</span><span>남 2명 · 여 2명</span><span>초보자 환영</span></div></section>
+<section class="section"><h2>참가비 포함 항목</h2><div class="includes"><span>코트 이용</span><span>매칭 참가</span><span>공 제공</span></div></section>
+<section class="section"><h2>위치와 현장 안내</h2><p class="small muted">서울시 예시구 코트로 25</p><p class="small" style="margin-top:10px">운동화와 개인 라켓을 준비해 주세요.</p></section>
+<section class="section" id="participant-contact" hidden><h2>운영자 문의</h2><p class="contact-number" data-phone></p><p class="small muted" data-hours></p><button class="call" type="button" id="call-preview">전화하기</button><p class="status" id="call-status" aria-live="polite"></p></section>
+<footer class="footer"><div class="price"><span class="muted small">1인 참가비</span><strong>12,000원</strong></div><button class="primary" type="button" id="apply-preview">같이 치기</button></footer>
+</div>
+<div id="settings-view" hidden>
+<section class="section"><p class="eyebrow">내 코트</p><h2 class="court">예시 테니스장</h2><p class="small muted">서울시 예시구 코트로 25</p></section>
+<section class="section"><h2>문의 연락처</h2><p class="small muted">이 코트의 모든 매칭에서 함께 사용하는 연락처예요.</p>
+<form id="contact-form">
+<div class="formrow"><label for="contact-phone">전화번호</label><input id="contact-phone" type="tel" inputmode="tel" maxlength="24" autocomplete="off" required pattern="0[0-9 -]{8,23}" aria-describedby="form-note"></div>
+<div class="formrow"><label for="contact-hours">연락 가능 시간</label><input id="contact-hours" maxlength="80" autocomplete="off" required></div>
+<p class="info" id="form-note">신청 접수 후 경기 종료 24시간까지 공개해요. 철회·취소 등은 미처리 입금·환불이 있는 동안만, 종료 24시간 뒤에도 미처리 거래가 남으면 해결까지 공개해요. 번호를 변경하면 기존 신청자에게도 새 번호가 보여요.</p>
+<label class="confirm"><input id="contact-agreed" type="checkbox" required><span>이 번호로 문의를 받을 수 있으며, 위 범위의 신청자에게 연락처를 공개하는 데 동의해요.</span></label>
+<div class="stack"><button class="primary" type="submit">시안에 반영하기</button><button class="secondary" type="button" id="cancel-edit">변경 취소</button></div>
+</form>
+</section>
+</div>
+</article>
+</main>
+<dialog id="preview-dialog" aria-labelledby="dialog-title"><h2 id="dialog-title">등록 내용 확인</h2><p><strong>예시 테니스장</strong><br>10. 10. (토) 14:00–16:00<br>혼복 · 남 2명 / 여 2명 · 1인 12,000원</p><p id="dialog-contact">문의 연락처는 코트 기본정보를 사용해요.</p><p class="small muted">시안에서는 실제 등록·신청을 하지 않아요.</p><form method="dialog"><button class="primary">닫기</button></form></dialog>
+<script>
+const byId=id=>document.getElementById(id);
+const contact={phone:'02-0000-0000',hours:'매일 09:00–18:00'};
+const descriptions={create:'코트와 연락처는 저장된 정보를 사용해요.',before:'신청 전에는 경기 조건을 확인해요. 담당자 번호는 아직 보이지 않아요.',after:'신청 후에는 연락처와 연락 가능 시간, 전화하기를 보여요.',settings:'최초 설정이나 번호가 바뀔 때만 수정해요. 매칭마다 다시 입력하지 않아요.'};
+const titles={create:'코트 매칭 등록',before:'코트 매칭',after:'코트 매칭',settings:'코트 기본정보'};
+function renderContact(){document.querySelectorAll('[data-phone]').forEach(el=>el.textContent=contact.phone);document.querySelectorAll('[data-hours]').forEach(el=>el.textContent='연락 가능 시간 · '+contact.hours);}
+function showMode(mode){
+ document.querySelectorAll('[data-mode]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.mode===mode)));
+ byId('create-view').hidden=mode!=='create';byId('member-view').hidden=mode!=='before'&&mode!=='after';byId('settings-view').hidden=mode!=='settings';
+ byId('participant-contact').hidden=mode!=='after';byId('match-state').textContent=mode==='after'?'신청 접수':'모집 중';
+ byId('apply-preview').textContent=mode==='after'?'신청 접수 완료':'같이 치기';byId('apply-preview').disabled=mode==='after';
+ byId('state-description').textContent=descriptions[mode];byId('screen-name').textContent=titles[mode];byId('call-status').textContent='';
+ if(mode==='settings'){byId('contact-phone').value=contact.phone;byId('contact-hours').value=contact.hours;byId('contact-agreed').checked=false;byId('contact-phone').setCustomValidity('');byId('contact-hours').setCustomValidity('');}
+}
+document.querySelectorAll('[data-mode]').forEach(el=>el.addEventListener('click',()=>showMode(el.dataset.mode)));
+byId('edit-contact').addEventListener('click',()=>{showMode('settings');byId('contact-phone').focus();});
+byId('cancel-edit').addEventListener('click',()=>{showMode('create');byId('edit-contact').focus();});
+byId('contact-form').addEventListener('submit',event=>{
+ event.preventDefault();const phone=byId('contact-phone'),hours=byId('contact-hours');
+ phone.setCustomValidity(/^0\d{8,11}$/.test(phone.value.replace(/[ -]/g,''))?'':'전화번호 형식을 확인해 주세요.');
+ hours.setCustomValidity(hours.value.trim()?'':'연락 가능 시간을 입력해 주세요.');
+ if(!event.currentTarget.reportValidity())return;
+ contact.phone=phone.value.trim();contact.hours=hours.value.trim();renderContact();showMode('create');byId('create-status').textContent='시안에 반영했어요. 이 코트의 매칭에서 함께 사용해요.';byId('edit-contact').focus();
+});
+['contact-phone','contact-hours'].forEach(id=>byId(id).addEventListener('input',()=>{byId(id).setCustomValidity('');byId('contact-agreed').checked=false;}));
+function openPreview(kind){byId('dialog-title').textContent=kind==='create'?'등록 내용 확인':'신청 내용 확인';byId('dialog-contact').hidden=kind!=='create';byId('preview-dialog').showModal();}
+byId('create-preview').addEventListener('click',()=>openPreview('create'));byId('apply-preview').addEventListener('click',()=>openPreview('apply'));byId('call-preview').addEventListener('click',()=>byId('call-status').textContent='시안에서는 전화를 걸지 않아요.');renderContact();
+</script>
+</body>
+</html>
