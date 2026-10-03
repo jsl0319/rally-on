@@ -1492,6 +1492,8 @@ PUT  /api/v1/operator/courts/{courtId}/settlement-account     운영자 입금 �
 
 `GET /partner-session-slots/{slotId}`의 `participation.applicationNotice`는 서버가 만든 현재 신청 안내다. `version`, `fingerprint`(SHA-256), `terms`(코트·일시·인원·비용·승인 방식·이용 안내·취소/입금 규칙 원문과 요약)를 포함한다. 현재 남은 자리나 조회 시각은 조건 해시에 포함하지 않는다.
 
+`court-application-2026-10-01-v2` 안내는 `terms.serviceScope`(공·장비·레슨·현장 경기 진행의 포함 여부)와 해당 원문/요약을 해시에 포함한다. 기존 v1 신청 기록은 필드가 없어도 원문 그대로 읽으며 새 값을 소급하지 않는다. 과거 Slot의 NULL은 미포함이 아니라 미등록으로 표시한다.
+
 `POST /court-matches/{matchId}/applications`의 본문:
 
 ```json
@@ -1568,6 +1570,7 @@ PUT  /api/v1/operator/courts/{courtId}/settlement-account     운영자 입금 �
   },
   "totalCourtFeeKrw": 40000,
   "maxParticipantCount": 4,
+  "serviceScope": { "balls": true, "equipment": false, "lesson": false, "facilitator": true },
   "usageNote": "실내 전용 테니스화를 준비해 주세요.",
   "session": {
     "matchId": "0198...",
@@ -1653,13 +1656,21 @@ POST /api/v1/operator/courts
 POST /api/v1/operator/courts/{courtId}/slots
 {
   "courtUnitName": "2번 코트",
-  "startsAt": "2026-08-28T10:00:00.000Z",
-  "endsAt": "2026-08-28T12:00:00.000Z",
+  "startsAt": "2030-01-02T01:00:00.000Z",
+  "endsAt": "2030-01-02T03:00:00.000Z",
   "priceKrw": 40000,
   "maxParticipantCount": 4,
+  "minParticipantCount": 4,
+  "gameType": "MIXED_DOUBLES",
+  "maleCapacity": 2,
+  "femaleCapacity": 2,
+  "approvalMode": "AUTO",
+  "serviceScope": { "balls": true, "equipment": false, "lesson": false, "facilitator": true },
   "usageNote": "실내 전용 테니스화를 준비해 주세요."
 }
 ```
+
+`serviceScope`는 새 Slot 생성·수정에서 네 boolean을 모두 필수로 받는다. 누락·null·문자열 등 잘못된 값은 422다. 초안의 값이 미등록이면 공개 시 `409 COURT_SERVICE_SCOPE_REQUIRED`다. 본인 Slot 및 공개 Slot 조회는 구조화된 `serviceScope` 또는 기존 미등록을 뜻하는 null을 반환한다. 상세 계약은 [03-14](03-14-court-service-scope-and-support.md) §8을 따른다.
 
 Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `GET /api/v1/operator/slots`는 본인 Slot의 날짜·상태 필터 목록과 연결 세션의 안전한 요약만 반환한다. `PATCH /api/v1/operator/slots/{slotId}`는 `DRAFT`의 전체 필드와 `expectedVersion`만 받고, `AVAILABLE` 이후에는 `409 COURT_SLOT_PUBLIC_IMMUTABLE`을 반환한다. `POST /publish`는 빈 본문으로 이를 `PUBLIC`·`AVAILABLE`로 원자 전환한다. `POST /block`은 아직 Match에 연결되지 않은 `AVAILABLE` Slot 또는 연결 Match가 모집자 취소로 `CANCELLED`인 `ALLOCATED` Slot만 `BLOCKED`로 전환한다. 후자의 전이는 운영자 본인의 명시적 확인이 필요하고 Match·Application·Incident·운영자 제한을 바꾸지 않는다. `BLOCKED`에는 재공개 엔드포인트를 제공하지 않는다.
 
@@ -1914,3 +1925,19 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 - 성공은 `{ id, status: "CANCELLED" }`. 감사 기록 1건·현재 남은 신청 취소·전액 반환 의무·채팅 읽기 전용·참가자 취소 안내를 같은 트랜잭션에서 기록한다.
 - 같은 대상·처리자·clientRequestId·근거의 재시도는 성공 응답을 재사용한다. 다른 취소 요청은 409. 이전 자발적 취소 및 PROCESSING/REVIEW 송금 금액·계좌는 변경하지 않는다. 자동 송금 기능은 없다.
 - Slot의 공급 상태를 바꾸거나 시설 사고로 기록하지 않는다. 연결 Match의 취소 상태가 상세에 표시되며 자동 재공개되지 않는다.
+
+## 코트 운영자 연락처 API (2026-10-02)
+
+`GET /api/v1/operator/courts`는 본인 시설의 `operatorContact: { phone, hours } | null`, `contactVersion`을 반환한다. `PUT /api/v1/operator/courts/{courtId}/contact`는 다음 전체 입력을 받는다.
+
+```json
+{ "phone": "02-1234-5678", "hours": "매일 09:00~18:00", "publicationAgreed": true, "expectedVersion": 0 }
+```
+
+국내 번호만 검증하여 숫자로 정규화한다. 동의 누락·연락 시간 누락·형식 오류는 422, 비로그인은 401, 타인 Court는 404, 버전/운영 상태 충돌은 409 `COURT_CONTACT_STATE_CONFLICT`다. 성공 시 본인 Court view와 증가한 버전을 반환한다. 같은 경로 `DELETE`는 `{ "expectedVersion": 1 }`로 공개를 중단하고 현재 번호·시간·공개 확인 시각을 NULL로 지운다.
+
+새 Slot 공개에 연락처가 없으면 409 `COURT_CONTACT_REQUIRED`다. 초안 저장·이미 공개된 경기의 신청은 이 조건으로 막지 않는다.
+
+`GET /api/v1/partner-session-slots/{slotId}`의 `participation.operatorContact`는 조회자 본인의 신청과 공개 기간·거래 상태·운영자 활동 상태가 충족된 경우에만 `{ phone, hours, telHref }`, 나머지는 null이다. 전화번호가 포함된 응답에는 `Cache-Control: no-store`를 적용한다. 일반 공개 목록·Slot view·신청 안내에는 번호를 넣지 않는다. 기존 문의 API·단체 채팅 권한은 그대로 유지한다. [03-15](03-15-court-operator-contact.md)의 확정 기준을 따른다.
+
+탈퇴·정지 후 본인의 거래를 조회하는 `GET /api/v1/me/transactions`도 각 항목의 `operatorContact`에 동일한 공개 기준과 no-store를 적용한다. 운영자 본인 거래에는 참가자 전화 문의 정보를 추가하지 않으며 일반 상세·채팅 권한은 재개하지 않는다.

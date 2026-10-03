@@ -6,6 +6,7 @@ import type { MyCourtTransactions } from "@/server/domain/court-match-view";
 import type { SupportInquiryView } from "@/server/domain/support-service";
 import { SupportThread } from "@/features/support/support-thread";
 import { apiMessage, formatStatusChangedAt } from "@/features/partner/partner-session";
+import { formatCourtContactPhone } from "@/matches/court-contact";
 
 const endpoint = "/api/v1/me/transactions";
 const field = "mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-base";
@@ -62,6 +63,7 @@ function TransactionCard({ item, refresh }: { item: MyCourtTransactions["items"]
       {a.refundLocked ? <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm">송금 확인 중이에요. 금액과 계좌는 변경할 수 없어요.</p> : a.awaitingRefund ? <form className="mt-4" onSubmit={(e) => { e.preventDefault(); void send(false); }}><fieldset disabled={busy} className="space-y-3"><p className="text-xs leading-5 text-slate-500">본인 환불 계좌는 해당 운영자 또는 인계받은 내부 담당자에게 전달돼요.</p><label className="block text-sm">은행<input className={field} required maxLength={50} autoComplete="off" value={bank} onChange={(e) => setBank(e.target.value)} /></label><label className="block text-sm">계좌번호<input className={field} required pattern="[0-9-]{5,40}" inputMode="numeric" autoComplete="off" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} /></label><label className="block text-sm">예금주<input className={field} required maxLength={50} autoComplete="off" value={accountHolder} onChange={(e) => setAccountHolder(e.target.value)} /></label><Button type="submit" size="medium" fullWidth>환불 계좌 저장</Button></fieldset></form> : null}
       {a.refundAttempts.map((r) => <p className="mt-2 text-xs text-slate-500" key={r.id}>{r.amountKrw.toLocaleString("ko-KR")}원 · {r.status === "PAID" ? "송금 완료 기록" : r.status === "FAILED" ? "미송금 확인" : "송금 여부 확인 중"}</p>)}
     </> : null}
+    {item.operatorContact ? <div className="mt-4 rounded-xl bg-slate-50 p-3"><p className="text-sm font-semibold">운영자 · {formatCourtContactPhone(item.operatorContact.phone)}</p><p className="mt-1 text-xs leading-5 text-slate-600">연락 가능 시간 · {item.operatorContact.hours}</p><Button as="a" href={item.operatorContact.telHref} className="mt-3" fullWidth variant="secondary" size="medium">운영자에게 전화</Button></div> : null}
     <details className="mt-4"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold">입금·환불 문의</summary><form onSubmit={(e) => { e.preventDefault(); void send(true); }}><label className="text-sm">문의 내용<textarea className={field} required minLength={10} maxLength={1000} value={message} onChange={(e) => setMessage(e.target.value)} /></label><Button className="mt-3" type="submit" disabled={busy} fullWidth size="medium">문의 보내기</Button></form></details>
     {notice ? <p role="status" className="mt-3 text-sm text-blue-700">{notice}</p> : null}{error ? <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p> : null}
   </article>;

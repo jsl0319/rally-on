@@ -3,7 +3,7 @@ import { cancelCourtMatchForComposition } from "@/server/domain/court-match-comp
 import { previewWithdrawal, withdrawAccount } from "@/server/domain/account-service";
 import { getMyCourtTransactions } from "@/server/domain/court-match-view";
 import { assertHandoffAccess, claimCourtHandoff, cancelHandedOffCourtMatch, listCourtHandoffs } from "@/server/domain/court-transaction-handoff";
-import { getMyCourtSlots, getPublicCourtSlots, publishCourtSlot } from "@/server/domain/court-slot-service";
+import { updateCourtContact, createCourtSlot, updateCourtSlot, getMyCourtSlots, getPublicCourtSlot, getPublicCourtSlots, publishCourtSlot } from "@/server/domain/court-slot-service";
 import { randomUUID } from "node:crypto";
 
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -168,6 +168,92 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
 
   const errorCode = (caught: unknown) => (caught as { code?: string }).code;
 
+  it("운영자 연락처는 동의 후 본인 신청에서만 읽고 최신 번호·공개 중단을 반영한다", async () => {
+    const op = await makeUser("연락 운영자", "MALE");
+    const member = await makeUser("연락 참가자", "FEMALE");
+    const stranger = await makeUser("다른 회원", "MALE");
+    const match = await makeCourtMatch(op.id, { approvalMode: "OPERATOR" });
+    const contact = { phone: "02-1234-5678", hours: "매일 09~18시", publicationAgreed: true as const, expectedVersion: 0 };
+    const read = () => getCourtMatchParticipation(prisma, member.viewer, match.matchId);
+    expect((await read()).operatorContact).toBeNull();
+    await expect(updateCourtContact(prisma, stranger, match.courtId, contact)).rejects.toMatchObject({ code: "COURT_NOT_FOUND" });
+    const saved = await updateCourtContact(prisma, op, match.courtId, contact);
+    expect(saved).toMatchObject({ operatorContact: { phone: "0212345678", hours: contact.hours }, contactVersion: 1 });
+    await expect(updateCourtContact(prisma, op, match.courtId, contact)).rejects.toMatchObject({ code: "COURT_CONTACT_STATE_CONFLICT" });
+    expect(JSON.stringify(await getPublicCourtSlot(prisma, match.slotId))).not.toContain("0212345678");
+    expect(JSON.stringify(await getPublicCourtSlots(prisma, false))).not.toContain("0212345678");
+    expect((await read()).operatorContact).toBeNull();
+    const app = await applyToCourtMatch(prisma, member.viewer, match.matchId);
+    expect(app.status).toBe("PENDING");
+    expect((await read()).operatorContact).toMatchObject({ phone: "0212345678", telHref: "tel:0212345678" });
+    expect((await getCourtMatchParticipation(prisma, stranger.viewer, match.matchId)).operatorContact).toBeNull();
+    expect(JSON.stringify((await read()).application?.applicationNotice)).not.toContain("0212345678");
+    await updateCourtContact(prisma, op, match.courtId, { ...contact, phone: "031-123-4567", expectedVersion: 1 });
+    expect((await read()).operatorContact?.phone).toBe("0311234567");
+    await updateCourtContact(prisma, op, match.courtId, { expectedVersion: 2 }, true);
+    expect((await read()).operatorContact).toBeNull();
+    expect(await prisma.court.findUnique({ where: { id: match.courtId } })).toMatchObject({ operatorContactPhone: null, operatorContactHours: null, contactPublishedAt: null, contactVersion: 3 });
+    expect((await read()).application?.status).toBe("PENDING");
+    await updateCourtContact(prisma, op, match.courtId, { ...contact, expectedVersion: 3 });
+    await prisma.user.update({ where: { id: op.id }, data: { status: "WITHDRAWN" } });
+    expect((await read()).operatorContact).toBeNull();
+    await expect(updateCourtContact(prisma, op, match.courtId, { expectedVersion: 4 }, true)).rejects.toMatchObject({ code: "ACCOUNT_INACTIVE" });
+  });
+
+  it("철회 뒤 미대조 입금·반환 잔액이 있으면 전화 문의를 유지하고 대조·반환 후에는 숨긴다", async () => {
+    const op = await makeUser("대조 운영자", "MALE");
+    const member = await makeUser("대조 참가자", "FEMALE");
+    const match = await makeCourtMatch(op.id);
+    await updateCourtContact(prisma, op, match.courtId, { phone: "02-1234-5678", hours: "매일 09~18시", publicationAgreed: true, expectedVersion: 0 });
+    const app = await applyToCourtMatch(prisma, member.viewer, match.matchId);
+    await claimCourtMatchDeposit(prisma, member.viewer, app.id, { depositorName: "대조 참가자" });
+    await cancelCourtMatchApplication(prisma, member, app.id);
+    const read = () => getCourtMatchParticipation(prisma, member.viewer, match.matchId);
+    expect((await read()).operatorContact).not.toBeNull();
+    await recordCourtReceipt(prisma, op, app.id, { amountKrw: 0, receivedAt: null, expectedVersion: 0, clientRequestId: randomUUID(), note: "통장 대조 결과 수령 없음" });
+    expect((await read()).operatorContact).toBeNull();
+    await recordCourtReceipt(prisma, op, app.id, { amountKrw: 36000, receivedAt: new Date().toISOString(), expectedVersion: 1, clientRequestId: randomUUID(), note: "추가 대조에서 실제 입금 확인" });
+    expect((await read()).operatorContact).not.toBeNull();
+    await withdraw(member.id);
+    expect((await getMyCourtTransactions(prisma, member.id)).items[0].operatorContact?.phone).toBe("0212345678");
+    expect((await getMyCourtTransactions(prisma, op.id)).items[0].operatorContact).toBeNull();
+    await submitCourtMatchRefundAccount(prisma, member, app.id, { bank: "테스트은행", accountNumber: "123-456-789", accountHolder: "대조 참가자" });
+    await finishRefund(op, app.id);
+    expect((await read()).operatorContact).toBeNull();
+    expect((await getMyCourtTransactions(prisma, member.id)).items[0].operatorContact).toBeNull();
+  });
+
+  it("제공 범위는 운영자가 명시해 공개하며 변경된 조건으로는 재확인 없이 신청하지 않는다", async () => {
+    const op = await makeUser("제공 범위 운영자", "MALE");
+    const user = await makeUser("제공 범위 참가자", "FEMALE");
+    const existing = await makeCourtMatch(op.id);
+    const old = await getCourtMatchParticipation(prisma, user.viewer, existing.matchId);
+    expect(old.applicationNotice.terms.serviceScope).toBeNull();
+    const slot = await prisma.courtSlot.findUniqueOrThrow({ where: { id: existing.slotId }, include: { courtUnit: true } });
+    const serviceScope = { balls: true, equipment: false, lesson: false, facilitator: true };
+    const input = { courtUnitName: "추가 코트", startsAt: slot.startsAt.toISOString(), endsAt: slot.endsAt.toISOString(), priceKrw: 12000, maxParticipantCount: 2, minParticipantCount: 2, gameType: "OTHER" as const, approvalMode: "AUTO" as const, serviceScope };
+    const created = await createCourtSlot(prisma, op, slot.courtUnit.courtId, input);
+    expect(created).toMatchObject({ status: "DRAFT", serviceScope });
+    await expect(updateCourtSlot(prisma, user, created.id, { ...input, expectedVersion: created.version })).rejects.toMatchObject({ status: 404 });
+    const changed = await updateCourtSlot(prisma, op, created.id, { ...input, serviceScope: { ...serviceScope, equipment: true }, expectedVersion: created.version });
+    await updateCourtContact(prisma, op, slot.courtUnit.courtId, { phone: "02-1234-5678", hours: "매일 09~18시", publicationAgreed: true, expectedVersion: 0 });
+    await publishCourtSlot(prisma, op, changed.id);
+    await expect(updateCourtSlot(prisma, op, changed.id, { ...input, expectedVersion: changed.version })).rejects.toMatchObject({ code: "COURT_SLOT_PUBLIC_IMMUTABLE" });
+    const match = await prisma.match.findFirstOrThrow({ where: { courtSlotId: created.id } });
+    const before = await getCourtMatchParticipation(prisma, user.viewer, match.id);
+    expect(before.applicationNotice.terms.serviceScope).toEqual({ ...serviceScope, equipment: true });
+    // Simulate an out-of-band correction; public editing through the application remains forbidden.
+    await prisma.courtSlot.update({ where: { id: created.id }, data: { serviceScope } });
+    await expect(rawApplyToCourtMatch(prisma, user.viewer, match.id, { noticeAccepted: true, noticeFingerprint: before.applicationNotice.fingerprint })).rejects.toMatchObject({ code: "APPLICATION_NOTICE_CHANGED" });
+    expect(await prisma.matchApplication.count({ where: { matchId: match.id } })).toBe(0);
+    const fresh = await getCourtMatchParticipation(prisma, user.viewer, match.id);
+    await rawApplyToCourtMatch(prisma, user.viewer, match.id, { noticeAccepted: true, noticeFingerprint: fresh.applicationNotice.fingerprint });
+    await prisma.courtSlot.update({ where: { id: created.id }, data: { serviceScope: { ...serviceScope, balls: false } } });
+    expect((await getCourtMatchParticipation(prisma, user.viewer, match.id)).application?.applicationNotice).toEqual(fresh.applicationNotice);
+    expect((await getOperatorCourtMatch(prisma, op, match.id)).applications[0].applicationNotice).toEqual(fresh.applicationNotice);
+    expect((await prisma.courtSlot.findUniqueOrThrow({ where: { id: existing.slotId } })).serviceScope).toBeNull();
+  });
+
   it("신청 조건 확인은 서버가 강제하고 당시 조건·시각을 신청과 함께 남긴다", async () => {
     const op = await makeUser("고지 운영자", "MALE");
     const user = await makeUser("고지 참가자", "FEMALE");
@@ -223,6 +309,12 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     expect(await prisma.courtSlot.findUnique({ where: { id: old.slotId } })).toMatchObject({ status: "DRAFT", visibility: "PRIVATE" });
     expect(await prisma.match.count()).toBe(0);
     await prisma.courtSlot.update({ where: { id: old.slotId }, data: { minParticipantCount: 4, maxParticipantCount: 4, maleCapacity: 2, femaleCapacity: 2 } });
+    await expect(publishCourtSlot(prisma, op, old.slotId)).rejects.toMatchObject({ code: "COURT_SERVICE_SCOPE_REQUIRED" });
+    expect(await prisma.match.count()).toBe(0);
+    await prisma.courtSlot.update({ where: { id: old.slotId }, data: { serviceScope: { balls: false, equipment: false, lesson: false, facilitator: false } } });
+    await expect(publishCourtSlot(prisma, op, old.slotId)).rejects.toMatchObject({ code: "COURT_CONTACT_REQUIRED" });
+    expect(await prisma.match.count()).toBe(0);
+    await updateCourtContact(prisma, op, old.courtId, { phone: "02-1234-5678", hours: "매일 09~18시", publicationAgreed: true, expectedVersion: 0 });
     await publishCourtSlot(prisma, op, old.slotId);
     expect(await prisma.match.findFirst({ where: { courtSlotId: old.slotId } })).toMatchObject({ courtCompositionPolicyVersion: 1, maleRecruitCount: 2, femaleRecruitCount: 2 });
   });

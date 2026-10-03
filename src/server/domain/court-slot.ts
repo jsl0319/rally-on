@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { activeGameTypes } from "@/matches/game-type";
 import { courtCompositionIssues } from "@/matches/court-composition";
+import { courtServiceScopeSchema } from "@/matches/court-service-scope";
 
 const isoDateTimeSchema = z.string().datetime({ offset: true });
 
@@ -37,6 +38,7 @@ export const courtSlotCreateInputSchema = z.object({
   maleCapacity: z.number().int().min(0).max(20).nullable().optional(),
   femaleCapacity: z.number().int().min(0).max(20).nullable().optional(),
   approvalMode: z.enum(["AUTO", "OPERATOR"]),
+  serviceScope: courtServiceScopeSchema,
   usageNote: z.string().trim().max(500, "이용 안내는 500자 이하여야 해요.").nullable().optional(),
 }).superRefine((input, context) => {
   const startsAt = new Date(input.startsAt);

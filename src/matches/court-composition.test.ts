@@ -16,7 +16,7 @@ describe("코트 경기의 실제 최소 구성", () => {
     expect(checkCourtComposition(type, 4, { total: 4, male: type === "MENS_DOUBLES" ? 4 : 0, female: type === "WOMENS_DOUBLES" ? 4 : 0 }).ready).toBe(true);
   });
   it("새 혼복의 불가능한 정원과 최소 1명을 서버 입력 검증에서 거절한다", () => {
-    const times = { courtUnitName: "1번", startsAt: "2030-01-02T10:00:00.000Z", endsAt: "2030-01-02T12:00:00.000Z", priceKrw: 12000, approvalMode: "AUTO" };
+    const times = { courtUnitName: "1번", startsAt: "2030-01-02T10:00:00.000Z", endsAt: "2030-01-02T12:00:00.000Z", priceKrw: 12000, approvalMode: "AUTO", serviceScope: { balls: false, equipment: false, lesson: false, facilitator: false } };
     expect(courtSlotCreateInputSchema.safeParse({ ...base, ...times }).success).toBe(true);
     expect(courtSlotCreateInputSchema.safeParse({ ...base, ...times, minParticipantCount: 1 }).success).toBe(false);
     expect(courtSlotCreateInputSchema.safeParse({ ...base, ...times, maleCapacity: 6, femaleCapacity: 0 }).success).toBe(false);

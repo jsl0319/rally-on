@@ -8,6 +8,7 @@ import { getApplicationDeadline, getLateConfirmationDeadline, getJudgementAt, ca
 
 import { courtMoneySummary } from "./court-match-money";
 import { buildCourtCancellationPreview } from "./court-cancellation-preview";
+import { canReadCourtContact, currentCourtContact } from "./court-contact";
 
 const applicationSelect = {
   courtNoticeVersion: true, courtNoticeSnapshot: true, courtNoticeAcceptedAt: true,
@@ -27,11 +28,26 @@ const matchInclude = {
   applications: { select: applicationSelect, orderBy: { createdAt: "asc" } },
   conversation: { select: { status: true } },
   host: { select: { status: true } },
-  courtSlot: { include: { courtUnit: { include: { court: { include: { operatorApplication: { select: { applicantUserId: true } } } } } } } },
+  courtSlot: { include: { courtUnit: { include: { court: { include: { operatorApplication: { select: { applicantUserId: true, status: true } } } } } } } },
 } satisfies Prisma.MatchInclude;
 
 type Application = Prisma.MatchApplicationGetPayload<{ select: typeof applicationSelect }>;
 type Match = Prisma.MatchGetPayload<{ include: typeof matchInclude }>;
+const contactMatchSelect = {
+  hostUserId: true, totalCourtFeeKrw: true, status: true, endsAt: true,
+  host: matchInclude.host, courtSlot: matchInclude.courtSlot,
+} satisfies Prisma.MatchSelect;
+
+function participantContact(match: Prisma.MatchGetPayload<{ select: typeof contactMatchSelect }>, application: Application | undefined) {
+  const court = match.courtSlot?.courtUnit.court;
+  if (!court || court.operatorApplication.applicantUserId !== match.hostUserId) return null;
+  if (!canReadCourtContact({
+    application, fee: match.totalCourtFeeKrw ?? 0, endsAt: match.endsAt, matchStatus: match.status,
+    operatorActive: match.host.status === "ACTIVE" && court.status === "ACTIVE" && court.operatorApplication.status === "PUBLISH_APPROVED",
+  })) return null;
+  const contact = currentCourtContact(court);
+  return contact ? { ...contact, telHref: `tel:${contact.phone}` } : null;
+}
 
 export function courtApplicationStatusLabel(application: Pick<Application, "status" | "depositClaimedAt" | "confirmedAt" | "refundCompletedAt" | "refundAmountKrw">) {
   if (application.status === "CANCELLED" && application.confirmedAt) {
@@ -138,6 +154,7 @@ export async function getCourtMatchParticipation(prisma: PrismaClient, viewer: {
     && now < match.startsAt;
   return {
     ...info, isOperator, legacy, operationsPaused, canApply: blockedReason === null, blockedReason,
+    operatorContact: participantContact(match, application),
     application: application ? toApplication(application, info.guestFeeKrw) : null,
     cancellation: cancellable && application
       ? buildCourtCancellationPreview(application, match, now)
@@ -171,10 +188,10 @@ export type OperatorCourtMatch = Awaited<ReturnType<typeof getOperatorCourtMatch
 export async function getMyCourtTransactions(prisma: PrismaClient, userId: string) {
   const matches = await prisma.match.findMany({ where: { courtSource: "PARTNER_COURT", OR: [{ hostUserId: userId }, { applications: { some: { applicantUserId: userId } } }] }, orderBy: [{ startsAt: "desc" }, { id: "asc" }], select: { id: true, title: true, startsAt: true, hostUserId: true, totalCourtFeeKrw: true } });
   for (const match of matches) await reconcileCourtMatch(prisma, match.id);
-  const applications = await prisma.matchApplication.findMany({ where: { applicantUserId: userId, match: { courtSource: "PARTNER_COURT" } }, select: { ...applicationSelect, matchId: true } });
+  const applications = await prisma.matchApplication.findMany({ where: { applicantUserId: userId, match: { courtSource: "PARTNER_COURT" } }, select: { ...applicationSelect, matchId: true, match: { select: contactMatchSelect } } });
   return { items: matches.map((m) => {
     const a = applications.find((a) => a.matchId === m.id);
-    return { id: m.id, title: m.title, startsAt: m.startsAt.toISOString(), isHost: m.hostUserId === userId, application: a ? toApplication(a, m.totalCourtFeeKrw ?? 0) : null };
+    return { id: m.id, title: m.title, startsAt: m.startsAt.toISOString(), isHost: m.hostUserId === userId, application: a ? toApplication(a, m.totalCourtFeeKrw ?? 0) : null, operatorContact: a ? participantContact(a.match, a) : null };
   }) };
 }
 export type MyCourtTransactions = Awaited<ReturnType<typeof getMyCourtTransactions>>;

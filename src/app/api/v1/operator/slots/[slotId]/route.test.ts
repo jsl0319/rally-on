@@ -29,6 +29,7 @@ const validBody = {
   femaleCapacity: 2,
   approvalMode: "AUTO",
   usageNote: null,
+  serviceScope: { balls: true, equipment: false, lesson: false, facilitator: false },
   expectedVersion: 2,
 };
 

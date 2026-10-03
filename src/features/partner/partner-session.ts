@@ -1,5 +1,6 @@
 import type { CourtImageView } from "@/features/matches/court-media";
 import { matchScheduleText } from "@/matches/schedule";
+import type { CourtServiceScope } from "@/matches/court-service-scope";
 
 export type PublicCourtSlot = {
   id: string;
@@ -15,6 +16,7 @@ export type PublicCourtSlot = {
   genderCapacity: { male: number; female: number } | null;
   approvalMode: "AUTO" | "OPERATOR";
   usageNote: string | null;
+  serviceScope: CourtServiceScope | null;
   durationMinutes: number;
   court: {
     name: string;

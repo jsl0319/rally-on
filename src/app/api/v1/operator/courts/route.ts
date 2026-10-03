@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const user = await getRateLimitedCurrentUser();
-    return Response.json(await getMyCourts(getPrisma(), user));
+    return Response.json(await getMyCourts(getPrisma(), user), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return handleApiError(error);
   }

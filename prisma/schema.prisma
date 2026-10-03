@@ -943,6 +943,11 @@ model Court {
   settlementBank          String? @map("settlement_bank") @db.VarChar(50)
   settlementAccountNumber String? @map("settlement_account_number") @db.VarChar(40)
   settlementAccountHolder String? @map("settlement_account_holder") @db.VarChar(50)
+  /// 신청 후 자격이 있는 회원에게만 공개하는 현재 업무용 연락처. 심사 자료와 분리한다.
+  operatorContactPhone   String? @map("operator_contact_phone") @db.VarChar(12)
+  operatorContactHours   String? @map("operator_contact_hours") @db.VarChar(80)
+  contactPublishedAt     DateTime? @map("contact_published_at") @db.Timestamptz(6)
+  contactVersion         Int @default(0) @map("contact_version")
   deactivatedAt         DateTime? @map("deactivated_at") @db.Timestamptz(6)
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1036,6 +1041,8 @@ model CourtSlot {
   publishedAt         DateTime?           @map("published_at") @db.Timestamptz(6)
   statusChangedAt     DateTime            @default(now()) @map("status_changed_at") @db.Timestamptz(6)
   usageNote           String?             @map("usage_note") @db.VarChar(500)
+  /// 참가비에 포함된 공·장비·레슨·현장 진행. null은 도입 전 정보 미등록이며 미포함과 다르다.
+  serviceScope        Json?               @map("service_scope") @db.JsonB
   version             Int                 @default(1)
   createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)

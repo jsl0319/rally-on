@@ -7,9 +7,12 @@ import { purposeLabels } from "@/server/domain/profile";
 import { gameTypeLabels } from "@/matches/game-type";
 import { courtCompositionIssues, courtCompositionPolicyVersion } from "@/matches/court-composition";
 import { describeCourtComposition } from "./court-match-composition";
+import { courtServiceScopeSchema, readCourtServiceScope } from "@/matches/court-service-scope";
 import { courtMoneySummary } from "./court-match-money";
 import { makeConversationReadOnly } from "@/server/domain/match-chat-service";
 import { canAcceptCourtApplication, seatHoldingStatuses } from "./court-match";
+import { currentCourtContact } from "./court-contact";
+import { courtContactInputSchema, courtContactStopInputSchema, type CourtContactInput } from "@/matches/court-contact";
 
 import type {
   CourtCreateInput,
@@ -138,6 +141,8 @@ function toCourtView(court: CourtWithRelations) {
     region: { code: court.region.code, name: court.region.name },
     status: court.status,
     operatorApplicationStatus: court.operatorApplication.status,
+    operatorContact: currentCourtContact(court),
+    contactVersion: court.contactVersion,
     // 운영자 본인 화면 전용. 참가자에게는 공개된 코트 매칭의 스냅샷으로만 보인다.
     settlementAccount: court.settlementBank && court.settlementAccountNumber && court.settlementAccountHolder
       ? { bank: court.settlementBank, accountNumber: court.settlementAccountNumber, accountHolder: court.settlementAccountHolder }
@@ -173,6 +178,7 @@ export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) 
       : null,
     approvalMode: slot.approvalMode,
     usageNote: slot.usageNote,
+    serviceScope: readCourtServiceScope(slot.serviceScope),
     court: {
       id: court.id,
       name: court.name,
@@ -317,6 +323,29 @@ export async function updateCourtSettlementAccount(
   return toCourtView(court);
 }
 
+/** Current contact is shared by this operator's court sessions; never copied into notice snapshots. */
+export async function updateCourtContact(prisma: PrismaClient, viewer: { id: string }, courtId: string, input: CourtContactInput | { expectedVersion: number }, stop = false) {
+  const registration = stop ? null : courtContactInputSchema.parse(input);
+  const expectedVersion = registration?.expectedVersion ?? courtContactStopInputSchema.parse(input).expectedVersion;
+  return prisma.$transaction(async (transaction) => {
+    await lockAccountTransactions(transaction);
+    await assertActiveTransactionUser(transaction, viewer.id);
+    const court = await transaction.court.findFirst({ where: { id: courtId, operatorApplication: { applicantUserId: viewer.id } } });
+    if (!court) throw new DomainError("COURT_NOT_FOUND", 404, "코트장을 찾을 수 없어요.");
+    const result = await transaction.court.updateMany({
+      where: { id: courtId, contactVersion: expectedVersion, ...(registration ? { status: "ACTIVE", operatorApplication: { status: { in: [...draftAccessStatuses] } } } : {}) },
+      data: {
+        operatorContactPhone: registration?.phone ?? null,
+        operatorContactHours: registration?.hours ?? null,
+        contactPublishedAt: registration ? new Date() : null,
+        contactVersion: { increment: 1 },
+      },
+    });
+    if (result.count !== 1) throw new DomainError("COURT_CONTACT_STATE_CONFLICT", 409, "연락처 정보나 운영 상태가 바뀌었어요. 다시 불러와 주세요.");
+    return toCourtView(await transaction.court.findUniqueOrThrow({ where: { id: courtId }, include: courtInclude }));
+  });
+}
+
 export async function createCourt(prisma: PrismaClient, viewer: { id: string }, input: CourtCreateInput) {
   const application = await getDraftAccessApplication(prisma, viewer.id);
   const region = await prisma.region.findFirst({
@@ -350,6 +379,7 @@ export async function createCourt(prisma: PrismaClient, viewer: { id: string }, 
 
 export async function createCourtSlot(prisma: PrismaClient, viewer: { id: string }, courtId: string, input: CourtSlotCreateInput) {
   await getOwnedCourt(prisma, viewer, courtId);
+  const serviceScope = courtServiceScopeSchema.parse(input.serviceScope);
   const startsAt = new Date(input.startsAt);
   const endsAt = new Date(input.endsAt);
 
@@ -385,6 +415,7 @@ export async function createCourtSlot(prisma: PrismaClient, viewer: { id: string
           femaleCapacity: input.femaleCapacity ?? null,
           approvalMode: input.approvalMode,
           usageNote: optionalText(input.usageNote),
+          serviceScope,
           statusChangedAt: now,
           statusHistory: {
             create: {
@@ -488,6 +519,8 @@ export async function updateCourtSlot(
     throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "다른 변경사항이 있어 시간대를 다시 확인해 주세요.");
   }
 
+  const serviceScope = courtServiceScopeSchema.parse(input.serviceScope);
+
   const startsAt = new Date(input.startsAt);
   const endsAt = new Date(input.endsAt);
   try {
@@ -525,6 +558,7 @@ export async function updateCourtSlot(
           femaleCapacity: input.femaleCapacity ?? null,
           approvalMode: input.approvalMode,
           usageNote: optionalText(input.usageNote),
+          serviceScope,
           version: { increment: 1 },
         },
       });
@@ -555,6 +589,12 @@ async function transitionSlot(
     }
     const compositionIssue = courtCompositionIssues(slot)[0];
     if (compositionIssue) throw new DomainError("COURT_COMPOSITION_INVALID", 409, compositionIssue.message);
+    if (!readCourtServiceScope(slot.serviceScope)) {
+      throw new DomainError("COURT_SERVICE_SCOPE_REQUIRED", 409, "초안에서 공·장비·레슨·현장 진행의 참가비 포함 여부를 선택한 뒤 공개해 주세요.");
+    }
+    if (!currentCourtContact(slot.courtUnit.court)) {
+      throw new DomainError("COURT_CONTACT_REQUIRED", 409, "운영자 전화번호와 연락 가능 시간을 등록한 뒤 공개해 주세요.");
+    }
     if (slot.startsAt <= new Date()) {
       throw new DomainError("COURT_SLOT_ALREADY_STARTED", 409, "이미 시작된 시간대는 공개할 수 없어요.");
     }
@@ -580,6 +620,12 @@ async function transitionSlot(
   const result = await prisma.$transaction(async (transaction) => {
     await lockAccountTransactions(transaction);
     await assertActiveTransactionUser(transaction, viewer.id);
+    // Serialize publication with contact updates so withdrawal cannot race this check.
+    if (nextStatus === "AVAILABLE") {
+      await transaction.$queryRaw`SELECT id FROM courts WHERE id = ${slot.courtUnit.court.id}::uuid FOR UPDATE`;
+      const court = await transaction.court.findUniqueOrThrow({ where: { id: slot.courtUnit.court.id } });
+      if (!currentCourtContact(court)) throw new DomainError("COURT_CONTACT_REQUIRED", 409, "운영자 전화번호와 연락 가능 시간을 등록한 뒤 공개해 주세요.");
+    }
     const updated = await transaction.courtSlot.updateMany({
       where: {
         id: slot.id,

@@ -18,6 +18,7 @@ const slotInput = courtSlotCreateInputSchema.parse({
   maleCapacity: 2,
   femaleCapacity: 2,
   approvalMode: "AUTO",
+  serviceScope: { balls: true, equipment: false, lesson: false, facilitator: true },
   usageNote: "실내 전용 테니스화를 준비해 주세요.",
 });
 
@@ -60,6 +61,7 @@ function ownedSlot(applicationStatus: "DRAFT_ACCESS_GRANTED" | "PUBLISH_APPROVED
     publishedAt: null,
     statusChangedAt: new Date("2026-01-01T00:00:00.000Z"),
     usageNote: null,
+    serviceScope: slotInput.serviceScope,
     version: 1,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -75,6 +77,12 @@ function ownedSlot(applicationStatus: "DRAFT_ACCESS_GRANTED" | "PUBLISH_APPROVED
 }
 
 describe("Court Partner time supply authorization and state transitions", () => {
+  it("requires an explicit choice for every inclusion without defaulting missing values to false", () => {
+    expect(courtSlotCreateInputSchema.safeParse({ ...slotInput, serviceScope: undefined }).success).toBe(false);
+    expect(courtSlotCreateInputSchema.safeParse({ ...slotInput, serviceScope: { balls: true } }).success).toBe(false);
+    expect(courtSlotCreateInputSchema.safeParse({ ...slotInput, serviceScope: { ...slotInput.serviceScope, lesson: "false" } }).success).toBe(false);
+    expect(courtSlotCreateInputSchema.safeParse({ ...slotInput, serviceScope: { balls: false, equipment: false, lesson: false, facilitator: false } }).success).toBe(true);
+  });
   it("rejects invalid or non-future time slots before persistence", () => {
     expect(() => courtSlotCreateInputSchema.parse({ ...slotInput, endsAt: slotInput.startsAt })).toThrow("종료 시간");
     expect(() => courtSlotCreateInputSchema.parse({ ...slotInput, startsAt: "2020-01-02T01:00:00.000Z" })).toThrow("시작 시간");
@@ -104,6 +112,7 @@ describe("Court Partner time supply authorization and state transitions", () => 
     expect(result).toMatchObject({ id: "slot-id", visibility: "PRIVATE", status: "DRAFT", availableAction: "READ_ONLY" });
     expect(transaction.courtSlot.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
+        serviceScope: slotInput.serviceScope,
         statusHistory: expect.objectContaining({ create: expect.objectContaining({ actor: "OPERATOR", toStatus: "DRAFT", reasonCode: "SLOT_DRAFT_CREATED" }) }),
       }),
     }));

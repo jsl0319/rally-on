@@ -988,6 +988,7 @@ Pilot에서는 한 User가 한 운영자 계정의 소유자가 되는 단순한
 | `publishedAt` | timestamptz | X | 최초 공개 시각. 공개 상태를 다시 비공개로 숨기지 않는 Pilot 정책에서는 NULL 여부가 공개 시작 이력을 뜻함 |
 | `statusChangedAt` | timestamptz | O | 가장 최근 공급 상태 전환 시각 |
 | `usageNote` | varchar(500) | X | 준비물·이용 안내 |
+| `serviceScope` | jsonb nullable | 새 생성·수정 필수 | `balls`, `equipment`, `lesson`, `facilitator` 네 boolean. 참가비 포함 여부이며 NULL은 과거 미등록. 공개 후 불변, 신청 안내에 스냅샷. [03-14](03-14-court-service-scope-and-support.md) |
 | `version` | int | O | 동시 수정 제어 |
 | `createdAt` | timestamptz | O | 생성 시각 |
 | `updatedAt` | timestamptz | O | 수정 시각 |
@@ -1350,3 +1351,7 @@ Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_
 | compositionSnapshot | 취소 시 정책 버전·최초 통과 시각·필요 구성·현재 확정 구성 |
 
 현재 구성은 신청 당시 `applicantGender`와 현재 `CONFIRMED`로 계산한다. 현재 구성의 상태 컬럼은 추가하지 않는다. 최초 통과만 영속 기록하고 현재 구성은 조회 때 계산하므로 보충 시 자동으로 조치 필요 표시가 해제된다. 기존 신청의 자발적 취소 환불액·입금 원장·송금 시도는 수정하지 않는다. 전체 취소 당시 남은 신청만 CANCELLED 및 refundAmountKrw=null(실제 입금 전액 기준)로 전환한다.
+
+## 코트 운영자 문의 연락처 확장 (2026-10-02)
+
+`Court`에 `operatorContactPhone`(varchar 12 nullable), `operatorContactHours`(varchar 80 nullable), `contactPublishedAt`(timestamptz nullable), `contactVersion`(int, 기본 0)을 추가한다. 기존 레코드는 NULL/0으로 유지하고 심사 정보에서 복사하지 않는다. 현재 연락처만 보관하며 공개 중단 시 세 nullable 필드를 지우고 버전을 증가시킨다. 신청 안내 스냅샷과 공개 Slot 응답에는 포함하지 않는다. 신청 상태·입금 대조·환불 기록을 기준으로 조회할 때 공개 권한을 계산한다. [03-15](03-15-court-operator-contact.md).

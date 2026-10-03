@@ -41,6 +41,9 @@ test("혼복 구성 부족을 목록과 상세에 알리고 운영자 취소 뒤
     expect(preview.ok()).toBeTruthy();
     const cancel = await leaver.context.request.post(`${E2E_BASE_URL}/api/v1/court-match-applications/${leaverId}/cancel`, { data: { cancellationFingerprint: (await preview.json()).fingerprint } });
     expect(cancel.ok(), await cancel.text()).toBeTruthy();
+    // Two hours from now can fall on tomorrow in KST. Preserve the actual prior cancellation, regardless of its date tier.
+    const priorRefund = (await prisma.matchApplication.findUniqueOrThrow({ where: { id: leaverId } })).refundAmountKrw;
+    expect(priorRefund).not.toBeNull();
     await operator.page.goto("/partner/slots");
     await expect(operator.page.getByText("경기 구성 · 운영자 조치 필요", { exact: true })).toBeVisible();
     await operator.page.goto(`/partner/court-matches/${fixture.partnerMatchId}`);
@@ -69,7 +72,7 @@ test("혼복 구성 부족을 목록과 상세에 알리고 운영자 취소 뒤
     await expect(member.page.getByText("환불 계좌를 저장했어요.", { exact: true })).toBeVisible();
     await member.page.screenshot({ path: "/tmp/rally-r05-participant-mobile.png", fullPage: true });
     expect(await prisma.courtMatchCompositionCancellation.count()).toBe(1);
-    expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: leaverId } })).refundAmountKrw).toBe(0);
+    expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: leaverId } })).refundAmountKrw).toBe(priorRefund);
     for (const page of [operator.page, member.page]) expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(errors).toEqual([]);
   } finally { await operator.context.close(); await member.context.close(); await leaver.context.close(); }
@@ -92,7 +95,7 @@ test("새 초안은 유형별 최소 인원을 제안하고 서버도 잘못된 
     await expect(operator.page.getByLabel("남자 정원", { exact: true })).toHaveValue("4");
     await expect(operator.page.getByLabel("여자 정원", { exact: true })).toHaveValue("0");
     const slot = await prisma.courtSlot.findUniqueOrThrow({ where: { id: fixture.partnerSlotId }, include: { courtUnit: true } });
-    const rejected = await operator.context.request.post(`${E2E_BASE_URL}/api/v1/operator/courts/${slot.courtUnit.courtId}/slots`, { data: { courtUnitName: "새 코트", startsAt: "2030-01-02T01:00:00.000Z", endsAt: "2030-01-02T03:00:00.000Z", priceKrw: 12000, minParticipantCount: 1, maxParticipantCount: 4, gameType: "MIXED_DOUBLES", maleCapacity: 4, femaleCapacity: 0, approvalMode: "AUTO" } });
+    const rejected = await operator.context.request.post(`${E2E_BASE_URL}/api/v1/operator/courts/${slot.courtUnit.courtId}/slots`, { data: { courtUnitName: "새 코트", startsAt: "2030-01-02T01:00:00.000Z", endsAt: "2030-01-02T03:00:00.000Z", priceKrw: 12000, minParticipantCount: 1, maxParticipantCount: 4, gameType: "MIXED_DOUBLES", maleCapacity: 4, femaleCapacity: 0, approvalMode: "AUTO", serviceScope: { balls: false, equipment: false, lesson: false, facilitator: false } } });
     expect(rejected.status(), await rejected.text()).toBe(422);
     expect(errors).toEqual([]);
   } finally { await operator.context.close(); }

@@ -77,7 +77,7 @@ export const courtMatchSelect = {
   recruitCount: true,
   maleRecruitCount: true,
   femaleRecruitCount: true,
-  courtSlot: { select: { id: true, status: true, approvalMode: true, minParticipantCount: true, usageNote: true, courtUnit: { select: { name: true, court: { select: { name: true, address: true, status: true, operatorApplication: { select: { applicantUserId: true, status: true } } } } } } } },
+  courtSlot: { select: { id: true, status: true, approvalMode: true, minParticipantCount: true, usageNote: true, serviceScope: true, courtUnit: { select: { name: true, court: { select: { name: true, address: true, status: true, operatorApplication: { select: { applicantUserId: true, status: true } } } } } } } },
 } satisfies Prisma.MatchSelect;
 
 type CourtMatch = Prisma.MatchGetPayload<{ select: typeof courtMatchSelect }>;
