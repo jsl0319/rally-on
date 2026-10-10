@@ -2,6 +2,8 @@
 
 2026-10-10. 조사·제안이며 구현/가입/외부 발송은 하지 않았다.
 
+> **최신 사용자 목표:** Android와 iOS 스토어에서 다운로드하는 설치형 앱 출시. 아래 Web Push 안은 웹 전용 대안으로 보존하고, 우선순위는 이 문서 마지막의 설치형 앱 검토로 변경한다. 사용자가 선택 동의 질문에 스토어 출시 목표를 답한 것이므로, 이를 Web Push 구현 승인으로 해석하지 않는다.
+
 ## 사용자 문제와 최소 범위
 
 입금·확정·경기 취소를 앱 밖에서도 알아야 참가자와 운영자가 이동/대관을 결정할 수 있다.
@@ -45,3 +47,30 @@ iOS/iPadOS 16.4 이상은 홈 화면에 추가한 웹앱에서 사용자가 버�
 - [Apple Web Push 구현 안내](https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers)
 - [MDN 알림 권한·HTTPS·사용자 동작](https://developer.mozilla.org/en-US/docs/Web/API/Notifications_API/Using_the_Notifications_API)
 - [FCM 무료 안내](https://firebase.google.com/products/cloud-messaging)
+
+## 설치형 앱 출시 방향으로 변경 (2026-10-10)
+
+사용자는 홈 화면 웹앱에 한정하지 않고 Android·iOS에서 다운로드해 사용하는 앱 출시를 원한다. 앱을 닫은 상태의 거래 알림을 제공하고 스토어에서 설치할 수 있게 하는 것이 목적이다. 기존 매칭·입금·환불 백엔드는 유지하며, 앱 패키징과 기기 연동은 별도 작업 단위로 검증한다. 이번 변경은 조사·계획 기록이며 새 SDK·앱 프로젝트·유료 개발자 가입은 실행하지 않았다.
+
+### 권장하는 작은 첫 작업
+
+1. 기존 React 화면 재사용을 위해 Capacitor를 첫 후보로 비교한다. React Native/Flutter 전체 재작성은 현 단계의 기본안으로 삼지 않는다. 더 단순한 대안은 기존 웹 운영과 홈 화면 설치지만, 스토어 다운로드라는 사용자 목표를 완전히 충족하지 않는다.
+2. 로그인 → 목록/상세 → 앱 복귀와 외부 링크 → 알림 클릭으로 상세 열기만 우선 검증하는 작은 시제품을 만든다. 통과 후 신청·취소·환불·사진 업로드 등 핵심 흐름을 확장 검증한다. 새 의존성·인증 변경·앱 배포 구조는 검증 범위와 함께 합의하고 적용한다.
+3. 현재 `src/app/page.tsx`는 서버 인증·DB 조회를 사용하고 `src/auth.ts`의 공급자는 Kakao 하나다. Next 서버 전체를 정적 파일로 포장할 수 있다고 가정하지 않는다. 서버는 유지하고 패키징할 클라이언트 경계, API 인증, 쿠키/로그인 콜백과 외부 브라우저 복귀를 먼저 정한다. 공식 Capacitor `server.url`은 개발용 live reload 설정이므로 운영 URL 하나를 넣고 출시 완료로 처리하지 않는다.
+4. Android는 FCM, iOS는 APNs 기반 네이티브 푸시를 우선 비교한다. FCM은 자체 전송료가 없으며 iOS도 연동할 수 있지만 Apple 설정과 별도 SDK 연동이 필요하다. Capacitor 기본 push 플러그인의 iOS 토큰은 APNs 토큰, Android는 FCM 토큰이므로 서로 같은 전송 API에 그대로 넣지 않는다. Firebase로 인증·DB를 이전할 필요는 없다.
+
+### 동의와 출시 전 확인
+
+- **푸시 강제 동의는 적용하지 않는다.** Apple 심사 지침 4.5.4는 푸시를 앱 동작의 필수 조건으로 두지 못하게 한다. 중요 단계의 선택 동의 안내와 해제 시 영향 설명을 제안한다. 실제 OS 권한 해제는 앱 복귀 때 확인하며, 기존 거래·환불·문의 접근을 유지한다. 사용자에게 이 제약과 제안을 설명한 상태로, 동의 UX 구현은 아직 하지 않았다.
+- 기존 Kakao 단독 로그인은 Apple 4.8의 동등한 개인정보 보호 로그인 선택지 요구에 해당하는지 확인한다. 현 서비스에는 뚜렷한 예외를 확인하지 못했으므로 Apple 로그인 추가를 예상 작업으로 잡되, 계정 중복/연결 정책을 정하기 전 임의로 인증을 교체하지 않는다.
+- Apple 4.2의 앱 완성도 요구를 고려한다. 웹사이트를 단순히 감싼 형태로 심사 통과를 보장하지 않는다. 네이티브 푸시·앱 내 이동·복귀·키보드·뒤로가기·네트워크 오류를 실제 기기로 검증한다.
+- 채팅/사진의 사용자 생성 콘텐츠 신고·차단 대응, 앱 내 계정 삭제, 개인정보 공개와 심사용 접근을 현재 구현과 대조해야 한다. 대규모 기능을 임의 추가하기보다 스토어 필수 조건의 실제 공백부터 확인한다.
+- 무료 푸시와 무료 스토어 출시는 다르다. Apple Developer는 연 USD 99(지역별 결제액 차이), Google Play는 등록 시 USD 25 일회 비용이다. 개인 Apple 계정은 법적 실명이 판매자명으로 표시된다. 결제·가입은 별도 승인 없이 진행하지 않는다.
+- Google Play의 2023-11-13 이후 생성 개인 계정은 최소 12명의 테스터가 14일 연속 참여한 비공개 테스트 후 프로덕션 접근을 신청해야 한다. 계정 보유/생성 시점과 테스트 인원은 아직 확인하지 않았다. 출시일을 확정하기 전에 준비한다.
+
+### 추가 공식 근거
+
+- [Capacitor 개요](https://capacitorjs.com/docs), [server.url 용도](https://capacitorjs.com/docs/config), [기본 네이티브 푸시 플러그인](https://capacitorjs.com/docs/apis/push-notifications)
+- [Apple 심사 지침: 4.5.4 알림·4.8 로그인·4.2 완성도·1.2 사용자 콘텐츠](https://developer.apple.com/app-store/review/guidelines/)
+- [Apple 가입 비용과 개인 판매자명](https://developer.apple.com/programs/enroll/)
+- [Google Play 가입 비용](https://support.google.com/googleplay/android-developer/answer/6112435?hl=en), [신규 개인 계정 테스트](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en)
