@@ -24,7 +24,7 @@ export function MatchFiltersPreview() {
       <p className="my-3 text-[11px] text-[var(--tm-text-secondary)]">디자인 확인용 예시 · 실제 신청·저장 없음</p>
       <div className="grid gap-4" onClickCapture={event => { if ((event.target as HTMLElement).closest("a")) event.preventDefault(); }}>
         {visible.map(match => <MatchCard key={match.id} match={match} />)}
-        {!visible.length ? <div className="rally-card p-5"><p className="text-sm">조건에 맞는 예시 매칭이 없어요.</p><button type="button" className="rally-text-action mt-2" onClick={() => setFilters(DEFAULT_MATCH_FILTERS)}>필터 초기화</button></div> : null}
+        {!visible.length ? <div className="rally-card p-5"><p className="text-sm">조건에 맞는 예시 매칭이 없어요.</p><button type="button" className="rally-text-action mt-2" onClick={() => setFilters(current => ({ ...current, date: null, gameType: null }))}>필터 초기화</button></div> : null}
       </div>
     </section>
     <BottomNavigation />
