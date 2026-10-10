@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="ko"
-      className={`h-full antialiased ${notoSansKr.variable}`}
+      className={`antialiased ${notoSansKr.variable}`}
       suppressHydrationWarning
     >
       <head>
@@ -43,7 +43,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css"
         />
       </head>
-      <body className="flex min-h-full flex-col">
+      <body className="flex min-h-dvh flex-col">
         <WdsProviders>{children}</WdsProviders>
       </body>
     </html>

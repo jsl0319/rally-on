@@ -91,5 +91,5 @@ export function OperatorContact({ courtId, onCourtChange, onDone, onBusyChange }
       </div> : null}
     </>}
   </>;
-  return courtId ? <div className="pb-6 text-[var(--tm-text-primary)]">{content}</div> : <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-12 pt-6 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[560px]">{content}</div></main>;
+  return courtId ? <div className="pb-6 text-[var(--tm-text-primary)]">{content}</div> : <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-12 pt-4 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[560px]">{content}</div></main>;
 }

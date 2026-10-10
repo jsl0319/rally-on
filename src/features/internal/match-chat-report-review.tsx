@@ -111,7 +111,7 @@ export function InternalMatchChatReportReview() {
   const emptyTitle = status === "OPEN" ? "처리할 채팅 신고가 없어요" : "처리 완료된 채팅 신고가 없어요";
   const emptyDescription = status === "OPEN" ? "새 신고가 들어오면 이 목록에서 필요한 범위로만 검토할 수 있어요." : "처리한 신고는 이 목록에서 감사 목적으로 확인할 수 있어요.";
 
-  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-12 pt-11 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[560px]">
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-12 pt-4 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[560px]">
     <PageHeader eyebrow="내부 관리" title="채팅 신고 검토" description="신고 사유와 해당 메시지만 확인해요. 조치 기록은 심사자와 시각, 선택한 조치·메모로 남고 수정할 수 없어요." />
     <Tab onValueChange={(value) => { const nextStatus = value as ReportStatus; if (status === nextStatus) { void load(); return; } setReports(null); setStatus(nextStatus); }} value={status}>
       <TabList aria-label="채팅 신고 상태" className="mt-5">

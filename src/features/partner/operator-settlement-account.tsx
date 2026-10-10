@@ -92,7 +92,7 @@ export function OperatorSettlementAccount() {
     </main>;
   }
 
-  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-32 pt-6 text-[var(--tm-text-primary)]">
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-32 pt-4 text-[var(--tm-text-primary)]">
     <section className="mx-auto max-w-[560px]">
       <PageHeader backHref="/partner" title="정산 계좌" description={<>{court.name}에서 여는 코트 매칭의 참가비를 받을 계좌예요. 참가자에게는 승인된 뒤에만 보여요.</>} />
 

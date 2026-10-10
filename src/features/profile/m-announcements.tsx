@@ -40,7 +40,7 @@ export function MAnnouncements() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-10 pt-6 text-[var(--tm-text-primary)]">
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-10 pt-4 text-[var(--tm-text-primary)]">
     <div className="mx-auto max-w-[560px]">
       <PageHeader backHref="/my" title="공지사항" />
 

@@ -116,9 +116,9 @@ export function M8MyPage() {
   };
 
 
-  return <main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]">
+  return <main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] px-5 pb-28 pt-4 text-[var(--tm-text-primary)]">
     <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col">
-      <header className="flex items-center justify-between gap-3">
+      <header className="flex min-h-11 items-center justify-between gap-3">
         <h1 className="rally-page-title text-2xl font-bold">마이</h1>
         <NotificationBell unreadCount={unreadNotificationCount} />
       </header>

@@ -63,7 +63,7 @@ export function MSupportInquiry() {
 
   const valid = message.trim().length >= 10;
 
-  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-10 pt-6 text-[var(--tm-text-primary)]">
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-10 pt-4 text-[var(--tm-text-primary)]">
     <div className="mx-auto max-w-[560px]">
       <PageHeader backHref="/my" title="1:1 문의" description="궁금한 점이나 불편한 점을 남겨주시면 확인 후 도와드릴게요." />
       {matchId ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-text-secondary)]">방금 보던 매칭에 대한 문의로 접수돼요. 어떤 건인지 따로 적지 않으셔도 돼요.</p> : null}

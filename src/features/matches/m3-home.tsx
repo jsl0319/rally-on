@@ -156,7 +156,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   return (
     <main className="min-h-app bg-[var(--tm-bg-page)] pb-[calc(160px+env(safe-area-inset-bottom))] text-[var(--tm-text-primary)]">
       <header className="border-b border-[var(--tm-border-default)] bg-white">
-        <div className="mx-auto max-w-[560px] px-5 py-5">
+        <div className="mx-auto max-w-[560px] px-5 py-4">
           <PageHeader title="매칭" actions={<Link className="rally-text-action rounded-full bg-[var(--tm-bg-subtle)] px-4" href="/activity/received">내 매칭</Link>} />
         </div>
       </header>
@@ -352,7 +352,7 @@ function HomeLoading() {
 function HomeStateFrame({ children }: { children: React.ReactNode }) {
   return <main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] pb-32 text-[var(--tm-text-primary)]">
     <header className="border-b border-[var(--tm-border-default)] bg-[var(--tm-bg-page)]">
-      <div className="mx-auto max-w-[560px] px-5 pb-5 pt-8"><h1 className="rally-page-title">매칭</h1></div>
+      <div className="mx-auto max-w-[560px] px-5 py-4"><h1 className="rally-page-title">매칭</h1></div>
     </header>
     <section className="mx-auto flex w-full max-w-[560px] flex-1 items-center justify-center px-5 text-center">{children}</section>
     <BottomNavigation />

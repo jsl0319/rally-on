@@ -79,8 +79,7 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
   return <main className="min-h-app bg-[var(--tm-bg-page)] pb-16 text-[var(--tm-text-primary)]">
     <article className="mx-auto max-w-[560px] bg-white">
       <header className="px-5 pb-6 pt-4">
-        <BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/partner/slots" />
-        <p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">참가자 관리</p>
+        <div className="-ml-2 flex items-center gap-2"><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/partner/slots" /><p className="text-sm font-semibold text-[var(--tm-action-primary)]">참가자 관리</p></div>
         <h1 className="rally-page-title mt-1 break-words text-2xl font-bold leading-snug">{match.title}</h1>
         <p className="mt-2 flex flex-wrap gap-x-2 text-sm tabular-nums text-[var(--tm-text-secondary)]"><span>{date.day}</span><span>{date.time}</span></p>
         <div className="mt-4 flex flex-wrap gap-2">
