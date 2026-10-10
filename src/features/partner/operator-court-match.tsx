@@ -61,7 +61,7 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
   };
 
   if (!match) {
-    return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-subtle-muted)] px-5 text-center">
+    return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-subtle-muted)] px-5 text-center">
       {error
         ? <div><p className="text-lg font-bold">코트 매칭을 열 수 없어요</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{error}</p><Button as={Link} className="mt-5" href="/partner/slots" size="medium">시간 관리로</Button></div>
         : <CourtRallyLoader label="참가자 정보를 준비하고 있어요." />}
@@ -76,9 +76,9 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
   const closed = match.applications.filter((item) => !["PENDING", "ACCEPTED", "CONFIRMED"].includes(item.status) && !item.awaitingRefund);
   const shortfall = match.minParticipantCount - match.confirmedCount;
 
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] pb-16 text-[var(--tm-text-primary)]">
+  return <main className="min-h-app bg-[var(--tm-bg-page)] pb-16 text-[var(--tm-text-primary)]">
     <article className="mx-auto max-w-[560px] bg-white">
-      <header className="px-5 pb-6 pt-[max(1rem,env(safe-area-inset-top))]">
+      <header className="px-5 pb-6 pt-4">
         <BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/partner/slots" />
         <p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">참가자 관리</p>
         <h1 className="rally-page-title mt-1 break-words text-2xl font-bold leading-snug">{match.title}</h1>

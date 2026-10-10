@@ -24,7 +24,7 @@ export function PartnerSessionList() {
     } catch (caught) { setError(caught instanceof Error ? caught.message : "코트 매칭을 불러오지 못했어요."); }
   }, []);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
+  return <main className="min-h-app bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
     <div className="mx-auto max-w-[560px] px-5 pt-8">
       <PageHeader title="코트 매칭" description="운영자가 준비한 코트에서 함께 테니스해요." actions={<Link className="rally-text-action rounded-full border border-[var(--tm-border-default)] bg-white px-3" href="/activity/sent">내 신청 내역 →</Link>} />
       {error ? <div role="alert" className="mt-5 rounded-2xl bg-white p-5"><p className="text-sm text-red-600">{error}</p><Button className="mt-3" variant="secondary" onClick={() => void load()}>다시 불러오기</Button></div> : null}

@@ -122,7 +122,7 @@ export function M5SentApplications() {
     } catch (caught) { setError(caught instanceof Error ? caught.message : "신청을 철회하지 못했어요."); } finally { setWithdrawingId(null); }
   };
 
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-28 pt-6 text-[var(--tm-text-primary)]">
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-28 pt-6 text-[var(--tm-text-primary)]">
     <div className="mx-auto max-w-[560px]">
       <PageHeader backHref="/my" title="내가 보낸 신청" />
       <ActivityTabs current="sent" />

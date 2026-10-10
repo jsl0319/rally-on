@@ -148,12 +148,12 @@ export function InternalOperatorApplicationReview() {
     }
   };
 
-  if (applications === null) return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[560px]" label="운영자 심사 목록을 불러오고 있어요." /></main>;
+  if (applications === null) return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[560px]" label="운영자 심사 목록을 불러오고 있어요." /></main>;
 
   const emptyTitle = status === "REVIEW_REQUIRED" ? "심사 대기 신청이 없어요" : status === "PUBLISH_APPROVED" ? "공개 승인 운영자가 없어요" : "공개 중지된 운영자가 없어요";
   const emptyDescription = status === "REVIEW_REQUIRED" ? "새 신청이 들어오면 이 목록에서 안전한 정보만 확인할 수 있어요." : "심사자가 조치한 운영자만 이 목록에 표시돼요.";
 
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-12 pt-11 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[560px]">
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-12 pt-11 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[560px]">
     <PageHeader eyebrow="내부 관리" title="운영자 신청 검토" description="확인한 내용만 선택해 판정해요. 공개 중지와 코트 비활성화는 새 공급·사진만 막고 기존 세션은 취소하지 않아요." />
     <Tab onValueChange={(value) => { const nextStatus = value as ReviewStatus; if (status === nextStatus) { void load(); return; } setApplications(null); setStatus(nextStatus); }} value={status}>
       <TabList aria-label="운영자 심사 상태" className="mt-5">

@@ -149,7 +149,7 @@ export function OperatorApplicationFlow() {
     }
   };
 
-  if (screen === "loading") return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[390px]" label="운영자 등록을 준비하고 있어요." /></main>;
+  if (screen === "loading") return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[390px]" label="운영자 등록을 준비하고 있어요." /></main>;
   if (screen === "intro") return <Intro onStart={() => setScreen(1)} />;
   if (screen === 1) return <BusinessStep draft={draft} error={error} onBack={() => applicationId ? router.replace("/partner/application") : setScreen("intro")} onNext={nextBusiness} set={set} />;
   if (screen === 2) return <VenueStep draft={draft} error={error} onBack={() => { setError(""); setScreen(1); }} onNext={nextVenue} set={set} />;
@@ -157,7 +157,7 @@ export function OperatorApplicationFlow() {
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-28 pt-11 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[390px]">{children}</div></main>;
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-28 pt-11 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[390px]">{children}</div></main>;
 }
 
 function Intro({ onStart }: { onStart: () => void }) {

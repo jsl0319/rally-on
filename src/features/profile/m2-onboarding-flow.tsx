@@ -4,7 +4,6 @@ import { FormControl, FormField, FormLabel, FormMessage, TextField } from "@want
 import { signIn } from "next-auth/react";
 import { Check, ArrowLeft, TennisBall } from "@phosphor-icons/react";
 import { WelcomeScreen } from "./welcome-screen";
-import { Brand } from "@/components/ui/brand";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
@@ -192,9 +191,15 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
     });
   };
 
-  if (screen === "loading") return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[560px]" label="Rally On을 준비하고 있어요." /></main>;
+  if (screen === "loading") return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[560px]" label="Rally On을 준비하고 있어요." /></main>;
 
-  if (screen === "login") return <WelcomeScreen error={error} loading={loading} onSignIn={() => {
+  if (screen === "login") return <WelcomeScreen error={error} loading={loading} onOperator={() => {
+    setLoading(true); setError("");
+    void signIn("kakao", { callbackUrl: getStartAuthCallbackPath("OPERATOR", safeReturnTo) }).catch(() => {
+      setError("카카오에 연결하지 못했어요. 다시 시도해 주세요.");
+      setLoading(false);
+    });
+  }} onSignIn={() => {
     setLoading(true); setError("");
     void signIn("kakao", { callbackUrl: skipTennisProfileOnboarding ? safeReturnTo : getStartAuthCallbackPath("PLAYER", safeReturnTo) }).catch(() => {
       setError("카카오에 연결하지 못했어요. 다시 시도해 주세요.");
@@ -247,7 +252,7 @@ export function ChoiceList({ options, selected, onSelect }: { options: ReadonlyA
 }
 
 function ServiceCheckError({ onRetry }: { onRetry: () => void }) {
-  return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-6 py-12 text-[var(--tm-text-primary)]"><section className="w-full max-w-[420px]"><Brand /><div role="alert"><h1 className="mt-12 text-[28px] font-bold leading-tight">잠시 연결이 끊겼어요</h1><p className="mt-4 text-base leading-7 text-[var(--tm-text-secondary)]">네트워크 상태를 확인한 뒤 다시 시도해 주세요.</p></div><Button className="mt-8" fullWidth onClick={onRetry}>다시 연결하기</Button></section></main>;
+  return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-page)] px-6 py-12 text-[var(--tm-text-primary)]"><section className="w-full max-w-[420px]"><div role="alert"><h1 className="text-balance text-[28px] font-bold leading-tight">잠시 연결이 끊겼어요</h1><p className="mt-4 text-base leading-7 text-[var(--tm-text-secondary)]">네트워크 상태를 확인한 뒤 다시 시도해 주세요.</p></div><Button className="mt-8" fullWidth onClick={onRetry}>다시 연결하기</Button></section></main>;
 }
 
 /** 입력 화면 수. 닉네임 + 질문 네 개다. 막대와 숫자가 같은 값을 보게 한다. */
@@ -256,7 +261,7 @@ const STEP_COUNT = 5;
 export function FormShell({ children, onBack, step, complete = false }: { children: React.ReactNode; onBack: () => void; step: number; complete?: boolean }) {
   const content = useRef<HTMLDivElement>(null);
   useEffect(() => { content.current?.focus({ preventScroll: true }); window.scrollTo({ top: 0 }); }, [step, complete]);
-  return <main className="bg-[var(--tm-bg-page)] text-[var(--tm-text-primary)]"><section className="rally-form"><header className="flex items-center justify-between gap-4"><button aria-label="이전 화면으로 돌아가기" className="-ml-2 grid size-11 place-items-center rounded-full" onClick={onBack} type="button"><ArrowLeft size={23} /></button><Brand /><span className="text-xs tabular-nums text-[var(--tm-text-secondary)]">{complete ? "완료" : `${step} / ${STEP_COUNT}`}</span></header><div aria-label={`프로필 설정 ${step}/${STEP_COUNT}`} role="progressbar" aria-valuemin={0} aria-valuemax={STEP_COUNT} aria-valuenow={step} className="mt-5 flex gap-1.5">{Array.from({length:STEP_COUNT}, (_, i) => <span className={`h-1 flex-1 rounded-full ${i < step ? "bg-[var(--tm-action-primary)]" : "bg-[var(--tm-border-default)]"}`} key={i} />)}</div><div ref={content} tabIndex={-1} className="rally-form-content outline-none">{children}</div></section></main>;
+  return <main className="bg-[var(--tm-bg-page)] text-[var(--tm-text-primary)]"><section className="rally-form"><header className="flex items-center justify-between gap-4"><button aria-label="이전 화면으로 돌아가기" className="-ml-2 grid size-11 place-items-center rounded-full" onClick={onBack} type="button"><ArrowLeft size={23} /></button><span className="text-sm font-semibold">테니스 프로필</span><span className="text-xs tabular-nums text-[var(--tm-text-secondary)]">{complete ? "완료" : `${step} / ${STEP_COUNT}`}</span></header><div aria-label={`프로필 설정 ${step}/${STEP_COUNT}`} role="progressbar" aria-valuemin={0} aria-valuemax={STEP_COUNT} aria-valuenow={step} className="mt-5 flex gap-1.5">{Array.from({length:STEP_COUNT}, (_, i) => <span className={`h-1 flex-1 rounded-full ${i < step ? "bg-[var(--tm-action-primary)]" : "bg-[var(--tm-border-default)]"}`} key={i} />)}</div><div ref={content} tabIndex={-1} className="rally-form-content outline-none">{children}</div></section></main>;
 }
 
 function ActionButton({ children, disabled, loading, onClick }: { children: React.ReactNode; disabled?: boolean; loading?: boolean; onClick: () => void }) {

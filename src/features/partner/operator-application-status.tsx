@@ -42,7 +42,7 @@ export function OperatorApplicationStatus() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  if (!application) return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pt-11 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[390px]">{error ? <section className="rounded-2xl border border-[var(--tm-border-default)] bg-white p-5"><p className="text-sm leading-6" role="alert">{error}</p><div className="mt-4 grid gap-2"><Button onClick={() => void load()} size="medium">다시 불러오기</Button><Button as={Link} href="/partner/apply" size="medium" variant="secondary">운영자 등록 시작하기</Button></div></section> : <p className="text-sm text-[var(--tm-text-secondary)]">심사 상태를 불러오고 있어요…</p>}</div></main>;
+  if (!application) return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pt-11 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[390px]">{error ? <section className="rounded-2xl border border-[var(--tm-border-default)] bg-white p-5"><p className="text-sm leading-6" role="alert">{error}</p><div className="mt-4 grid gap-2"><Button onClick={() => void load()} size="medium">다시 불러오기</Button><Button as={Link} href="/partner/apply" size="medium" variant="secondary">운영자 등록 시작하기</Button></div></section> : <p className="text-sm text-[var(--tm-text-secondary)]">심사 상태를 불러오고 있어요…</p>}</div></main>;
   return <StatusScreen application={application} />;
 }
 
@@ -52,7 +52,7 @@ function StatusScreen({ application }: { application: Application }) {
   const draftReady = application.status === "DRAFT_ACCESS_GRANTED";
   const formHref = `/partner/apply?applicationId=${encodeURIComponent(application.id)}`;
 
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-28 pt-11 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[390px]"><div className="flex justify-between text-sm text-[var(--tm-text-secondary)]"><span>운영자 등록</span><span>심사 상태</span></div><span className={`mt-10 inline-flex min-h-8 items-center rounded-full px-3 text-sm ${needsMore ? "border border-[var(--tm-border-default)] bg-white" : "bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]"}`}>{application.statusLabel}</span>{isApproved ? <Approved application={application} /> : needsMore ? <MoreInformation application={application} formHref={formHref} /> : <DraftOrWaiting application={application} draftReady={draftReady} />}</div></main>;
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-28 pt-11 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[390px]"><div className="flex justify-between text-sm text-[var(--tm-text-secondary)]"><span>운영자 등록</span><span>심사 상태</span></div><span className={`mt-10 inline-flex min-h-8 items-center rounded-full px-3 text-sm ${needsMore ? "border border-[var(--tm-border-default)] bg-white" : "bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]"}`}>{application.statusLabel}</span>{isApproved ? <Approved application={application} /> : needsMore ? <MoreInformation application={application} formHref={formHref} /> : <DraftOrWaiting application={application} draftReady={draftReady} />}</div></main>;
 }
 
 function DraftOrWaiting({ application, draftReady }: { application: Application; draftReady: boolean }) {

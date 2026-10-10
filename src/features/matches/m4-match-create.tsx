@@ -318,9 +318,9 @@ export function M4MatchCreate() {
   };
 
   return (
-    <main className="min-h-svh bg-[var(--tm-bg-page)] pb-36 text-[var(--tm-text-primary)]">
+    <main className="min-h-app bg-[var(--tm-bg-page)] pb-36 text-[var(--tm-text-primary)]">
       <section className="mx-auto max-w-[560px]">
-        <header className="sticky top-0 z-20 bg-[var(--tm-bg-page)]/95 px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur">
+        <header className="sticky top-[var(--rally-safe-top)] z-20 bg-[var(--tm-bg-page)]/95 px-5 pb-4 pt-4 backdrop-blur">
           <div className="relative flex min-h-11 items-center">
             <button
               aria-label="이전 화면으로 돌아가기"

@@ -231,11 +231,11 @@ export function MatchConversation({ params }: { params: Promise<{ matchId: strin
     }
   };
 
-  if (!conversation) return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-center text-[var(--tm-text-primary)]">{error ? <section><p>{error}</p><Button className="mt-4" onClick={() => void load()} size="medium">다시 불러오기</Button><Link className="ml-3 text-sm font-semibold text-[var(--tm-action-primary)]" href="/chats">채팅 목록</Link></section> : <CourtRallyLoader label="채팅방을 준비하고 있어요." />}</main>;
+  if (!conversation) return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-page)] px-5 text-center text-[var(--tm-text-primary)]">{error ? <section><p>{error}</p><Button className="mt-4" onClick={() => void load()} size="medium">다시 불러오기</Button><Link className="ml-3 text-sm font-semibold text-[var(--tm-action-primary)]" href="/chats">채팅 목록</Link></section> : <CourtRallyLoader label="채팅방을 준비하고 있어요." />}</main>;
 
   return (
-    <main className="flex min-h-svh flex-col bg-[var(--tm-bg-page)] text-[var(--tm-text-primary)]">
-      <header className="sticky top-0 z-10 border-b border-[var(--tm-border-default)] bg-white/95 px-5 pb-3 pt-[max(12px,env(safe-area-inset-top))] backdrop-blur">
+    <main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] text-[var(--tm-text-primary)]">
+      <header className="sticky top-[var(--rally-safe-top)] z-10 border-b border-[var(--tm-border-default)] bg-white/95 px-5 pb-3 pt-3 backdrop-blur">
         <div className="mx-auto flex max-w-[560px] items-center gap-2">
           <BackButton className="grid size-11 place-items-center rounded-full text-xl" fallbackPath="/chats" />
           <div className="min-w-0"><h1 className="truncate text-base font-bold">{conversation.match.title}</h1><p className="mt-0.5 truncate text-xs text-[var(--tm-text-secondary)]">{schedule(conversation.match.startsAt, conversation.match.endsAt)}</p></div>

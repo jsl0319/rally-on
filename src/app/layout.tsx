@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Noto_Sans_KR } from "next/font/google";
 import type { ReactNode } from "react";
 
@@ -16,6 +16,15 @@ const notoSansKr = Noto_Sans_KR({
 export const metadata: Metadata = {
   title: "Rally On",
   description: "테니스 초보자를 위한 부담 없는 매칭 서비스",
+};
+
+// CSS owns the safe areas on both Safari and the app's WKWebView.
+// Keep pinch zoom available; sizing must not be fixed by disabling zoom.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#f7f8f2",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

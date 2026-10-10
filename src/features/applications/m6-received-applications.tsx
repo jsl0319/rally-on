@@ -100,7 +100,7 @@ function useJsonLoader<T>(url: string) {
 }
 
 function PageShell({ children, withNavigation = false }: { children: React.ReactNode; withNavigation?: boolean }) {
-  return <main className={`min-h-svh bg-[var(--tm-bg-page)] px-5 pt-6 text-[var(--tm-text-primary)] ${withNavigation ? "pb-28" : "pb-10"}`}><div className="mx-auto max-w-[560px]">{children}</div>{withNavigation ? <BottomNavigation /> : null}</main>;
+  return <main className={`min-h-app bg-[var(--tm-bg-page)] px-5 pt-6 text-[var(--tm-text-primary)] ${withNavigation ? "pb-28" : "pb-10"}`}><div className="mx-auto max-w-[560px]">{children}</div>{withNavigation ? <BottomNavigation /> : null}</main>;
 }
 
 function LoadingOrError({ error, label, load }: { error: string; label: string; load: () => Promise<void> }) {

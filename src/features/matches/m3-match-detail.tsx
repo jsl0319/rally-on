@@ -115,12 +115,12 @@ export function M3MatchDetail({ params }: { params: Promise<{ matchId: string }>
     }
   };
 
-  if (!detail) return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-center">{error ? <div><p>{error}</p><Button className="mt-4" onClick={() => void load()}>다시 불러오기</Button><Link className="ml-3 text-sm underline" href="/">홈으로</Link></div> : <CourtRallyLoader label="매칭 정보를 준비하고 있어요." />}</main>;
+  if (!detail) return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-page)] px-5 text-center">{error ? <div><p>{error}</p><Button className="mt-4" onClick={() => void load()}>다시 불러오기</Button><Link className="ml-3 text-sm underline" href="/">홈으로</Link></div> : <CourtRallyLoader label="매칭 정보를 준비하고 있어요." />}</main>;
 
   if (submitted) return <ApplicationSuccess title={detail.court.name ?? "코트 미정"} />;
 
   const fee = detail.estimatedFeePerPersonKrw;
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] pb-32 text-[var(--tm-text-primary)]">
+  return <main className="min-h-app bg-[var(--tm-bg-page)] pb-32 text-[var(--tm-text-primary)]">
     <MatchDetailArticle detail={detail} returnTo={returnTo} />
     <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--tm-border-subtle)] bg-white/95 px-5 pb-[max(16px,env(safe-area-inset-bottom))] pt-4 backdrop-blur"><div className="mx-auto flex max-w-[520px] items-center gap-5">{detail.viewer.canApply && fee !== null ? <div className="shrink-0"><p className="text-[11px] text-[var(--tm-text-secondary)]">게스트 참가비</p><p className="mt-1 text-lg font-bold tabular-nums">{fee.toLocaleString("ko-KR")}원</p></div> : null}<div className="min-w-0 flex-1"><DetailAction detail={detail} onApply={openSheet} /></div></div></div>
     {sheetOpen ? <ApplicationSheet detail={detail} message={message} applyError={applyError} alreadyApplied={alreadyApplied} isSubmitting={isSubmitting} onClose={() => setSheetOpen(false)} onMessageChange={setMessage} onSubmit={() => void submitApplication()} /> : null}
@@ -211,7 +211,7 @@ export function ApplicationSheet({ detail, message, applyError, alreadyApplied, 
 }
 
 export function ApplicationSuccess({ title }: { title: string }) {
-  return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-[var(--tm-text-primary)]"><section className="w-full max-w-[390px] rounded-[20px] bg-white p-6 text-center shadow-[var(--tm-shadow-card)]"><p className="text-4xl">🎾</p><h1 className="mt-4 text-2xl font-bold">신청을 보냈어요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]"><strong className="font-semibold text-[var(--tm-text-primary)]">{title}</strong><br />모집자가 프로필을 확인하면 결과를 알려드릴게요.</p><Button as={Link} className="mt-6" fullWidth href="/activity/sent">신청 내역 보기</Button></section></main>;
+  return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-page)] px-5 text-[var(--tm-text-primary)]"><section className="w-full max-w-[390px] rounded-[20px] bg-white p-6 text-center shadow-[var(--tm-shadow-card)]"><p className="text-4xl">🎾</p><h1 className="mt-4 text-2xl font-bold">신청을 보냈어요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]"><strong className="font-semibold text-[var(--tm-text-primary)]">{title}</strong><br />모집자가 프로필을 확인하면 결과를 알려드릴게요.</p><Button as={Link} className="mt-6" fullWidth href="/activity/sent">신청 내역 보기</Button></section></main>;
 }
 
 function Section({ children, title }: { children: React.ReactNode; title: string }) {

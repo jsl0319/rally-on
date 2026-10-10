@@ -44,10 +44,10 @@ export function PartnerSessionDetail({ slotId }: { slotId: string }) {
     } catch (caught) { setApplyError(caught instanceof Error ? caught.message : "신청을 보내지 못했어요."); } finally { setBusy(false); }
   };
 
-  if (!slot) return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-subtle-muted)] px-5 text-center">{error ? <div><p>{error}</p><Button className="mt-4" onClick={reload}>다시 불러오기</Button><Link href="/partner-sessions" className="ml-3 text-sm underline">목록 보기</Link></div> : <CourtRallyLoader label="코트 매칭을 준비하고 있어요." />}</main>;
+  if (!slot) return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-subtle-muted)] px-5 text-center">{error ? <div><p>{error}</p><Button className="mt-4" onClick={reload}>다시 불러오기</Button><Link href="/partner-sessions" className="ml-3 text-sm underline">목록 보기</Link></div> : <CourtRallyLoader label="코트 매칭을 준비하고 있어요." />}</main>;
   const participation = slot.participation;
   const date = matchSchedule(slot.startsAt, slot.endsAt);
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]"><article className="mx-auto max-w-[560px] bg-white">
+  return <main className="min-h-app bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]"><article className="mx-auto max-w-[560px] bg-white">
     <div className="relative"><CourtMedia alt={`${slot.court.name} 코트 사진`} className="aspect-[7/4] w-full !rounded-none" fallbackLabel="코트 사진 준비 중" image={slot.court.image} priority /><div className="absolute left-5 top-5 grid size-11 place-items-center rounded-full bg-white/95 shadow-sm"><BackButton fallbackPath="/partner-sessions" /></div></div>
     <header className="px-5 py-6"><div className="flex flex-wrap gap-2"><MatchBadge tone={participation?.status === "OPEN" ? "blue" : "neutral"}>{slot.session?.statusLabel ?? slot.statusLabel}</MatchBadge>{slot.gameType ? <MatchBadge>{slot.gameType.label}</MatchBadge> : null}<MatchBadge tone="green">{slot.approvalMode === "AUTO" ? "선착순 자동 승인" : "운영자 승인"}</MatchBadge></div><h1 className="rally-page-title mt-4 break-words text-[26px] font-bold leading-snug tracking-tight">{slot.court.name}</h1><p className="mt-2 flex items-start gap-1.5 text-sm leading-6 text-[var(--tm-text-secondary)]"><MapPin className="mt-0.5 shrink-0" size={18} aria-hidden />{slot.court.address}</p></header>
     <CourtFreshness checkedAt={checkedAt} error={error} reload={reload} />

@@ -130,7 +130,7 @@ function toKstIso(date: string, time: string) {
 }
 
 function PageShell({ children }: { children: React.ReactNode }) {
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[560px]">{children}</div></main>;
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[560px]">{children}</div></main>;
 }
 
 function BackLink({ href }: { href: string }) {

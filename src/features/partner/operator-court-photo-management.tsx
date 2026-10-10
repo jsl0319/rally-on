@@ -179,18 +179,18 @@ export function OperatorCourtPhotoManagement() {
   };
 
   if (loading) {
-    return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-[var(--tm-text-primary)]"><CourtRallyLoader label="대표 코트 사진을 준비하고 있어요." /></main>;
+    return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-page)] px-5 text-[var(--tm-text-primary)]"><CourtRallyLoader label="대표 코트 사진을 준비하고 있어요." /></main>;
   }
 
   if (!application?.canPublish) {
-    return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pt-8 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><Link className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--tm-text-secondary)]" href="/partner">← 운영 홈</Link><h1 className="rally-page-title mt-5 text-2xl font-bold">대표 코트 사진은 공개 승인 후 관리해요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">심사 완료 뒤에 시설 사진을 최대 3장 올리고 대표 사진을 고를 수 있어요.</p><Button as={Link} className="mt-6" href="/partner/application" size="medium">심사 상태 보기</Button></section></main>;
+    return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pt-8 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><Link className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--tm-text-secondary)]" href="/partner">← 운영 홈</Link><h1 className="rally-page-title mt-5 text-2xl font-bold">대표 코트 사진은 공개 승인 후 관리해요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">심사 완료 뒤에 시설 사진을 최대 3장 올리고 대표 사진을 고를 수 있어요.</p><Button as={Link} className="mt-6" href="/partner/application" size="medium">심사 상태 보기</Button></section></main>;
   }
 
   if (!court) {
-    return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pt-8 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><Link className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--tm-text-secondary)]" href="/partner">← 운영 홈</Link><h1 className="rally-page-title mt-5 text-2xl font-bold">등록된 코트를 먼저 준비해 주세요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">시간 초안을 처음 저장하면 승인된 시설에 코트가 만들어져요. 그 뒤 대표 사진을 관리할 수 있어요.</p><Button as={Link} className="mt-6" href="/partner/slots/new" size="medium">시간 초안 만들기</Button></section></main>;
+    return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pt-8 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><Link className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--tm-text-secondary)]" href="/partner">← 운영 홈</Link><h1 className="rally-page-title mt-5 text-2xl font-bold">등록된 코트를 먼저 준비해 주세요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">시간 초안을 처음 저장하면 승인된 시설에 코트가 만들어져요. 그 뒤 대표 사진을 관리할 수 있어요.</p><Button as={Link} className="mt-6" href="/partner/slots/new" size="medium">시간 초안 만들기</Button></section></main>;
   }
 
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-32 pt-8 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><PageHeader backHref="/partner" title="코트 사진" description={<>{court.name}의 사진을 최대 3장 저장할 수 있어요. 대표 1장만 제휴 코트 카드와 세션 상세에 보여요.</>} />
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-32 pt-8 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><PageHeader backHref="/partner" title="코트 사진" description={<>{court.name}의 사진을 최대 3장 저장할 수 있어요. 대표 1장만 제휴 코트 카드와 세션 상세에 보여요.</>} />
 
     <section className="mt-5 rally-card p-5"><h2 className="font-bold">사진을 올리기 전에 확인해 주세요</h2><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">직접 찍었거나 사용할 권한이 있는 시설 사진만 올려 주세요. 얼굴, 연락처, 예약번호, 사업자등록증·예약 확인서가 보이는 사진은 올리지 않아요.</p><p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">JPEG · PNG · WebP · 사진당 최대 10 MiB</p></section>
 

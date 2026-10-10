@@ -84,7 +84,7 @@ export function MatchChatList() {
   const otherRole: ChatRole = role === "HOST" ? "PARTICIPANT" : "HOST";
   const otherCount = lists ? lists[otherRole].length : 0;
 
-  return <main className="flex min-h-svh flex-col bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]">
+  return <main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]">
     <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col">
       <h1 className="rally-page-title mt-1 text-2xl font-bold">채팅</h1>
       <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">참가가 확정된 메이트와 준비를 나눠요.</p>

@@ -18,7 +18,7 @@ export function CourtHandoffDashboard() {
     catch (e) { setError(e instanceof Error ? e.message : "목록 확인에 실패했어요."); } finally { setBusy(false); }
   }, []);
   useEffect(() => { const timer = setTimeout(() => void load(), 0); return () => clearTimeout(timer); }, [load]);
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 py-8 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[640px]"><PageHeader backHref="/internal/support-inquiries" title="코트 거래 인계" description="비활성 운영자의 기존 거래를 처리해요. 원래 운영자는 바뀌지 않으며 실제 기록자와 인계 근거를 남겨요." /><Button className="mt-4" variant="secondary" disabled={busy} onClick={() => void load()}>새로고침</Button>
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 py-8 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[640px]"><PageHeader backHref="/internal/support-inquiries" title="코트 거래 인계" description="비활성 운영자의 기존 거래를 처리해요. 원래 운영자는 바뀌지 않으며 실제 기록자와 인계 근거를 남겨요." /><Button className="mt-4" variant="secondary" disabled={busy} onClick={() => void load()}>새로고침</Button>
     {busy ? <p role="status" className="mt-4">인계 목록 확인 중…</p> : null}{error ? <p role="alert" className="mt-4 text-rose-700">{error}</p> : null}{!busy && !error && !data.items.length ? <p className="mt-6">인계할 거래가 없어요.</p> : null}
     <div className="mt-6 space-y-5">{data.items.map((item) => <HandoffCard key={item.id} item={item} refresh={() => load()} />)}</div>{data.nextCursor ? <Button className="mt-5" disabled={busy} onClick={() => void load(data.nextCursor!)}>더 보기</Button> : null}
   </div></main>;

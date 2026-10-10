@@ -85,14 +85,14 @@ export function OperatorSettlementAccount() {
   };
 
   if (!court) {
-    return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-center text-[var(--tm-text-primary)]">
+    return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-page)] px-5 text-center text-[var(--tm-text-primary)]">
       {loadError
         ? <div><p className="text-lg font-bold">입금 계좌를 설정할 수 없어요</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{loadError}</p><Button as={Link} className="mt-5" href="/partner" size="medium">운영 홈으로</Button></div>
         : <CourtRallyLoader label="코트장 정보를 확인하고 있어요." />}
     </main>;
   }
 
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-32 pt-6 text-[var(--tm-text-primary)]">
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-32 pt-6 text-[var(--tm-text-primary)]">
     <section className="mx-auto max-w-[560px]">
       <PageHeader backHref="/partner" title="정산 계좌" description={<>{court.name}에서 여는 코트 매칭의 참가비를 받을 계좌예요. 참가자에게는 승인된 뒤에만 보여요.</>} />
 

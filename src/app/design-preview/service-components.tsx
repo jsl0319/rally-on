@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { TextField } from "@wanteddev/wds";
-import { Brand } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { CourtServiceScopeFields } from "@/features/partner/court-service-scope";
@@ -13,7 +12,6 @@ import { ChoiceList } from "@/features/profile/m2-onboarding-flow";
 export function ServiceComponentsPreview() {
   const [scope, setScope] = useState<Partial<CourtServiceScope>>({});
   return <main className="mx-auto max-w-[560px] space-y-6 px-5 py-8">
-    <Brand />
     <PageHeader eyebrow="서비스 공통 기준" title="같은 디자인, 모든 화면" description="입력·운영·거래 상태에도 같은 색과 간격을 적용해요." />
     <section className="rally-card space-y-4 p-5" aria-label="버튼 상태">
       <h2 className="text-lg font-bold">행동과 상태</h2>

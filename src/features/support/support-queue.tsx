@@ -27,7 +27,7 @@ export function SupportQueue({ audience }: { audience: "reviewer" | "operator" }
     finally { setBusy(false); }
   }, [endpoint, status]);
   useEffect(() => { const timer = setTimeout(() => void load(), 0); return () => clearTimeout(timer); }, [load]);
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 py-8 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[640px]">
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 py-8 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[640px]">
     <PageHeader backHref={audience === "reviewer" ? "/internal/operator-applications" : "/partner"} title={audience === "reviewer" ? "1:1 문의 처리" : "담당자 대조 요청"} />
     {audience === "reviewer" ? <Link className="mb-4 block text-sm font-semibold text-[var(--tm-action-primary)]" href="/internal/court-handoffs">비활성 운영자 거래 인계 →</Link> : null}
     <label className="mt-5 block text-sm">처리 상태<select className="rally-input ml-3 rounded-xl border border-[var(--tm-border-default)] bg-white p-3" value={status} onChange={(e) => setStatus(e.target.value)}>{[["", "전체"], ["OPEN", "접수됨"], ["IN_PROGRESS", "검토 중"], ["WAITING_OPERATOR", "운영자 확인 중"], ["ANSWERED", "답변 완료"], ["RESOLVED", "해결 완료"]].map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select></label>

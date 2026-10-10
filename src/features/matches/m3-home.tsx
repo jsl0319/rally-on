@@ -5,7 +5,7 @@ import { DateCalendar, Modal, ModalClose, ModalContainer, ModalContent, ModalCon
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 
-import { Brand } from "@/components/ui/brand";
+import { PageHeader } from "@/components/ui/page-header";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { Button } from "@/components/ui/button";
@@ -84,7 +84,6 @@ async function requestJson<T>(url: string): Promise<T> {
 export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   const safeReturnTo = getSafeReturnTo(returnTo);
   const [screen, setScreen] = useState<Screen>("loading");
-  const [me, setMe] = useState<MeResponse | null>(null);
   const [error, setError] = useState("");
 
   const [matches, setMatches] = useState<MatchCardData[]>([]);
@@ -107,7 +106,6 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
       const meBody: unknown = await meResponse.json();
       if (!meResponse.ok) throw new Error(getErrorMessage(meBody));
       const current = meBody as MeResponse;
-      setMe(current);
       if (!current.onboardingCompleted) {
         setScreen("onboarding");
         return;
@@ -156,9 +154,11 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   const hasFilter = gameType !== null || date !== null;
 
   return (
-    <main className="min-h-svh bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
+    <main className="min-h-app bg-[var(--tm-bg-page)] pb-[calc(160px+env(safe-area-inset-bottom))] text-[var(--tm-text-primary)]">
       <header className="border-b border-[var(--tm-border-default)] bg-white">
-        <div className="mx-auto max-w-[560px] px-5 pb-6 pt-6"><div className="flex items-center justify-between"><Brand /><Link className="inline-flex min-h-11 items-center rounded-full bg-[var(--tm-bg-subtle)] px-4 text-xs font-semibold text-[var(--tm-action-primary)]" href="/activity/received">내 매칭</Link></div><p className="mt-5 text-sm text-[var(--tm-text-secondary)]">{me?.nickname}님, 코트에서 만나요.</p><h1 className="mt-1 text-[28px] font-bold leading-tight tracking-tight">함께할 메이트 찾기</h1></div>
+        <div className="mx-auto max-w-[560px] px-5 py-5">
+          <PageHeader title="매칭" actions={<Link className="rally-text-action rounded-full bg-[var(--tm-bg-subtle)] px-4" href="/activity/received">내 매칭</Link>} />
+        </div>
       </header>
       <section className="mx-auto max-w-[560px] px-5 pt-5">
         <Link className="flex min-h-14 items-center justify-between gap-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm text-[var(--tm-action-primary)]" href="/partner-sessions"><span>코트 예약이 어렵다면 <strong>코트 매칭</strong></span><span aria-hidden>↗</span></Link>
@@ -181,7 +181,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
         )}
       </section>
 
-      <Link aria-label="매칭 만들기" className="fixed bottom-24 right-[max(20px,calc((100vw-520px)/2))] z-30 inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[var(--tm-action-primary)] px-5 text-sm font-semibold text-white shadow-[0_6px_20px_#174c3c26] transition-transform active:scale-95" href="/matches/new">
+      <Link aria-label="매칭 만들기" className="fixed bottom-[calc(88px+env(safe-area-inset-bottom))] right-[max(20px,calc((100vw-520px)/2))] z-30 inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[var(--tm-action-primary)] px-5 text-sm font-semibold text-white shadow-[0_6px_20px_#174c3c26] transition-transform active:scale-95" href="/matches/new">
         <span aria-hidden="true" className="text-lg leading-none text-[var(--tm-tennis-ball)]">+</span>
         매칭 만들기
       </Link>
@@ -350,9 +350,9 @@ function HomeLoading() {
 }
 
 function HomeStateFrame({ children }: { children: React.ReactNode }) {
-  return <main className="flex min-h-svh flex-col bg-[var(--tm-bg-page)] pb-32 text-[var(--tm-text-primary)]">
+  return <main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] pb-32 text-[var(--tm-text-primary)]">
     <header className="border-b border-[var(--tm-border-default)] bg-[var(--tm-bg-page)]">
-      <div className="mx-auto max-w-[560px] px-5 pb-5 pt-8"><p className="text-sm font-semibold text-[var(--tm-action-primary)]">Rally On</p><h1 className="mt-2 text-2xl font-bold">매칭</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">함께 칠 메이트를 찾고 있어요.</p></div>
+      <div className="mx-auto max-w-[560px] px-5 pb-5 pt-8"><h1 className="rally-page-title">매칭</h1></div>
     </header>
     <section className="mx-auto flex w-full max-w-[560px] flex-1 items-center justify-center px-5 text-center">{children}</section>
     <BottomNavigation />

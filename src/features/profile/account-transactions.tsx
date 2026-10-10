@@ -27,7 +27,7 @@ export function AccountTransactions() {
     finally { setBusy(false); }
   }, []);
   useEffect(() => { const timer = setTimeout(() => void load(), 0); return () => clearTimeout(timer); }, [load]);
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 py-8 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[560px]">
+  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 py-8 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[560px]">
     <h1 className="rally-page-title text-2xl font-bold">내 거래 정리</h1>
     <p className="mt-3 text-sm leading-6 text-[var(--tm-text-muted)]">본인의 기존 코트 매칭 환불과 문의를 확인해요. 탈퇴·정지된 계정의 일반 서비스 이용은 재개되지 않아요.</p>
     <div className="mt-4 flex gap-3"><Button variant="secondary" size="medium" disabled={busy} onClick={() => void load()}>새로고침</Button><Button variant="secondary" size="medium" onClick={() => void signOut({ callbackUrl: "/login" })}>로그아웃</Button></div>

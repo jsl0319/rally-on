@@ -28,7 +28,7 @@ export function LegalNoticePage({ title, summary, updatedDate, sections, notice,
   const backLabel = backLabels[backHref] ?? "돌아가기";
 
   return (
-    <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 py-6 text-[var(--tm-text-primary)]">
+    <main className="min-h-app bg-[var(--tm-bg-page)] px-5 py-6 text-[var(--tm-text-primary)]">
       <article className="mx-auto max-w-[560px] pb-10">
         <Link className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--tm-action-primary)]" href={backHref}>
           ← {backLabel}
