@@ -375,8 +375,20 @@ describe("match service operation safeguards", () => {
 
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
-        startsAt: { gt: new Date("2029-01-01T00:00:00.000Z"), lt: new Date("2029-03-05T15:00:00.000Z") },
+        startsAt: { gt: new Date("2029-01-01T00:00:00.000Z"), gte: new Date("2029-03-04T15:00:00.000Z"), lt: new Date("2029-03-05T15:00:00.000Z") },
       }),
+    }));
+  });
+
+  it.each(["recommended", "soonest", "newest"] as const)("keeps today's past matches excluded with %s sorting", async (sort) => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const prisma = { match: { findMany } } as unknown as Parameters<typeof getMatches>[0];
+    const now = new Date("2029-03-05T03:00:00.000Z");
+    await getMatches(prisma, viewer, { startsFrom: now, limit: 20, date: "2029-03-05", sort });
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ startsAt: {
+        gt: now, gte: new Date("2029-03-04T15:00:00.000Z"), lt: new Date("2029-03-05T15:00:00.000Z"),
+      } }),
     }));
   });
 
@@ -570,6 +582,7 @@ describe("game type discovery filters", () => {
     const query = findMany.mock.calls[0][0];
     expect(query.where.gameType).toBe("MIXED_DOUBLES");
     expect(query.where.purposes).toBeUndefined();
+    expect(query.where.startsAt.gte).toEqual(new Date("2030-01-02T00:00:00+09:00"));
     expect(query.where.startsAt.lt).toEqual(new Date("2030-01-03T00:00:00+09:00"));
   });
   it("keeps historical game types readable in the all list", async () => {

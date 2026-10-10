@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { BusinessStep, CertificateStep, VenueStep } from "@/features/partner/operator-application-flow";
 import { WelcomeScreen } from "@/features/profile/welcome-screen";
 import { PageHeader } from "@/components/ui/page-header";
@@ -20,5 +21,6 @@ export function LayoutPreview() {
     <PageHeader backHref="/layout-preview" title="코트 매칭 관리" description="초안을 공개하면 참가자 모집이 시작돼요." />
     <p className="rally-card mt-6 p-5">레이아웃 검증용 예시 화면입니다. 실제 신청·저장은 하지 않습니다.</p>
     <button className="rally-text-action mt-4" onClick={() => change(1)}>운영자 입력 화면 확인</button>
+    <div><Link className="rally-text-action mt-4" href="/layout-preview/matches">매칭 필터 확인</Link></div>
   </section></main>;
 }

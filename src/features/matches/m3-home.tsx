@@ -1,11 +1,8 @@
 "use client";
 
-import { CalendarBlank, CaretDown, CheckCircle, Funnel } from "@phosphor-icons/react";
-import { DateCalendar, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalNavigation } from "@wanteddev/wds";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-import { PageHeader } from "@/components/ui/page-header";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { Button } from "@/components/ui/button";
@@ -13,7 +10,7 @@ import { getSafeReturnTo } from "@/navigation/return-to";
 import { EntrySelection } from "@/features/profile/entry-selection";
 import { M2OnboardingFlow } from "@/features/profile/m2-onboarding-flow";
 
-import { activeGameTypes, gameTypeLabels, type ActiveGameType } from "@/matches/game-type";
+import { DEFAULT_MATCH_FILTERS, MatchDiscoveryFilters, MatchDiscoveryHeader, type MatchFilters } from "./match-discovery-filters";
 
 import { MatchCard, type MatchCardData } from "./m3-match-card";
 
@@ -26,46 +23,6 @@ type MeResponse = {
 type MatchListResponse = { items: MatchCardData[] };
 type Screen = "loading" | "entry" | "onboarding" | "home" | "error";
 type ListStatus = "loading" | "ready" | "error";
-type MatchSort = "recommended" | "soonest" | "newest";
-const GAME_TYPE_OPTIONS = activeGameTypes.map((value) => ({ value, label: gameTypeLabels[value] }));
-
-const SORT_OPTIONS: { value: MatchSort; label: string }[] = [
-  { value: "recommended", label: "추천순" },
-  { value: "soonest", label: "매칭 임박순" },
-  { value: "newest", label: "매칭 생성순" },
-];
-
-function gameTypeLabel(value: ActiveGameType | null) {
-  return GAME_TYPE_OPTIONS.find((option) => option.value === value)?.label ?? "게임 유형";
-}
-
-function sortLabel(value: MatchSort) {
-  return SORT_OPTIONS.find((option) => option.value === value)?.label ?? "정렬";
-}
-
-function dateLabel(value: string | null) {
-  if (!value) return "날짜";
-  const [, month, day] = value.split("-").map(Number);
-  return `${month}월 ${day}일`;
-}
-
-function getTodayKstDate() {
-  const values = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
-  const part = (type: Intl.DateTimeFormatPartTypes) => values.find((item) => item.type === type)?.value ?? "";
-  return `${part("year")}-${part("month")}-${part("day")}`;
-}
-
-function toCalendarDate(value: string | null): Date | undefined {
-  if (!value) return undefined;
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return undefined;
-  return new Date(year, month - 1, day);
-}
-
-function fromCalendarDate(value: Date): string {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
-}
-
 function getErrorMessage(body: unknown) {
   if (typeof body === "object" && body !== null && "error" in body) {
     const error = body.error;
@@ -74,8 +31,8 @@ function getErrorMessage(body: unknown) {
   return "매칭을 불러오지 못했어요. 다시 시도해 주세요.";
 }
 
-async function requestJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { cache: "no-store" });
+async function requestJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(url, { cache: "no-store", signal });
   const body: unknown = await response.json();
   if (!response.ok) throw new Error(getErrorMessage(body));
   return body as T;
@@ -89,12 +46,9 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   const [matches, setMatches] = useState<MatchCardData[]>([]);
   const [listStatus, setListStatus] = useState<ListStatus>("loading");
   const [listError, setListError] = useState("");
-  const [gameType, setGameType] = useState<ActiveGameType | null>(null);
-  const [sort, setSort] = useState<MatchSort>("recommended");
-  const [date, setDate] = useState<string | null>(null);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isSortOpen, setIsSortOpen] = useState(false);
-  const [isDateOpen, setIsDateOpen] = useState(false);
+  const [filters, setFilters] = useState<MatchFilters>(DEFAULT_MATCH_FILTERS);
+  const { gameType, date, sort } = filters;
+  const latestListRequest = useRef(0);
 
   const loadMe = useCallback(async () => {
     try {
@@ -122,16 +76,19 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
     return () => window.clearTimeout(timer);
   }, [loadMe]);
 
-  const loadMatches = useCallback(async () => {
+  const loadMatches = useCallback(async (signal?: AbortSignal) => {
+    const requestId = ++latestListRequest.current;
     setListStatus("loading");
     try {
       const params = new URLSearchParams({ limit: "30", sort });
       if (gameType) params.set("gameType", gameType);
       if (date) params.set("date", date);
-      const response = await requestJson<MatchListResponse>(`/api/v1/matches?${params.toString()}`);
+      const response = await requestJson<MatchListResponse>(`/api/v1/matches?${params.toString()}`, signal);
+      if (signal?.aborted || requestId !== latestListRequest.current) return;
       setMatches(response.items);
       setListStatus("ready");
     } catch (caught) {
+      if (signal?.aborted || requestId !== latestListRequest.current) return;
       setListError(caught instanceof Error ? caught.message : "매칭을 불러오지 못했어요.");
       setListStatus("error");
     }
@@ -139,8 +96,9 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
 
   useEffect(() => {
     if (screen !== "home") return;
-    const timer = window.setTimeout(() => { void loadMatches(); }, 0);
-    return () => window.clearTimeout(timer);
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => { void loadMatches(controller.signal); }, 0);
+    return () => { controller.abort(); window.clearTimeout(timer); };
   }, [screen, loadMatches]);
 
   if (screen === "loading") return <HomeLoading />;
@@ -155,18 +113,10 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
 
   return (
     <main className="min-h-app bg-[var(--tm-bg-page)] pb-[calc(160px+env(safe-area-inset-bottom))] text-[var(--tm-text-primary)]">
-      <header className="border-b border-[var(--tm-border-default)] bg-white">
-        <div className="mx-auto max-w-[560px] px-5 py-4">
-          <PageHeader title="매칭" actions={<Link className="rally-text-action rounded-full bg-[var(--tm-bg-subtle)] px-4" href="/activity/received">내 매칭</Link>} />
-        </div>
-      </header>
-      <section className="mx-auto max-w-[560px] px-5 pt-5">
-        <Link className="flex min-h-14 items-center justify-between gap-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm text-[var(--tm-action-primary)]" href="/partner-sessions"><span>코트 예약이 어렵다면 <strong>코트 매칭</strong></span><span aria-hidden>↗</span></Link>
-        <div className="mt-5 flex flex-wrap items-center gap-2">
-          <FilterChip active={date !== null} icon={<CalendarBlank aria-hidden size={15} weight="bold" />} label={dateLabel(date)} onClick={() => setIsDateOpen(true)} />
-          <FilterChip active={gameType !== null} icon={<Funnel aria-hidden size={15} weight="bold" />} label={gameTypeLabel(gameType)} onClick={() => setIsFilterOpen(true)} />
-          <FilterChip active={sort !== "recommended"} label={sortLabel(sort)} onClick={() => setIsSortOpen(true)} />
-        </div>
+      <MatchDiscoveryHeader />
+      <section className="mx-auto max-w-[560px] px-5 pt-3">
+        <Link className="flex min-h-12 items-center justify-between gap-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm text-[var(--tm-action-primary)]" href="/partner-sessions"><span>코트 예약이 어렵다면 <strong>코트 매칭</strong></span><span aria-hidden>↗</span></Link>
+        <div className="mt-4"><MatchDiscoveryFilters value={filters} onChange={setFilters} /></div>
 
         {listStatus === "loading" ? (
           <CourtRallyLoader className="mt-4" label="매칭을 불러오고 있어요." />
@@ -175,7 +125,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
         ) : matches.length > 0 ? (
           <div className="mt-4 grid gap-4">{matches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
         ) : hasFilter ? (
-          <EmptyFilteredState onReset={() => { setGameType(null); setDate(null); }} />
+          <EmptyFilteredState onReset={() => setFilters(current => ({ ...current, gameType: null, date: null }))} />
         ) : (
           <EmptyMatchState />
         )}
@@ -187,113 +137,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
       </Link>
       <BottomNavigation />
 
-      <FilterSheet
-        onClose={() => setIsFilterOpen(false)}
-        onSelect={(value) => { setGameType(value); setIsFilterOpen(false); }}
-        open={isFilterOpen}
-        value={gameType}
-      />
-      <SortSheet
-        onClose={() => setIsSortOpen(false)}
-        onSelect={(value) => { setSort(value); setIsSortOpen(false); }}
-        open={isSortOpen}
-        value={sort}
-      />
-      <DateSheet
-        onClose={() => setIsDateOpen(false)}
-        onSelect={(value) => { setDate(value); setIsDateOpen(false); }}
-        open={isDateOpen}
-        value={date}
-      />
     </main>
-  );
-}
-
-function FilterSheet({ onClose, onSelect, open, value }: { onClose: () => void; onSelect: (value: ActiveGameType | null) => void; open: boolean; value: ActiveGameType | null }) {
-  if (!open) return null;
-
-  return (
-    <Modal open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <ModalContainer size="large" variant="bottom">
-        <ModalNavigation trailingContent={<ModalClose aria-label="게임 유형 필터 닫기" />}>게임 유형</ModalNavigation>
-        <ModalContent>
-          <ModalContentItem>
-            <div className="grid gap-1">
-              <SheetOptionRow label="전체" onClick={() => onSelect(null)} selected={value === null} />
-              {GAME_TYPE_OPTIONS.map((option) => <SheetOptionRow key={option.value} label={option.label} onClick={() => onSelect(option.value)} selected={value === option.value} />)}
-            </div>
-          </ModalContentItem>
-        </ModalContent>
-      </ModalContainer>
-    </Modal>
-  );
-}
-
-function SortSheet({ onClose, onSelect, open, value }: { onClose: () => void; onSelect: (value: MatchSort) => void; open: boolean; value: MatchSort }) {
-  if (!open) return null;
-
-  return (
-    <Modal open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <ModalContainer size="large" variant="bottom">
-        <ModalNavigation trailingContent={<ModalClose aria-label="정렬 선택 닫기" />}>정렬</ModalNavigation>
-        <ModalContent>
-          <ModalContentItem>
-            <div className="grid gap-1">
-              {SORT_OPTIONS.map((option) => <SheetOptionRow key={option.value} label={option.label} onClick={() => onSelect(option.value)} selected={value === option.value} />)}
-            </div>
-          </ModalContentItem>
-        </ModalContent>
-      </ModalContainer>
-    </Modal>
-  );
-}
-
-function FilterChip({ active, icon, label, onClick }: { active: boolean; icon?: ReactNode; label: string; onClick: () => void }) {
-  return (
-    <button
-      aria-pressed={active}
-      className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold transition-colors ${active ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white text-[var(--tm-text-primary)]"}`}
-      onClick={onClick}
-      type="button"
-    >
-      {icon}
-      {label}
-      <CaretDown aria-hidden size={13} weight="bold" />
-    </button>
-  );
-}
-
-function DateSheet({ onClose, onSelect, open, value }: { onClose: () => void; onSelect: (value: string | null) => void; open: boolean; value: string | null }) {
-  if (!open) return null;
-
-  return (
-    <Modal open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <ModalContainer size="large" variant="bottom">
-        <ModalNavigation trailingContent={<ModalClose aria-label="날짜 필터 닫기" />}>날짜</ModalNavigation>
-        <ModalContent>
-          <ModalContentItem>
-            <SheetOptionRow label="전체 날짜" onClick={() => onSelect(null)} selected={value === null} />
-            <div className="mt-3 flex justify-center">
-              <DateCalendar
-                min={toCalendarDate(getTodayKstDate())}
-                onChange={(next) => { if (next instanceof Date) onSelect(fromCalendarDate(next)); }}
-                value={toCalendarDate(value)}
-                views={["day"]}
-              />
-            </div>
-          </ModalContentItem>
-        </ModalContent>
-      </ModalContainer>
-    </Modal>
-  );
-}
-
-function SheetOptionRow({ label, onClick, selected }: { label: string; onClick: () => void; selected: boolean }) {
-  return (
-    <button aria-pressed={selected} className={`flex min-h-13 w-full items-center justify-between rounded-xl px-3 text-left text-base transition-colors ${selected ? "bg-[var(--tm-bg-subtle)] font-bold text-[var(--tm-action-primary)]" : "text-[var(--tm-text-primary)]"}`} onClick={onClick} type="button">
-      {label}
-      {selected ? <CheckCircle aria-hidden size={20} weight="fill" /> : null}
-    </button>
   );
 }
 
@@ -351,7 +195,7 @@ function HomeLoading() {
 
 function HomeStateFrame({ children }: { children: React.ReactNode }) {
   return <main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] pb-32 text-[var(--tm-text-primary)]">
-    <header className="border-b border-[var(--tm-border-default)] bg-[var(--tm-bg-page)]">
+    <header className="bg-[var(--tm-bg-page)]">
       <div className="mx-auto max-w-[560px] px-5 py-4"><h1 className="rally-page-title">매칭</h1></div>
     </header>
     <section className="mx-auto flex w-full max-w-[560px] flex-1 items-center justify-center px-5 text-center">{children}</section>
