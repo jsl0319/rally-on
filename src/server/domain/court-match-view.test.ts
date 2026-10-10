@@ -10,7 +10,7 @@ const applicantId = "applicant-user-id";
 function application(overrides: Record<string, unknown> = {}) {
   return {
     receivedAmountKrw: null, lastReceivedAt: null, receiptVersion: 0, legacyRefundPaidKrw: 0, refundAccountVersion: 1, refundAmountKrw: null,
-    receiptRecords: [], refundAttempts: [], confirmationDueAt: null,
+    agreedRefundAmountKrw: 0, refundAgreementVersion: 0, refundAgreements: [], receiptRecords: [], refundAttempts: [], confirmationDueAt: null,
     id: "application-id",
     applicantUserId: applicantId,
     applicantGender: "MALE",

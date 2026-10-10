@@ -16,6 +16,11 @@ describe("코트 운영자 연락처 공개 경계", () => {
   it.each(["WITHDRAWN", "REJECTED", "EXPIRED_UNPAID", "CANCELLED"])("%s 종료 신청에 남은 거래가 없으면 즉시 숨긴다", (status) => {
     expect(canReadCourtContact({ ...input, application: { ...application, status } }, endsAt)).toBe(false);
   });
+  it("부분 반환 합의의 미처리 잔액도 종료 24시간 후 연락처 공개에 반영한다", () => {
+    const pending = { ...application, status: "CONFIRMED", confirmedAt: endsAt, receivedAmountKrw: 12000, agreedRefundAmountKrw: 3000 };
+    expect(canReadCourtContact({ ...input, application: pending }, cutoff)).toBe(true);
+    expect(canReadCourtContact({ ...input, application: { ...pending, refundAttempts: [{ status: "PAID", amountKrw: 3000 }] } }, cutoff)).toBe(false);
+  });
   it("신청 전·운영자 비활성·전체 취소는 일반 공개를 허용하지 않는다", () => {
     expect(canReadCourtContact({ ...input, application: undefined }, endsAt)).toBe(false);
     expect(canReadCourtContact({ ...input, operatorActive: false }, endsAt)).toBe(false);

@@ -4,13 +4,13 @@ import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { z } from "zod";
 import { lockApplicationMatch, reconcileCourtMatch } from "./court-match-service";
 import { DomainError } from "./profile-service";
-import { courtMoneySummary, type courtReceiptInputSchema, type courtRefundStartInputSchema, type courtRefundResultInputSchema } from "./court-match-money";
+import { courtMoneySummary, courtRefundAgreementInputSchema, type courtReceiptInputSchema, type courtRefundStartInputSchema, type courtRefundResultInputSchema } from "./court-match-money";
 import type { RefundAccountInput } from "./court-match";
 import { recordApplicationNotification } from "./notification-service";
 
 const include = {
   refundAttempts: { orderBy: { createdAt: "desc" } },
-  match: { select: { id: true, hostUserId: true, courtSource: true, totalCourtFeeKrw: true, title: true,
+  match: { select: { id: true, hostUserId: true, courtSource: true, totalCourtFeeKrw: true, title: true, startsAt: true, endsAt: true, cancelledAt: true,
     courtSlot: { select: { courtUnit: { select: { court: { select: { operatorApplication: { select: { applicantUserId: true } } } } } } } } } },
 } satisfies Prisma.MatchApplicationInclude;
 
@@ -131,5 +131,45 @@ export async function completeCourtMatchRefund(prisma: PrismaClient, operator: {
     await tx.matchApplication.update({ where: { id: applicationId }, data: { refundCompletedAt: input.status === "PAID" && !money.outstandingKrw && !money.reservedKrw ? new Date() : null } });
     if (input.status === "PAID") await recordApplicationNotification(tx, { recipientUserId: a.applicantUserId, type: "COURT_MATCH_REFUND_COMPLETED", matchTitle: a.match.title, href: "/activity/sent" });
     return { id: attempt.id };
+  });
+}
+
+/** 당사자가 합의한 누적 금액만 기록한다. 송금·취소·수령 사실은 바꾸지 않는다. */
+export async function recordCourtRefundAgreement(prisma: PrismaClient, operator: { id: string }, applicationId: string, rawInput: z.infer<typeof courtRefundAgreementInputSchema>, handoff = false) {
+  const input = courtRefundAgreementInputSchema.parse(rawInput);
+  await reconcile(prisma, applicationId);
+  return prisma.$transaction(async (tx) => {
+    const a = await readLocked(tx, applicationId);
+    await assertOperator(tx, a, operator.id, handoff);
+    if (a.applicantUserId === operator.id) throw new DomainError("SELF_FINANCIAL_ACTION", 403, "본인 신청의 반환 금액은 다른 담당자가 확인해야 해요.");
+    const incidentAt = new Date(input.incidentAt);
+    const existing = await tx.courtRefundAgreement.findUnique({ where: { applicationId_clientRequestId: { applicationId, clientRequestId: input.clientRequestId } } });
+    if (existing) {
+      if (existing.actorUserId !== operator.id || existing.amountKrw !== input.amountKrw || existing.incidentAt.getTime() !== incidentAt.getTime() || existing.note !== input.note) conflict("같은 요청 번호로 다른 합의를 저장할 수 없어요.");
+      return { id: existing.id };
+    }
+    if (a.refundAgreementVersion !== input.expectedVersion || a.receiptVersion !== input.expectedReceiptVersion) conflict();
+    const fee = a.match.totalCourtFeeKrw ?? 0;
+    const money = courtMoneySummary(a, fee);
+    if (money.needsReview) conflict("송금 기록을 먼저 대조해 주세요.");
+    if (!a.confirmedAt || a.confirmedAt > incidentAt || incidentAt < a.match.startsAt || incidentAt >= a.match.endsAt || incidentAt > new Date()
+      || (a.participantCancelledAt && a.participantCancelledAt <= incidentAt) || (a.match.cancelledAt && a.match.cancelledAt <= incidentAt)) {
+      conflict("예약 이용 시간 중 문제가 발생했을 때 참가가 확정된 신청만 기록할 수 있어요.");
+    }
+    const policyAmount = ["CANCELLED", "WITHDRAWN", "REJECTED", "EXPIRED_UNPAID"].includes(a.status) ? a.refundAmountKrw ?? fee : 0;
+    if (a.receivedAmountKrw === null || input.amountKrw > Math.min(fee, a.receivedAmountKrw)
+      || input.amountKrw <= Math.max(a.agreedRefundAmountKrw, policyAmount)) {
+      conflict("실제 입금을 확인하고, 기존 반환액보다 큰 참가비 반환 총액을 입력해 주세요. 참가비와 실제 수령액을 넘을 수 없어요.");
+    }
+    const record = await tx.courtRefundAgreement.create({ data: {
+      applicationId, actorUserId: operator.id, clientRequestId: input.clientRequestId,
+      version: a.refundAgreementVersion + 1, previousAmountKrw: a.agreedRefundAmountKrw,
+      amountKrw: input.amountKrw, incidentAt, note: input.note,
+    } });
+    await tx.matchApplication.update({ where: { id: applicationId }, data: {
+      agreedRefundAmountKrw: input.amountKrw, refundAgreementVersion: { increment: 1 }, refundCompletedAt: null,
+    } });
+    await recordApplicationNotification(tx, { recipientUserId: a.applicantUserId, type: "COURT_REFUND_AGREEMENT_RECORDED", matchTitle: a.match.title, href: "/activity/sent" });
+    return { id: record.id };
   });
 }

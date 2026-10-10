@@ -16,9 +16,10 @@ const applicationSelect = {
   message: true, profileSnapshot: true, paymentDueAt: true, depositCode: true,
   depositorName: true, depositClaimedAt: true, confirmedAt: true,
   refundBank: true, refundAccountNumber: true, refundAccountHolder: true,
-  refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, participantCancelledAt: true,
+  refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, agreedRefundAmountKrw: true, participantCancelledAt: true,
   confirmationDueAt: true, receivedAmountKrw: true, lastReceivedAt: true, feeReceivedAt: true, receiptVersion: true,
-  refundAccountVersion: true, legacyRefundPaidKrw: true,
+  refundAccountVersion: true, legacyRefundPaidKrw: true, refundAgreementVersion: true,
+  refundAgreements: { orderBy: { version: "desc" } },
   receiptRecords: { orderBy: { version: "desc" } },
   refundAttempts: { orderBy: { createdAt: "desc" }, include: { events: { orderBy: { createdAt: "asc" } } } },
   applicantUser: { select: { nickname: true } },
@@ -64,6 +65,9 @@ function toApplication(application: Application, fee: number, operator = false) 
   return {
     applicationNotice: readCourtApplicationNotice(application.courtNoticeSnapshot),
     noticeAcceptedAt: application.courtNoticeAcceptedAt?.toISOString() ?? null,
+    agreedRefundAmountKrw: application.agreedRefundAmountKrw,
+    refundAgreementVersion: application.refundAgreementVersion,
+    refundAgreements: application.refundAgreements.map((r) => ({ id: r.id, amountKrw: r.amountKrw, previousAmountKrw: r.previousAmountKrw, incidentAt: r.incidentAt.toISOString(), note: r.note, createdAt: r.createdAt.toISOString() })),
     money, refundAccountVersion: application.refundAccountVersion,
     refundLocked: Boolean(activeRefund),
     receiptVersion: application.receiptVersion,
@@ -177,6 +181,10 @@ export async function getOperatorCourtMatch(prisma: PrismaClient, viewer: { id: 
     canCancelForComposition: !handoff && match.host.status === "ACTIVE" && ["OPEN", "CLOSED"].includes(match.status) && describeCourtComposition(match, new Date()).phase === "ACTION_REQUIRED",
     applications: match.applications.map((application) => ({
       ...toApplication(application, match.totalCourtFeeKrw ?? 0, true),
+      refundAgreementWindow: { startsAt: match.startsAt.toISOString(), endsAt: match.endsAt.toISOString(), maxAmountKrw: Math.min(match.totalCourtFeeKrw ?? 0, application.receivedAmountKrw ?? 0) },
+      canRecordRefundAgreement: Boolean(application.confirmedAt && match.startsAt <= new Date()
+        && !application.participantCancelledAt && match.status !== "CANCELLED"
+        && application.receivedAmountKrw !== null && application.agreedRefundAmountKrw < Math.min(match.totalCourtFeeKrw ?? 0, application.receivedAmountKrw)),
       ...(showProfile ? { profileSnapshot: application.profileSnapshot, message: application.message } : {}),
     })),
   };

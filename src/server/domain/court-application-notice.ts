@@ -6,7 +6,7 @@ import { checkCourtComposition, courtCompositionPolicyVersion } from "@/matches/
 import { courtServiceScopeSchema, describeCourtServiceScope, readCourtServiceScope } from "@/matches/court-service-scope";
 import { confirmationWindowMinutes, depositWindowMinutes, getApplicationDeadline, getJudgementAt, getPaymentDueAt, getLateConfirmationDeadline } from "./court-match";
 
-export const courtApplicationNoticeVersion = "court-application-2026-10-01-v2";
+export const courtApplicationNoticeVersion = "court-application-2026-10-10-v3";
 export const courtApplicationNoticeSchema = z.object({
   version: z.string(), fingerprint: z.string(),
   terms: z.object({
@@ -60,6 +60,7 @@ export function buildCourtApplicationNotice(match: NoticeMatch): CourtApplicatio
       { title: "추가 모집 기한", body: `진행 판정을 통과한 경기만 ${time(getApplicationDeadline(match.startsAt))}까지 추가 신청·승인을 받아요. 추가 모집의 이체 기한은 ${time(getPaymentDueAt(judgement, match.startsAt))}, 운영자 확인은 ${time(getLateConfirmationDeadline(match.startsAt))}까지예요.` },
       { title: "본인 사유의 취소", summary: "확정 전 전액 반환. 확정 후 이틀 전까지 100%, 하루 전 50%, 당일 0% (한국 날짜 기준).", body: "확정 전 철회·거절·만료 건의 실제 입금액은 전액 반환해요. 확정 후 본인 사유로 취소하면 한국 날짜 기준 이틀 전까지 참가비 전액, 하루 전 50%, 당일 0%예요. 취소는 시작 전까지 가능하며 초과 입금은 별도로 반환해요." },
       { title: "경기 취소와 반환", summary: "진행 조건 미달·제공 불가 취소 시 남은 참가자 전액 반환. 이전 본인 사유 취소는 당시 기준을 유지해요.", body: `진행 조건 미달이나 운영자의 제공 불가로 경기 전체가 취소되면 남은 참가자의 실제 입금액은 전액 반환 대상이에요.${currentPolicy ? " 판정 후 구성 부족은 운영자가 보충 여부를 확인하고 제공 불가하면 취소해요." : ""} 먼저 본인 사유로 취소한 신청은 당시 기준을 유지해요. 입금·환불은 운영자가 통장에서 대조하고 직접 이체해요. 앱은 자동 송금하지 않아요.` },
+      { title: "이용 중 일부 제공 불가", body: "우천·시설 문제로 일부 이용하지 못한 경우, 문제 발생 당시 확정 참가자는 운영자와 반환 금액을 직접 협의해 주세요. 운영자가 합의 금액·사유를 기록하고 직접 반환해요. 앱은 시간 비례 금액을 자동 계산하지 않으며, 기존 전액 반환 조건과 이전 본인 사유 취소 기준은 유지해요." },
       { title: "참가비 포함 항목", summary: describeCourtServiceScope(serviceScope), body: describeCourtServiceScope(serviceScope) },
     ],
   };

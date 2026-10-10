@@ -16,7 +16,17 @@ export const courtRefundResultInputSchema = z.object({
   transferredAt: z.iso.datetime({ offset: true }).nullable(), note: z.string().trim().min(2).max(500),
 }).refine((v) => v.status !== "PAID" || v.transferredAt !== null, { message: "은행에서 확인한 송금 시각을 입력해 주세요.", path: ["transferredAt"] });
 
+export const courtRefundAgreementInputSchema = z.object({
+  ...requestFields, expectedReceiptVersion: z.number().int().nonnegative(),
+  amountKrw: z.number().int().positive().max(100_000_000),
+  incidentAt: z.iso.datetime({ offset: true }),
+  note: z.string().trim().min(10).max(500),
+  agreementConfirmed: z.literal(true),
+}).strict();
+
 export type MoneyApplication = {
+  agreedRefundAmountKrw?: number;
+
   status: string; confirmedAt: Date | null; receivedAmountKrw: number | null; refundAmountKrw: number | null;
   legacyRefundPaidKrw: number; refundAttempts: { amountKrw: number; status: string }[];
 };
@@ -26,14 +36,14 @@ export function courtMoneySummary(a: MoneyApplication, fee: number) {
   const receivedKrw = a.receivedAmountKrw ?? (a.confirmedAt ? fee : 0);
   const excessKrw = Math.max(0, receivedKrw - fee);
   const terminated = ["WITHDRAWN", "REJECTED", "EXPIRED_UNPAID", "CANCELLED"].includes(a.status);
-  const refundTotalKrw = terminated
-    ? a.confirmedAt ? Math.min(receivedKrw, (a.refundAmountKrw ?? fee) + excessKrw) : receivedKrw
-    : excessKrw;
+  const policyAmountKrw = terminated && a.confirmedAt ? (a.refundAmountKrw ?? fee) : 0;
+  const refundTotalKrw = terminated && !a.confirmedAt ? receivedKrw
+    : Math.min(receivedKrw, Math.max(policyAmountKrw, a.agreedRefundAmountKrw ?? 0) + excessKrw);
   const paidKrw = a.legacyRefundPaidKrw + a.refundAttempts.filter((r) => r.status === "PAID").reduce((n, r) => n + r.amountKrw, 0);
   const reservedKrw = a.refundAttempts.filter((r) => r.status === "PROCESSING" || r.status === "REVIEW").reduce((n, r) => n + r.amountKrw, 0);
   const outstandingKrw = Math.max(0, refundTotalKrw - paidKrw);
   return { receivedKrw, excessKrw, refundTotalKrw, paidKrw, reservedKrw, outstandingKrw,
     availableKrw: Math.max(0, outstandingKrw - reservedKrw),
-    needsReview: paidKrw + reservedKrw > refundTotalKrw || a.refundAttempts.some((r) => r.status === "REVIEW"),
+    needsReview: (a.agreedRefundAmountKrw ?? 0) > Math.min(fee, receivedKrw) || paidKrw + reservedKrw > refundTotalKrw || a.refundAttempts.some((r) => r.status === "REVIEW"),
   };
 }

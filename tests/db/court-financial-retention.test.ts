@@ -3,6 +3,8 @@ import { createPrismaPg } from "../../src/server/db/prisma-adapter";
 import { Client } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PrismaClient, type Prisma } from "@/generated/prisma/client";
+import { recordCourtRefundAgreement } from "@/server/domain/court-match-money-service";
+import { getMyCourtSlots } from "@/server/domain/court-slot-service";
 import { auditCourtFinancialRetention } from "@/server/domain/court-financial-retention-audit";
 import { getCourtFinancialReview, recordCourtFinancialReview } from "@/server/domain/court-financial-review-service";
 import { financialReviewInputSchema, type FinancialReviewInput } from "@/server/domain/court-financial-review";
@@ -58,6 +60,24 @@ describe.skipIf(!databaseUrl)("금융 원문 점검 · 실제 DB", () => {
     finally { await client.end(); }
   }
   const reasonCount = (report: Awaited<ReturnType<typeof audit>>, code: string) => report.reasons.find((r) => r.code === code)!;
+
+  it("종료 후 합의액을 기록하면 대조가 무효화되고 보존 점검·운영 목록에 미처리 반환이 남는다", async () => {
+    const match = await makeMatch();
+    const a = await makeApplication(match.id, { status: "CONFIRMED", confirmedAt: new Date(match.startsAt.getTime() - 3600000), receivedAmountKrw: 12000, receiptVersion: 1 });
+    await prisma.courtReceiptRecord.create({ data: { applicationId: a.id, actorUserId: operatorId, clientRequestId: randomUUID(), version: 1, previousAmountKrw: 0, amountKrw: 12000, note: "은행 입금 대조" } });
+    const before = await getCourtFinancialReview(prisma, operatorId, a.id);
+    expect(before.canReconcile).toBe(true);
+    await recordCourtFinancialReview(prisma, operatorId, a.id, { action: "RECONCILE", bankChecked: true, expectedFingerprint: before.expectedFingerprint, clientRequestId: randomUUID() });
+    await recordCourtRefundAgreement(prisma, { id: operatorId }, a.id, { expectedVersion: 0, expectedReceiptVersion: 1, clientRequestId: randomUUID(), amountKrw: 3000, incidentAt: new Date(match.startsAt.getTime() + 1800000).toISOString(), note: "우천 일부 미제공에 대해 참가자와 합의", agreementConfirmed: true });
+    const after = await getCourtFinancialReview(prisma, operatorId, a.id);
+    expect(after.reconciliation?.current).toBe(false);
+    expect(after.canReconcile).toBe(false);
+    const report = await audit();
+    expect(reasonCount(report, "REFUND_OUTSTANDING").applications).toBe(1);
+    expect(report.applicationsWithRaw.retain).toBe(1);
+    const slots = await getMyCourtSlots(prisma, { id: operatorId });
+    expect(slots.items[0].actions.refundAccountPending).toBe(1);
+  });
 
   it("빈 목록과 일반 매칭을 안전하게 제외한다", async () => {
     await makeMatch({ courtSource: "EXTERNAL_RESERVED", courtSlotId: null });

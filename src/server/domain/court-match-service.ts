@@ -53,7 +53,7 @@ const applicantSelect = {
   depositClaimedAt: true,
   confirmedAt: true,
   refundCompletedAt: true,
-  refundAmountKrw: true,
+  refundAmountKrw: true, agreedRefundAmountKrw: true,
   participantCancelledAt: true,
   refundBank: true,
   refundAccountVersion: true,

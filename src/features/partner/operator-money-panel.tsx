@@ -1,5 +1,6 @@
 "use client";
 
+import { CourtRefundAgreementHistory } from "./court-refund-agreement-history";
 import { useRef, useState } from "react";
 import { CourtFinancialReviewPanel } from "./court-financial-review-panel";
 import { CourtApplicationNoticeRecord } from "./court-application-notice";
@@ -57,11 +58,13 @@ export function OperatorMoneyPanel({ application: a, refresh, endpoint = "/api/v
       </form>
       {a.receiptRecords.map((r) => <p className="mt-3 break-words text-xs leading-5 text-slate-500" key={r.id}>{formatStatusChangedAt(r.createdAt)} · {won(r.previousAmountKrw)} → {won(r.amountKrw)}<br />{r.note}</p>)}
     </details>
+    <CourtRefundAgreementHistory records={a.refundAgreements} />
+    {a.canRecordRefundAgreement ? <RefundAgreementForm key={a.refundAgreementVersion} application={a} busy={busy} mutate={mutate} /> : null}
     {a.awaitingRefund && !a.refundLocked ? <div className="mt-3 rounded-xl bg-amber-50 p-3">
       {a.refundAccount ? <><p>{a.refundAccount.bank} · {a.refundAccount.accountHolder}</p><p className="my-2 break-all font-semibold">{a.refundAccount.accountNumber}</p><Button fullWidth size="medium" disabled={busy || a.money.needsReview} onClick={() => void mutate("refund/start", { amountKrw: a.money.availableKrw, accountVersion: a.refundAccountVersion })}>환불 처리 시작 · {won(a.money.availableKrw)}</Button><p className="mt-2 text-xs leading-5">시작 후 표시되는 고정 계좌로 송금해 주세요. 시작 버튼은 돈을 보내지 않아요.</p></> : <p>참가자의 환불 계좌 입력을 기다리고 있어요.</p>}
     </div> : null}
     {a.refundAttempts.map((r) => <RefundResult key={r.id} attempt={r} busy={busy} mutate={mutate} />)}
-    <CourtFinancialReviewPanel key={JSON.stringify([a.receiptVersion, a.refundAccountVersion, a.status, a.refundAttempts.map((r) => [r.id, r.version])])} applicationId={a.id} endpoint={endpoint} />
+    <CourtFinancialReviewPanel key={JSON.stringify([a.receiptVersion, a.refundAgreementVersion, a.refundAccountVersion, a.status, a.refundAttempts.map((r) => [r.id, r.version])])} applicationId={a.id} endpoint={endpoint} />
     {error ? <p className="mt-3 text-rose-700" role="alert">{error}</p> : null}
   </div>;
 }
@@ -81,5 +84,27 @@ function RefundResult({ attempt: r, busy, mutate }: { attempt: Application["refu
       <Button type="submit" size="medium" fullWidth variant="secondary">{active ? "송금 결과 저장" : "완료 기록 확인 요청"}</Button>
     </fieldset></form> : null}
     {r.events.map((e) => <p key={e.id} className="mt-3 whitespace-pre-wrap break-words text-xs text-slate-500">{formatStatusChangedAt(e.createdAt)} · {statusLabels[e.status]}<br />{e.note}</p>)}
+  </details>;
+}
+
+function RefundAgreementForm({ application: a, busy, mutate }: { application: Application; busy: boolean; mutate: (action: string, body: Record<string, unknown>) => Promise<boolean> }) {
+  const [amount, setAmount] = useState("");
+  const [incidentAt, setIncidentAt] = useState("");
+  const [note, setNote] = useState("");
+  const [agreed, setAgreed] = useState(false);
+  const [openedAt, setOpenedAt] = useState(() => Date.now());
+  return <details className="mt-3" onToggle={(event) => { if (event.currentTarget.open) setOpenedAt(Date.now()); }}>
+    <summary className="min-h-11 cursor-pointer py-3 font-semibold text-blue-700">합의 반환 금액 기록</summary>
+    <form onSubmit={(event) => { event.preventDefault(); void mutate("refund-agreement", {
+      amountKrw: Number(amount), incidentAt: new Date(`${incidentAt}+09:00`).toISOString(), note,
+      agreementConfirmed: agreed, expectedVersion: a.refundAgreementVersion, expectedReceiptVersion: a.receiptVersion,
+    }); }}><fieldset disabled={busy || a.money.needsReview} className="space-y-3">
+      <p className="text-xs leading-5 text-slate-500">이용 중 우천·시설 문제로 직접 협의한 금액만 기록해 주세요. 기존 합의액을 포함한 누적 총액이며, 초과 입금은 제외해요. 저장만으로 송금되거나 참가가 취소되지는 않아요.</p>
+      <label className="block">문제 발생 시각 (한국 시간)<input className={field} type="datetime-local" required min={localInput(a.refundAgreementWindow.startsAt)} max={localInput(new Date(Math.min(openedAt, new Date(a.refundAgreementWindow.endsAt).getTime() - 1)).toISOString())} step="1" value={incidentAt} onChange={(e) => setIncidentAt(e.target.value)} /></label>
+      <label className="block">합의한 참가비 반환 총액<input className={field} type="number" required min={Math.max(a.agreedRefundAmountKrw, a.refundAmountKrw ?? 0) + 1} max={a.refundAgreementWindow.maxAmountKrw} step="1" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+      <label className="block">합의 사유<textarea className={field} required minLength={10} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="예: 우천으로 일부 이용하지 못해 전화로 반환 금액 합의" /><span className="mt-1 block text-xs text-slate-500">참가자에게도 보여요. 계좌번호 등 개인정보는 적지 마세요.</span></label>
+      <label className="flex min-h-11 items-start gap-2 py-2"><input type="checkbox" required checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-1" /><span>참가자와 위 금액·사유를 직접 합의했어요.</span></label>
+      <Button type="submit" size="medium" fullWidth disabled={!agreed}>합의 금액 기록{amount ? ` · ${won(Number(amount))}` : ""}</Button>
+    </fieldset></form>
   </details>;
 }

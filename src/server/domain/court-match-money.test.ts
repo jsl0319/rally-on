@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { courtMoneySummary, courtReceiptInputSchema, courtRefundResultInputSchema } from "./court-match-money";
+import { courtMoneySummary, courtReceiptInputSchema, courtRefundAgreementInputSchema, courtRefundResultInputSchema } from "./court-match-money";
 import { canAcceptCourtApplication, getConfirmationDueAt, getPaymentDueAt } from "./court-match";
 const base = { status: "ACCEPTED", confirmedAt: null, receivedAmountKrw: 12000, refundAmountKrw: null, legacyRefundPaidKrw: 0, refundAttempts: [] };
 
@@ -48,5 +48,24 @@ describe("이체와 확인 경계", () => {
     const due = getPaymentDueAt(new Date("2030-01-02T08:00:00Z"), starts);
     expect(due.toISOString()).toBe("2030-01-02T09:00:00.000Z");
     expect(getConfirmationDueAt(due).toISOString()).toBe("2030-01-02T09:30:00.000Z");
+  });
+});
+
+
+describe("합의 반환 총액", () => {
+  const confirmed = { ...base, status: "CONFIRMED", confirmedAt: new Date(), agreedRefundAmountKrw: 5000 };
+  it("기존 정책과 합의 중 큰 참가비 반환액에 초과분만 더한다", () => {
+    expect(courtMoneySummary({ ...confirmed, receivedAmountKrw: 15000 }, 12000).refundTotalKrw).toBe(8000);
+    expect(courtMoneySummary({ ...confirmed, status: "CANCELLED", refundAmountKrw: 6000, receivedAmountKrw: 15000 }, 12000).refundTotalKrw).toBe(9000);
+    expect(courtMoneySummary({ ...confirmed, status: "CANCELLED", refundAmountKrw: 12000, receivedAmountKrw: 15000 }, 12000).refundTotalKrw).toBe(15000);
+  });
+  it("기지급과 송금 중 금액을 차감하고 실제 수령액을 넘지 않는다", () => {
+    expect(courtMoneySummary({ ...confirmed, refundAttempts: [{ status: "PAID", amountKrw: 2000 }, { status: "PROCESSING", amountKrw: 1000 }] }, 12000)).toMatchObject({ outstandingKrw: 3000, availableKrw: 2000 });
+    expect(courtMoneySummary({ ...confirmed, receivedAmountKrw: 3000 }, 12000)).toMatchObject({ refundTotalKrw: 3000, needsReview: true });
+  });
+  it("명시적 합의 확인·양수 정수·시각·사유가 필요하다", () => {
+    const input = { clientRequestId: "10000000-0000-4000-8000-000000000001", expectedVersion: 0, expectedReceiptVersion: 1, amountKrw: 5000, incidentAt: new Date().toISOString(), note: "우천으로 이용 중단되어 반환 합의", agreementConfirmed: true };
+    expect(courtRefundAgreementInputSchema.safeParse(input).success).toBe(true);
+    for (const patch of [{ agreementConfirmed: false }, { amountKrw: 0 }, { amountKrw: -1 }, { amountKrw: 1.5 }, { note: "짧음" }, { incidentAt: "invalid" }]) expect(courtRefundAgreementInputSchema.safeParse({ ...input, ...patch }).success).toBe(false);
   });
 });

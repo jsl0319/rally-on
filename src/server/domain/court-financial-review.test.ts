@@ -26,5 +26,7 @@ describe("금융 검토 입력과 거래 지문", () => {
     expect(financialStateFingerprint(a)).toBe(financialStateFingerprint({ ...a, updatedAt: "2026-10-10T12:00:00+09:00", refundAttempts: a.refundAttempts.toReversed() }));
     expect(financialStateFingerprint(a)).not.toBe(financialStateFingerprint({ ...a, inquiries: [{ id: "new", version: 1, updatedAt: stamp }] }));
     expect(financialStateFingerprint(a)).not.toBe(financialStateFingerprint({ ...a, receiptVersion: 2 }));
+    expect(financialStateFingerprint(a)).not.toBe(financialStateFingerprint({ ...a, refundAgreementVersion: 1 }));
+    expect(financialStateFingerprint(a)).toBe(financialStateFingerprint({ ...a, refundAgreementVersion: 0 }));
   });
 });

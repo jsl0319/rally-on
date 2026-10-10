@@ -58,7 +58,7 @@ export function assessCourtFinancialRetention(
 
   const validAmount = (value: number) => Number.isSafeInteger(value) && value >= 0;
   const amounts = [match.fee, application.legacyRefundPaidKrw,
-    application.receivedAmountKrw ?? 0, application.refundAmountKrw ?? 0,
+    application.receivedAmountKrw ?? 0, application.refundAmountKrw ?? 0, application.agreedRefundAmountKrw ?? 0,
     ...application.refundAttempts.map((attempt) => attempt.amountKrw)];
   if (amounts.some((value) => value === null || !validAmount(value))
     || application.refundAttempts.some((attempt) => !["PAID", "FAILED", "PROCESSING", "REVIEW"].includes(attempt.status))) {

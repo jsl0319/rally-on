@@ -1,4 +1,5 @@
 "use client";
+import { CourtRefundAgreementHistory } from "@/features/partner/court-refund-agreement-history";
 import { signOut } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,7 @@ function TransactionCard({ item, refresh }: { item: MyCourtTransactions["items"]
     <h2 className="font-bold">{item.title}</h2><p className="mt-1 text-xs text-slate-500">{formatStatusChangedAt(item.startsAt)}</p>
     {item.isHost ? <p className="mt-3 text-sm">운영 거래는 내부 담당자가 인계받아 확인해요. 원래 운영자의 거래 기록과 책임은 유지돼요.</p> : null}
     {a ? <><p className="mt-4 text-sm font-semibold text-blue-700">{a.statusLabel}</p><dl className="mt-3 grid grid-cols-2 gap-2 text-sm"><dt>확인된 수령액</dt><dd className="text-right">{a.money.receivedKrw.toLocaleString("ko-KR")}원</dd><dt>남은 반환</dt><dd className="text-right font-bold">{a.money.outstandingKrw.toLocaleString("ko-KR")}원</dd></dl>
+      <CourtRefundAgreementHistory records={a.refundAgreements} />
       {a.refundLocked ? <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm">송금 확인 중이에요. 금액과 계좌는 변경할 수 없어요.</p> : a.awaitingRefund ? <form className="mt-4" onSubmit={(e) => { e.preventDefault(); void send(false); }}><fieldset disabled={busy} className="space-y-3"><p className="text-xs leading-5 text-slate-500">본인 환불 계좌는 해당 운영자 또는 인계받은 내부 담당자에게 전달돼요.</p><label className="block text-sm">은행<input className={field} required maxLength={50} autoComplete="off" value={bank} onChange={(e) => setBank(e.target.value)} /></label><label className="block text-sm">계좌번호<input className={field} required pattern="[0-9-]{5,40}" inputMode="numeric" autoComplete="off" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} /></label><label className="block text-sm">예금주<input className={field} required maxLength={50} autoComplete="off" value={accountHolder} onChange={(e) => setAccountHolder(e.target.value)} /></label><Button type="submit" size="medium" fullWidth>환불 계좌 저장</Button></fieldset></form> : null}
       {a.refundAttempts.map((r) => <p className="mt-2 text-xs text-slate-500" key={r.id}>{r.amountKrw.toLocaleString("ko-KR")}원 · {r.status === "PAID" ? "송금 완료 기록" : r.status === "FAILED" ? "미송금 확인" : "송금 여부 확인 중"}</p>)}
     </> : null}

@@ -1362,3 +1362,20 @@ Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_
 `CourtFinancialReview`는 `MatchApplication`별 추가 전용 이력이다. `applicationId`, `actorUserId`, `clientRequestId`, `action(RECONCILE/HOLD/RELEASE_HOLD)`, `requestFingerprint`, `stateFingerprint`, `scopes`, `reason`, `caseReference`, `reviewDueAt`, `releasesReviewId`, `createdAt`을 저장한다. 신청과 처리자는 삭제 제한 외래키, `(applicationId, clientRequestId)`와 `releasesReviewId`는 유일하다. DB CHECK로 동작별 필수/금지 필드를 제한한다.
 
 보존 범위는 `DEPOSITOR_NAME`, `REFUND_ACCOUNT`, `REFUND_ATTEMPTS`, `MATCH_ACCOUNT`. 해제는 같은 신청의 유효한 보존 기록 하나를 참조하도록 서버에서 검증한다. 계좌·이름·문의 원문은 스냅샷으로 복사하지 않는다. 실제 원문 삭제나 법정 보존 검토 완료 컬럼은 추가하지 않는다. 상세 기준은 [03-20](03-20-financial-reconciliation-records.md).
+
+
+## 합의 반환 기록 확장 (2026-10-10)
+
+`MatchApplication.agreedRefundAmountKrw`(기본 0)는 초과 입금을 제외한 참가비 반환 누적
+합의액, `refundAgreementVersion`(기본 0)은 변경 버전이다. `refundAmountKrw`는 기존
+취소 정책 결과로 그대로 보존한다. 실제 수령액 및 송금 시도와 별개다.
+
+`CourtRefundAgreement`는 추가 전용 이력으로 `applicationId`, `actorUserId`,
+`clientRequestId`, `version`, `previousAmountKrw`, `amountKrw`, `incidentAt`, `note`,
+`createdAt`을 저장한다. 신청/처리자 FK는 삭제 제한, `(applicationId,clientRequestId)`와
+`(applicationId,version)`은 각각 유일하다. DB CHECK로 양수 버전 및 증가 금액을 검증하고,
+서버는 경기/계정 잠금 안에서 권한·발생 당시 확정·입금 버전·수령액 상한을 확인한다.
+
+마이그레이션: `20261010120000_court_refund_agreements`. 기존 신청은 0/0으로 시작하며
+이전 금액과 신청 안내를 재작성하지 않는다. 합의액 변경은 금융 최종 대조 지문을 무효화하고,
+읽기 전용 보존 점검에도 미처리 반환으로 반영한다. 계좌나 입금자명을 이력에 복제하지 않는다.

@@ -1957,3 +1957,26 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 - 미인증 401, 권한 없음 403, 대상 없음 404, 형식 오류 422, 상태·지문·요청 충돌 409 `FINANCIAL_REVIEW_CONFLICT`. 같은 요청의 정확한 재전송은 최초 결과를 반환하되 현재 권한을 다시 확인한다.
 
 보존 기한 경과·해제는 개인정보 삭제를 실행하지 않는다. 동시성·보존 범위와 실제 파기 전 남은 조건은 [03-20](03-20-financial-reconciliation-records.md)을 따른다.
+
+
+## 직접 합의한 참가비 반환 기록 (2026-10-10)
+
+- `POST /api/v1/court-match-applications/{applicationId}/refund-agreement`: 해당 코트 매칭 운영자.
+- `POST /api/internal/court-handoff-applications/{applicationId}/refund-agreement`: 정식 배정된 인계 담당자.
+- 본인 신청에는 기록할 수 없다. 활성 계정·시설 운영자/인계 권한을 서버에서 검증한다.
+- 입력: UUID `clientRequestId`, 최신 `expectedVersion`(refundAgreementVersion),
+  `expectedReceiptVersion`, 양수 정수 `amountKrw`(참가비 반환 누적 총액),
+  offset 포함 ISO `incidentAt`, 10~500자 `note`, `agreementConfirmed: true`.
+- `incidentAt`은 예약 시작 이상·종료 미만·현재 이하이며 당시 참가가 확정되어야 한다.
+  먼저 개인 취소되었거나 경기 전체가 취소된 시점 이후 문제는 기록 불가다.
+- 실제 수령액을 먼저 확인해야 하며 합의액은 참가비·실제 수령액 이하,
+  기존 합의 및 정책 참가비 반환액보다 커야 한다. 송금 재확인 중에는 기록을 막는다.
+- 성공 `{id}`. 같은 요청의 동일 행위자·금액·발생 시각·사유는 최초 결과를 반환한다.
+  다른 내용으로 같은 UUID를 재사용하거나 오래된 버전이면 409 `MONEY_STATE_CONFLICT`.
+  미인증 401, 권한 없음 403, 신청 없음 404, 형식·합의 확인 누락 422.
+- 참가자 본인/운영자 상세·본인 거래에 `agreedRefundAmountKrw`, `refundAgreementVersion`,
+  `refundAgreements[{id,amountKrw,previousAmountKrw,incidentAt,note,createdAt}]`를 제공한다.
+  타 참가자에게 반환 이력을 공개하지 않는다. 기존 일반 공개 목록에는 포함하지 않는다.
+- 기록은 취소나 송금을 실행하지 않는다. 기존 `refund-account`, `refund/start`, `refund`
+  절차가 미처리 차액을 처리한다. 기록/알림은 같은 트랜잭션이며 `COURT_REFUND_AGREEMENT_RECORDED`
+  필수 금융 알림을 참가자에게 보낸다. 새 신청 안내는 v3, 기존 신청 스냅샷은 보존한다.

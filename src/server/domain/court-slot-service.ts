@@ -449,7 +449,7 @@ async function getOperatorActionCounts(prisma: PrismaClient, matchIds: string[])
 
   const applications = await prisma.matchApplication.findMany({
     where: { matchId: { in: matchIds } },
-    select: { matchId: true, applicantGender: true, status: true, depositClaimedAt: true, confirmedAt: true, refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, receivedAmountKrw: true, refundBank: true, refundAccountNumber: true, refundAccountHolder: true, receiptRecords: { take: 1, orderBy: { createdAt: "desc" }, select: { createdAt: true } }, legacyRefundPaidKrw: true, refundAttempts: { select: { status: true, amountKrw: true } }, match: { select: { totalCourtFeeKrw: true, status: true, startsAt: true, gameType: true, courtCompositionPolicyVersion: true, courtCompositionPassedAt: true, courtSlot: { select: { minParticipantCount: true } } } } },
+    select: { matchId: true, applicantGender: true, status: true, depositClaimedAt: true, confirmedAt: true, refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, agreedRefundAmountKrw: true, receivedAmountKrw: true, refundBank: true, refundAccountNumber: true, refundAccountHolder: true, receiptRecords: { take: 1, orderBy: { createdAt: "desc" }, select: { createdAt: true } }, legacyRefundPaidKrw: true, refundAttempts: { select: { status: true, amountKrw: true } }, match: { select: { totalCourtFeeKrw: true, status: true, startsAt: true, gameType: true, courtCompositionPolicyVersion: true, courtCompositionPassedAt: true, courtSlot: { select: { minParticipantCount: true } } } } },
   });
   const compositions = new Map<string, typeof applications>();
   for (const application of applications) {

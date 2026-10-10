@@ -15,7 +15,7 @@ export type FinancialReviewInput = z.infer<typeof financialReviewInputSchema>;
 type Stamp = Date | string;
 type Versioned = { id: string; version: number; updatedAt: Stamp };
 export type FinancialState = {
-  id: string; status: string; updatedAt: Stamp; receiptVersion: number; refundAccountVersion: number;
+  id: string; status: string; updatedAt: Stamp; receiptVersion: number; refundAccountVersion: number; refundAgreementVersion?: number;
   match: Versioned & { status: string; endsAt: Stamp };
   refundAttempts: Versioned[];
   inquiries: Versioned[];
@@ -28,5 +28,6 @@ const versions = (items: Versioned[]) => items.map((v) => [v.id, v.version, time
 export function financialStateFingerprint(a: FinancialState) {
   return financialDigest({ id: a.id, status: a.status, updatedAt: timestamp(a.updatedAt), receiptVersion: a.receiptVersion,
     refundAccountVersion: a.refundAccountVersion, match: [a.match.id, a.match.version, a.match.status, timestamp(a.match.endsAt), timestamp(a.match.updatedAt)],
-    refunds: versions(a.refundAttempts), inquiries: versions(a.inquiries) });
+    refunds: versions(a.refundAttempts), inquiries: versions(a.inquiries),
+    ...(a.refundAgreementVersion ? { refundAgreementVersion: a.refundAgreementVersion } : {}) });
 }

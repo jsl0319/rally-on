@@ -72,8 +72,8 @@ export async function auditCourtFinancialRetention(client: Client) {
       if (matches.length === 0) break;
 
       const { rows: applications } = await client.query<ApplicationRow>(`
-        SELECT a.id, a.updated_at AS "updatedAt", a.receipt_version AS "receiptVersion", a.refund_account_version AS "refundAccountVersion", a.match_id AS "matchId", a.status, a.confirmed_at AS "confirmedAt",
-          a.received_amount_krw AS "receivedAmountKrw", a.refund_amount_krw AS "refundAmountKrw",
+        SELECT a.id, a.updated_at AS "updatedAt", a.receipt_version AS "receiptVersion", a.refund_agreement_version AS "refundAgreementVersion", a.refund_account_version AS "refundAccountVersion", a.match_id AS "matchId", a.status, a.confirmed_at AS "confirmedAt",
+          a.received_amount_krw AS "receivedAmountKrw", a.refund_amount_krw AS "refundAmountKrw", a.agreed_refund_amount_krw AS "agreedRefundAmountKrw",
           a.legacy_refund_paid_krw AS "legacyRefundPaidKrw", a.deposit_claimed_at AS "depositClaimedAt",
           (a.deposit_code IS NOT NULL OR a.payment_due_at IS NOT NULL OR a.confirmation_due_at IS NOT NULL) AS "paymentInstructionsIssued",
           (a.depositor_name IS NOT NULL OR a.refund_account_number IS NOT NULL OR a.refund_account_holder IS NOT NULL) AS "hasRaw",
