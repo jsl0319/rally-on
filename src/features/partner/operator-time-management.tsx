@@ -14,6 +14,7 @@ import { courtCompositionIssues, minimumForCourtGame } from "@/matches/court-com
 import { courtServiceScopeSchema, type CourtServiceScope } from "@/matches/court-service-scope";
 import { CourtServiceScopeContent, CourtServiceScopeFields } from "./court-service-scope";
 import { formatCourtContactPhone, type CourtContact } from "@/matches/court-contact";
+import type { CourtMoneyActions } from "@/server/domain/court-money-actions";
 import { OperatorContact, type ContactCourt } from "./operator-contact";
 
 type Application = {
@@ -55,13 +56,22 @@ type Slot = {
   serviceScope: CourtServiceScope | null;
   court: { id: string; name: string; address: string; courtNumber: string; region: { code: string; name: string } };
   session: { matchId: string; status: string } | null;
-  actions: { pendingApproval: number; depositToConfirm: number; refundToComplete: number; confirmed: number; compositionNeedsAction: boolean };
+  actions: CourtMoneyActions & { pendingApproval: number; confirmed: number; compositionNeedsAction: boolean };
   version: number;
 };
 
-/** 운영자가 지금 눌러야 할 것이 있는 건수. */
+const actionLabels = {
+  pendingApproval: "승인 대기", depositToConfirm: "입금 확인", depositToReview: "입금 예외 확인",
+  refundAccountPending: "환불 계좌 대기", refundToComplete: "환불 송금 대기",
+  refundProcessing: "환불 처리 중", refundToReview: "송금 재확인",
+} as const;
+const actionKeys = Object.keys(actionLabels) as (keyof typeof actionLabels)[];
 function pendingActionCount(slot: Slot) {
-  return slot.actions.pendingApproval + slot.actions.depositToConfirm + slot.actions.refundToComplete + Number(slot.actions.compositionNeedsAction);
+  return actionKeys.reduce((sum, key) => sum + slot.actions[key], 0) + Number(slot.actions.compositionNeedsAction);
+}
+function describeActions(actions: Slot["actions"]) {
+  return [...actionKeys.filter((key) => actions[key] > 0).map((key) => `${actionLabels[key]} ${actions[key]}건`),
+    ...(actions.compositionNeedsAction ? ["경기 구성 · 운영자 조치 필요"] : [])].join(" · ");
 }
 
 type SlotResponse = {
@@ -177,9 +187,10 @@ export function OperatorDashboard() {
   const openToday = slotData.items.filter((slot) => slot.session && dateTimeParts(slot.startsAt).date === today).length;
   const openThisWeek = slotData.items.filter((slot) => slot.session && new Date(slot.startsAt).getTime() < loadedAt + 7 * 24 * 60 * 60 * 1000).length;
   const draftCount = slotData.items.filter((slot) => slot.status === "DRAFT").length;
-  const depositToConfirm = slotData.items.reduce((sum, slot) => sum + slot.actions.depositToConfirm, 0);
-  const pendingApproval = slotData.items.reduce((sum, slot) => sum + slot.actions.pendingApproval, 0);
-  const refundToComplete = slotData.items.reduce((sum, slot) => sum + slot.actions.refundToComplete, 0);
+  const actionSummary = actionKeys.map((key) => {
+    const count = slotData.items.reduce((sum, slot) => sum + slot.actions[key], 0);
+    return count ? `${actionLabels[key]} ${count}건` : null;
+  });
   const compositionNeedsAction = slotData.items.filter((slot) => slot.actions.compositionNeedsAction).length;
   const needsAction = slotData.items.filter((slot) => slot.session && pendingActionCount(slot) > 0);
   const attentionCount = slotData.items.filter((slot) => slot.status === "BLOCKED" || slot.status === "CANCELLED").length;
@@ -189,9 +200,7 @@ export function OperatorDashboard() {
     {needsAction.length ? <section className="mt-6 rounded-3xl border border-[var(--tm-action-primary)] bg-white p-5">
       <p className="text-sm font-semibold text-[var(--tm-action-primary)]">지금 처리할 일</p>
       <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{[
-        depositToConfirm ? `입금 확인 ${depositToConfirm}건` : null,
-        pendingApproval ? `승인 대기 ${pendingApproval}건` : null,
-        refundToComplete ? `환불 ${refundToComplete}건` : null,
+        ...actionSummary,
         compositionNeedsAction ? `경기 구성 확인 ${compositionNeedsAction}건` : null,
     ].filter(Boolean).join(" · ")}</p>
       <div className="mt-4 grid gap-2">{needsAction.slice(0, 3).map((slot) => <Button as={Link} fullWidth href={`/partner/court-matches/${encodeURIComponent(slot.session?.matchId ?? "")}`} key={slot.id} size="medium" variant="secondary">{formatDate(slot.startsAt)} {formatTime(slot.startsAt)} · {pendingActionCount(slot)}건</Button>)}</div>
@@ -243,12 +252,7 @@ export function OperatorSlotList() {
 
 function SlotCard({ application, disabled, slot, onPublish, onBlock, onIncident }: { application: Application; disabled: boolean; slot: Slot; onPublish: () => void; onBlock: () => void; onIncident: () => void }) {
   const isCancelledSession = slot.session?.status === "CANCELLED";
-  return <section className="rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)]"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 flex-1 basis-48"><p className="break-words text-sm text-[var(--tm-text-secondary)]">{slot.court.name} · {slot.court.courtNumber}</p><h2 className="mt-1 flex flex-wrap gap-x-2 text-lg font-bold tabular-nums"><span>{formatDate(slot.startsAt)}</span><span className="whitespace-nowrap">{formatTime(slot.startsAt)}–{formatTime(slot.endsAt)}</span></h2></div><StatusPill slot={slot} /></div><div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-[var(--tm-bg-subtle-muted)] p-3 text-sm"><p><span className="block text-xs text-[var(--tm-text-secondary)]">게스트 참가비</span><span className="mt-1 block font-semibold">{slot.guestFeeKrw.toLocaleString("ko-KR")}원</span></p><p><span className="block text-xs text-[var(--tm-text-secondary)]">모집 정원</span><span className="mt-1 block font-semibold">{slot.genderCapacity ? `남 ${slot.genderCapacity.male} · 여 ${slot.genderCapacity.female}명` : `${slot.maxParticipantCount}명`}</span></p><p><span className="block text-xs text-[var(--tm-text-secondary)]">최소 인원</span><span className="mt-1 block font-semibold">{slot.minParticipantCount}명</span></p><p><span className="block text-xs text-[var(--tm-text-secondary)]">{slot.gameType ? "경기 유형" : "승인"}</span><span className="mt-1 block font-semibold">{slot.gameType ? slot.gameType.label : slot.approvalMode === "AUTO" ? "자동" : "직접"}</span></p></div><details className="mt-4 text-sm"><summary className="min-h-11 cursor-pointer py-3 font-semibold">참가비 포함 항목</summary><CourtServiceScopeContent scope={slot.serviceScope} /></details>{slot.usageNote ? <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{slot.usageNote}</p> : null}<p className="mt-3 text-xs text-[var(--tm-text-secondary)]">상태 갱신 {formatDateTime(slot.statusChangedAt)}</p>{slot.status === "DRAFT" ? <div className="mt-5 grid grid-cols-2 gap-3"><Button as={Link} fullWidth href={`/partner/slots/${encodeURIComponent(slot.id)}/edit`} size="medium" variant="secondary">초안 수정</Button><Button disabled={!application.canPublish || disabled} fullWidth onClick={onPublish} size="medium">{application.canPublish ? "공개하기" : "심사 후 공개"}</Button></div> : null}{slot.session && pendingActionCount(slot) > 0 ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-highlight)] px-4 py-3 text-sm font-semibold leading-6 text-[var(--tm-text-primary)]">{[
-      slot.actions.depositToConfirm ? `입금 확인 ${slot.actions.depositToConfirm}건` : null,
-      slot.actions.pendingApproval ? `승인 대기 ${slot.actions.pendingApproval}건` : null,
-      slot.actions.refundToComplete ? `환불 ${slot.actions.refundToComplete}건` : null,
-      slot.actions.compositionNeedsAction ? "경기 구성 · 운영자 조치 필요" : null,
-    ].filter(Boolean).join(" · ")}</p> : null}{slot.status === "AVAILABLE" ? <div className="mt-5 grid gap-3">{slot.session ? <Button as={Link} fullWidth href={`/partner/court-matches/${encodeURIComponent(slot.session.matchId)}`} size="medium">참가자 관리{pendingActionCount(slot) > 0 ? ` (${pendingActionCount(slot)})` : ""}</Button> : null}{slot.session && !isCancelledSession ? null : <Button disabled={disabled} fullWidth onClick={onBlock} size="medium" variant="secondary">공개 중지 · 새 초안으로 정정</Button>}</div> : null}{slot.session && !isCancelledSession ? <div className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] p-4"><p className="text-sm font-semibold text-[var(--tm-action-primary)]">참가자를 모집 중인 코트 매칭이에요</p><p className="mt-1 text-sm leading-6 text-[var(--tm-text-secondary)]">시간·비용·코트를 바꿀 수 없어요. 실제로 코트를 쓸 수 없게 되면 운영상 문제를 접수해 주세요. 코트 매칭이 취소되고 참가자에게 안내돼요.</p><Button className="mt-3" fullWidth onClick={onIncident} size="medium" variant="secondary">운영상 문제 접수</Button></div> : null}{isCancelledSession ? <div className="mt-5 rounded-2xl bg-[var(--tm-bg-highlight)] p-4"><p className="text-sm font-semibold text-[var(--tm-text-primary)]">세션 모집자가 취소했어요</p><p className="mt-1 text-sm leading-6 text-[var(--tm-text-secondary)]">자동으로 다시 열지 않아요. 실제 공급 가능 여부를 확인한 뒤 이 시간을 중지하면 새 초안을 등록할 수 있어요.</p><Button className="mt-3" disabled={disabled} fullWidth onClick={onBlock} size="medium" variant="secondary">확인 후 이 시간 중지</Button></div> : null}{slot.status === "BLOCKED" ? <p className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-text-secondary)]">이 시간은 공개 중지 상태예요. 같은 정보를 정정하려면 새 초안을 등록해 주세요.</p> : null}{slot.status === "CANCELLED" ? <p className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]">운영상 공급 철회로 연결 세션이 취소됐어요. 이 기록은 다시 공개하지 않아요.</p> : null}</section>;
+  return <section className="rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)]"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 flex-1 basis-48"><p className="break-words text-sm text-[var(--tm-text-secondary)]">{slot.court.name} · {slot.court.courtNumber}</p><h2 className="mt-1 flex flex-wrap gap-x-2 text-lg font-bold tabular-nums"><span>{formatDate(slot.startsAt)}</span><span className="whitespace-nowrap">{formatTime(slot.startsAt)}–{formatTime(slot.endsAt)}</span></h2></div><StatusPill slot={slot} /></div><div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-[var(--tm-bg-subtle-muted)] p-3 text-sm"><p><span className="block text-xs text-[var(--tm-text-secondary)]">게스트 참가비</span><span className="mt-1 block font-semibold">{slot.guestFeeKrw.toLocaleString("ko-KR")}원</span></p><p><span className="block text-xs text-[var(--tm-text-secondary)]">모집 정원</span><span className="mt-1 block font-semibold">{slot.genderCapacity ? `남 ${slot.genderCapacity.male} · 여 ${slot.genderCapacity.female}명` : `${slot.maxParticipantCount}명`}</span></p><p><span className="block text-xs text-[var(--tm-text-secondary)]">최소 인원</span><span className="mt-1 block font-semibold">{slot.minParticipantCount}명</span></p><p><span className="block text-xs text-[var(--tm-text-secondary)]">{slot.gameType ? "경기 유형" : "승인"}</span><span className="mt-1 block font-semibold">{slot.gameType ? slot.gameType.label : slot.approvalMode === "AUTO" ? "자동" : "직접"}</span></p></div><details className="mt-4 text-sm"><summary className="min-h-11 cursor-pointer py-3 font-semibold">참가비 포함 항목</summary><CourtServiceScopeContent scope={slot.serviceScope} /></details>{slot.usageNote ? <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{slot.usageNote}</p> : null}<p className="mt-3 text-xs text-[var(--tm-text-secondary)]">상태 갱신 {formatDateTime(slot.statusChangedAt)}</p>{slot.status === "DRAFT" ? <div className="mt-5 grid grid-cols-2 gap-3"><Button as={Link} fullWidth href={`/partner/slots/${encodeURIComponent(slot.id)}/edit`} size="medium" variant="secondary">초안 수정</Button><Button disabled={!application.canPublish || disabled} fullWidth onClick={onPublish} size="medium">{application.canPublish ? "공개하기" : "심사 후 공개"}</Button></div> : null}{slot.session && pendingActionCount(slot) > 0 ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-highlight)] px-4 py-3 text-sm font-semibold leading-6 text-[var(--tm-text-primary)]">{describeActions(slot.actions)}</p> : null}{slot.session && slot.status !== "AVAILABLE" ? <Button as={Link} className="mt-4" fullWidth href={`/partner/court-matches/${encodeURIComponent(slot.session.matchId)}`} size="medium" variant="secondary">입금·환불 관리</Button> : null}{slot.status === "AVAILABLE" ? <div className="mt-5 grid gap-3">{slot.session ? <Button as={Link} fullWidth href={`/partner/court-matches/${encodeURIComponent(slot.session.matchId)}`} size="medium">{isCancelledSession ? "입금·환불 관리" : "참가자 관리"}{!isCancelledSession && pendingActionCount(slot) > 0 ? ` (${pendingActionCount(slot)})` : ""}</Button> : null}{slot.session && !isCancelledSession ? null : <Button disabled={disabled} fullWidth onClick={onBlock} size="medium" variant="secondary">공개 중지 · 새 초안으로 정정</Button>}</div> : null}{slot.session && !isCancelledSession ? <div className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] p-4"><p className="text-sm font-semibold text-[var(--tm-action-primary)]">참가자를 모집 중인 코트 매칭이에요</p><p className="mt-1 text-sm leading-6 text-[var(--tm-text-secondary)]">시간·비용·코트를 바꿀 수 없어요. 실제로 코트를 쓸 수 없게 되면 운영상 문제를 접수해 주세요. 코트 매칭이 취소되고 참가자에게 안내돼요.</p><Button className="mt-3" fullWidth onClick={onIncident} size="medium" variant="secondary">운영상 문제 접수</Button></div> : null}{isCancelledSession ? <div className="mt-5 rounded-2xl bg-[var(--tm-bg-highlight)] p-4"><p className="text-sm font-semibold text-[var(--tm-text-primary)]">세션 모집자가 취소했어요</p><p className="mt-1 text-sm leading-6 text-[var(--tm-text-secondary)]">자동으로 다시 열지 않아요. 실제 공급 가능 여부를 확인한 뒤 이 시간을 중지하면 새 초안을 등록할 수 있어요.</p><Button className="mt-3" disabled={disabled} fullWidth onClick={onBlock} size="medium" variant="secondary">확인 후 이 시간 중지</Button></div> : null}{slot.status === "BLOCKED" ? <p className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-text-secondary)]">이 시간은 공개 중지 상태예요. 같은 정보를 정정하려면 새 초안을 등록해 주세요.</p> : null}{slot.status === "CANCELLED" ? <p className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]">운영상 공급 철회로 연결 세션이 취소됐어요. 이 기록은 다시 공개하지 않아요.</p> : null}</section>;
 }
 
 function SupplyIncidentSheet({ slot, onClose, onDone }: { slot: Slot; onClose: () => void; onDone: () => Promise<void> }) {

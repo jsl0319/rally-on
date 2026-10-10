@@ -252,7 +252,7 @@ describe("Court Partner time supply authorization and state transitions", () => 
     });
   });
 
-  it("counts what the operator has to act on, and only refunds it can actually send", async () => {
+  it("counts missing refund accounts separately from refunds ready to send", async () => {
     const linkedSlot = {
       ...ownedSlot("PUBLISH_APPROVED"),
       visibility: "PUBLIC",
@@ -269,7 +269,13 @@ describe("Court Partner time supply authorization and state transitions", () => 
       // 환불 대기지만 계좌를 아직 안 넣었으면 운영자가 보낼 수 없다.
       { matchId: "match-id", status: "CANCELLED", depositClaimedAt: new Date(), confirmedAt: new Date(), refundRequestedAt: null, refundCompletedAt: null },
       { matchId: "match-id", status: "CANCELLED", depositClaimedAt: new Date(), confirmedAt: new Date(), refundRequestedAt: new Date(), refundCompletedAt: null },
-    ].map((a) => ({ ...a, receivedAmountKrw: null, refundAmountKrw: null, legacyRefundPaidKrw: 0, refundAttempts: [], match: { totalCourtFeeKrw: 36000 } })));
+    ].map((a) => ({ ...a, receivedAmountKrw: null, refundAmountKrw: null, legacyRefundPaidKrw: 0, refundAttempts: [],
+      receiptRecords: a.confirmedAt ? [{ createdAt: new Date() }] : [],
+      refundBank: a.refundRequestedAt ? "검증 은행" : null,
+      refundAccountNumber: a.refundRequestedAt ? "123456789" : null,
+      refundAccountHolder: a.refundRequestedAt ? "검증 참가자" : null,
+      match: { totalCourtFeeKrw: 36000 },
+    })));
     const prisma = {
       courtSlot: { findMany },
       matchApplication: { findMany: applications },
@@ -278,7 +284,7 @@ describe("Court Partner time supply authorization and state transitions", () => 
 
     const result = await getMyCourtSlots(prisma, viewer);
 
-    expect(result.items[0].actions).toEqual({ pendingApproval: 1, depositToConfirm: 1, refundToComplete: 1, confirmed: 1, compositionNeedsAction: false });
+    expect(result.items[0].actions).toEqual({ pendingApproval: 1, depositToConfirm: 1, depositToReview: 0, refundAccountPending: 1, refundToComplete: 1, refundProcessing: 0, refundToReview: 0, confirmed: 1, compositionNeedsAction: false });
   });
 
   it("keeps a blocked slot read-only even though a session is still linked", async () => {

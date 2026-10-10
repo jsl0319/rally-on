@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildCourtCancellationPreview, courtCancellationInputSchema } from "./court-cancellation-preview";
 
 const match = { id: "match", startsAt: new Date("2030-09-20T10:00:00+09:00"), totalCourtFeeKrw: 12001 };
-const application = { id: "application", status: "CONFIRMED", confirmedAt: new Date("2030-09-17T10:00:00+09:00"), depositClaimedAt: null, receivedAmountKrw: 15001, refundAmountKrw: null, legacyRefundPaidKrw: 1000, refundAttempts: [] };
+const application = { refundAccountVersion: 0, id: "application", status: "CONFIRMED", confirmedAt: new Date("2030-09-17T10:00:00+09:00"), depositClaimedAt: null, receivedAmountKrw: 15001, refundAmountKrw: null, legacyRefundPaidKrw: 1000, refundAttempts: [] };
 const preview = (time: string, changes = {}) => buildCourtCancellationPreview({ ...application, ...changes }, match, new Date(time));
 
 describe("취소 금액 확인값", () => {
@@ -22,7 +22,7 @@ describe("취소 금액 확인값", () => {
     expect(preview("2030-09-20T00:00:00+09:00", { status: "ACCEPTED", confirmedAt: null })).toMatchObject({ refundAmountKrw: 14001 });
   });
   it.each([
-    { id: "other-application" }, { status: "ACCEPTED", confirmedAt: null },
+    { refundAccountVersion: 1 }, { id: "other-application" }, { status: "ACCEPTED", confirmedAt: null },
     { receivedAmountKrw: 16001 }, { legacyRefundPaidKrw: 2000 },
     { refundAttempts: [{ status: "PROCESSING", amountKrw: 1000 }] },
   ])("신청·입금·지급·송금 처리 상태 변경을 감지한다: %j", (changes) => {

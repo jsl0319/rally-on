@@ -39,7 +39,8 @@ test("혼복 구성 부족을 목록과 상세에 알리고 운영자 취소 뒤
     }
     const preview = await leaver.context.request.get(`${E2E_BASE_URL}/api/v1/court-match-applications/${leaverId}/cancel`);
     expect(preview.ok()).toBeTruthy();
-    const cancel = await leaver.context.request.post(`${E2E_BASE_URL}/api/v1/court-match-applications/${leaverId}/cancel`, { data: { cancellationFingerprint: (await preview.json()).fingerprint } });
+    const cancellationPreview = await preview.json();
+    const cancel = await leaver.context.request.post(`${E2E_BASE_URL}/api/v1/court-match-applications/${leaverId}/cancel`, { data: { cancellationFingerprint: cancellationPreview.fingerprint, ...(cancellationPreview.refundAmountKrw > 0 ? { refundAccount: { bank: "검증 은행", accountNumber: "123456789", accountHolder: "검증 참가자" } } : {}) } });
     expect(cancel.ok(), await cancel.text()).toBeTruthy();
     // Two hours from now can fall on tomorrow in KST. Preserve the actual prior cancellation, regardless of its date tier.
     const priorRefund = (await prisma.matchApplication.findUniqueOrThrow({ where: { id: leaverId } })).refundAmountKrw;
@@ -62,6 +63,12 @@ test("혼복 구성 부족을 목록과 상세에 알리고 운영자 취소 뒤
     ]);
     expect(cancelled.ok(), await cancelled.text()).toBeTruthy();
     await expect(operator.page.getByText("경기 구성 부족으로 코트 매칭이 취소됐어요.", { exact: true })).toBeVisible();
+    await operator.page.goto("/partner/slots");
+    await expect(operator.page.getByText(/환불 계좌 대기 3건/).first()).toBeVisible();
+    const refundManagement = operator.page.getByRole("link", { name: "입금·환불 관리", exact: true }).first();
+    await expect(refundManagement).toBeVisible();
+    await refundManagement.click();
+    await expect(operator.page).toHaveURL(new RegExp(`/partner/court-matches/${fixture.partnerMatchId}$`));
     await member.page.reload();
     await expect(member.page.getByText("경기 구성 부족으로 코트 매칭이 취소됐어요.", { exact: true })).toBeVisible();
     await expect(member.page.getByText(/36,000원/).first()).toBeVisible();
@@ -70,6 +77,9 @@ test("혼복 구성 부족을 목록과 상세에 알리고 운영자 취소 뒤
     await member.page.getByLabel("예금주", { exact: true }).fill("E2E참가자");
     await member.page.getByRole("button", { name: "환불 계좌 저장", exact: true }).click();
     await expect(member.page.getByText("환불 계좌를 저장했어요.", { exact: true })).toBeVisible();
+    await operator.page.goto("/partner/slots");
+    await expect(operator.page.getByText(/환불 계좌 대기 2건/).first()).toBeVisible();
+    await expect(operator.page.getByText(/환불 송금 대기/).first()).toBeVisible();
     await member.page.screenshot({ path: "/tmp/rally-r05-participant-mobile.png", fullPage: true });
     expect(await prisma.courtMatchCompositionCancellation.count()).toBe(1);
     expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: leaverId } })).refundAmountKrw).toBe(priorRefund);

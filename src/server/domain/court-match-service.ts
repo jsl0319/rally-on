@@ -56,6 +56,7 @@ const applicantSelect = {
   refundAmountKrw: true,
   participantCancelledAt: true,
   refundBank: true,
+  refundAccountVersion: true,
   legacyRefundPaidKrw: true,
   refundAttempts: { select: { amountKrw: true, status: true } },
 } satisfies Prisma.MatchApplicationSelect;
@@ -490,7 +491,9 @@ export async function cancelCourtMatchApplication(prisma: PrismaClient, viewer: 
     const now = new Date();
     await assertActiveTransactionUser(tx, viewer.id);
     let application = await readCancellationApplication(tx, viewer, applicationId);
-    if (!courtCancellationInputSchema.safeParse(input).success) throw new DomainError("CANCELLATION_PREVIEW_REQUIRED", 409, "최신 취소 금액을 다시 확인해 주세요.");
+    const parsed = courtCancellationInputSchema.safeParse(input);
+    if (!parsed.success) throw new DomainError("CANCELLATION_PREVIEW_REQUIRED", 409, "최신 취소 금액을 다시 확인해 주세요.");
+    input = parsed.data;
     // 성공 응답을 놓친 재시도에서도 취소·알림·채팅 퇴장을 반복하지 않는다.
     if (application.participantCancelledAt && (application.status === "CANCELLED" || application.status === "WITHDRAWN")) {
       return { value: { id: application.id, status: application.status, refundAmountKrw: courtMoneySummary(application, application.match.totalCourtFeeKrw ?? 0).outstandingKrw } };
@@ -503,6 +506,16 @@ export async function cancelCourtMatchApplication(prisma: PrismaClient, viewer: 
     const preview = buildCourtCancellationPreview(application, application.match, now);
     if (preview.fingerprint !== input.cancellationFingerprint || now >= new Date(preview.validUntil)) {
       return { error: new DomainError("CANCELLATION_PREVIEW_CHANGED", 409, "신청 상태나 환불 금액이 바뀌었어요. 최신 내용을 확인한 뒤 다시 취소해 주세요.") };
+    }
+    if (preview.refundAmountKrw > 0 && !preview.refundAccountLocked) {
+      const account = input.refundAccount;
+      if (!account) return { error: new DomainError("REFUND_ACCOUNT_REQUIRED", 422, "환불받을 은행·계좌번호·예금주를 입력해 주세요.") };
+      await tx.matchApplication.update({ where: { id: applicationId }, data: {
+        refundBank: account.bank, refundAccountNumber: account.accountNumber, refundAccountHolder: account.accountHolder,
+        refundAccountVersion: { increment: 1 }, refundRequestedAt: now,
+      } });
+    } else if (preview.refundAccountLocked && input.refundAccount) {
+      return { error: new DomainError("REFUND_ACCOUNT_LOCKED", 409, "송금 처리 중에는 환불 계좌를 바꿀 수 없어요.") };
     }
     return { value: await cancelCourtApplicationLocked(tx, viewer, applicationId, now) };
   });

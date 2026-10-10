@@ -212,6 +212,10 @@ test("모바일 최초 코트 설정부터 직접 승인·입금 확인·채팅�
     await test.step("취소 예상액 확인·환불 계좌·송금 기록·완료 확인", async () => {
       await member.page.getByRole("button", { name: "참가 취소", exact: true }).click();
       await expect(member.page.getByText("15,000원", { exact: false }).first()).toBeVisible();
+      const cancellationForm = member.page.getByRole("group", { name: "참가 취소 확인" });
+      await cancellationForm.getByLabel("은행", { exact: true }).fill("검증 은행");
+      await cancellationForm.getByLabel("계좌번호", { exact: true }).fill("123456789");
+      await cancellationForm.getByLabel("예금주", { exact: true }).fill("검증 참가자");
       await saveAction(member.page, "참가 취소하기", "/cancel");
       await expect(member.page.getByText("참가를 취소했어요", { exact: false })).toBeVisible();
       await member.page.setViewportSize({ width: 320, height: 480 });

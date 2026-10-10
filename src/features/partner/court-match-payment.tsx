@@ -55,7 +55,10 @@ export function CourtMatchPayment({ participation, onRefresh }: { participation:
     if (busy || !cancelPreview) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      const response = await fetch(`/api/v1/court-match-applications/${application.id}/cancel`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cancellationFingerprint: cancelPreview.fingerprint }) });
+      const response = await fetch(`/api/v1/court-match-applications/${application.id}/cancel`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        cancellationFingerprint: cancelPreview.fingerprint,
+        ...(cancelPreview.refundAmountKrw > 0 && !cancelPreview.refundAccountLocked ? { refundAccount: { bank, accountNumber, accountHolder } } : {}),
+      }) });
       const body = await response.json();
       if (!response.ok && body?.error?.code === "CANCELLATION_PREVIEW_CHANGED") {
         setCancelChanged(true);
@@ -66,7 +69,7 @@ export function CourtMatchPayment({ participation, onRefresh }: { participation:
       if (!response.ok) throw new Error(apiMessage(body, "참가를 취소하지 못했어요."));
       setCancelOpen(false); setCancelPreview(null);
       setNotice(body.refundAmountKrw > 0
-        ? `참가를 취소했어요. 환불 ${Number(body.refundAmountKrw).toLocaleString("ko-KR")}원은 아래에 계좌를 입력하면 운영자가 보내요.`
+        ? `참가를 취소했어요. 환불 ${Number(body.refundAmountKrw).toLocaleString("ko-KR")}원은 등록한 계좌로 운영자가 처리해요.`
         : "참가를 취소했어요.");
       await onRefresh().catch(() => setError("취소는 완료됐지만 화면을 갱신하지 못했어요. 상태를 새로고침해 주세요."));
     } catch (caught) { setError(caught instanceof Error ? caught.message : "참가를 취소하지 못했어요."); } finally { setBusy(false); }
@@ -94,29 +97,36 @@ export function CourtMatchPayment({ participation, onRefresh }: { participation:
     {application.status === "ACCEPTED" && !canTransfer ? <p className="mt-3 text-sm leading-6 text-slate-600">추가 입금하지 말고 운영자의 참가 확정을 기다려 주세요. 잘못 보낸 금액은 입금·환불 문의로 알려 주세요.</p> : null}
     {application.confirmationDueAt && application.status === "ACCEPTED" ? <p className="mt-3 text-xs text-slate-500">운영자 확인 기한 · {formatStatusChangedAt(application.confirmationDueAt)}. 이체 기한이 지나면 추가 입금하지 말고 확인을 기다려 주세요.</p> : null}
     {application.status === "CONFIRMED" ? <p className="mt-3 text-sm leading-6 text-slate-600">운영자가 입금을 확인했어요. 일정과 현장 안내를 확인해 주세요.</p> : null}
-    {application.awaitingRefund && !application.refundLocked ? <form className="mt-4" onSubmit={(e) => { e.preventDefault(); void save("refund-account"); }}><p className="mb-4 text-sm leading-6 text-slate-600">환불 예정 금액은 <strong>{application.money.outstandingKrw.toLocaleString("ko-KR")}원</strong>이에요. 환불받을 계좌를 입력해 주세요. 운영자 또는 인계받은 내부 담당자에게 전달돼요.</p><fieldset disabled={busy} className="space-y-4"><label className="block text-sm font-semibold">은행<input className={inputClass} required maxLength={50} autoComplete="off" value={bank} onChange={(e) => setBank(e.target.value)} /></label><label className="block text-sm font-semibold">계좌번호<input className={inputClass} required pattern="[0-9-]{5,40}" inputMode="numeric" maxLength={40} autoComplete="off" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} /></label><label className="block text-sm font-semibold">예금주<input className={inputClass} required maxLength={50} autoComplete="off" value={accountHolder} onChange={(e) => setAccountHolder(e.target.value)} /></label><Button fullWidth type="submit" disabled={busy}>{busy ? "저장 중…" : "환불 계좌 저장"}</Button></fieldset></form> : null}
+    {application.awaitingRefund && !application.refundLocked ? <form className="mt-4" onSubmit={(e) => { e.preventDefault(); void save("refund-account"); }}><p className="mb-4 text-sm leading-6 text-slate-600">환불 예정 금액은 <strong>{application.money.outstandingKrw.toLocaleString("ko-KR")}원</strong>이에요. 환불받을 계좌를 입력해 주세요. 운영자 또는 인계받은 내부 담당자에게 전달돼요.</p><fieldset disabled={busy} className="space-y-4"><label className="block text-sm font-semibold">은행<input className={inputClass} required maxLength={50} autoComplete="off" value={bank} onChange={(e) => setBank(e.target.value)} /></label><label className="block text-sm font-semibold">계좌번호<input className={inputClass} required pattern="(?=.*[0-9])[0-9\-]{5,40}" inputMode="numeric" maxLength={40} autoComplete="off" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} /></label><label className="block text-sm font-semibold">예금주<input className={inputClass} required maxLength={50} autoComplete="off" value={accountHolder} onChange={(e) => setAccountHolder(e.target.value)} /></label><Button fullWidth type="submit" disabled={busy}>{busy ? "저장 중…" : "환불 계좌 저장"}</Button></fieldset></form> : null}
     {application.refundLocked ? <p className="mt-3 rounded-xl bg-amber-50 p-4 text-sm leading-6">운영자가 환불을 처리하고 있어요. 송금 여부가 확인될 때까지 금액과 계좌를 변경할 수 없어요.</p> : null}
     {application.refundAttempts.map((r) => <p key={r.id} className="mt-2 text-sm text-slate-600">{r.amountKrw.toLocaleString("ko-KR")}원 · {r.status === "PAID" ? "송금 완료 기록" : r.status === "FAILED" ? "미송금 확인 · 재처리 대기" : r.status === "REVIEW" ? "송금 여부 확인 중" : "송금 처리 중"}</p>)}
     {application.refundCompletedAt && !application.awaitingRefund ? <p className="mt-3 text-sm leading-6 text-slate-600">운영자가 {formatStatusChangedAt(application.refundCompletedAt)}에 환불 완료로 표시했어요.<br />실제 입금 여부는 통장에서 확인해 주세요.</p> : null}
     {application.status === "EXPIRED_UNPAID" ? <p className="mt-3 text-sm leading-6 text-slate-600">입금 확인 기한이 지나 자리가 반환됐어요. 이미 이체했다면 문의해 주세요.</p> : null}
     {participation.cancellation ? <div className="mt-5 rounded-2xl border border-slate-100 p-4">
-      {cancelOpen ? <div role="group" aria-label="참가 취소 확인">
+      {cancelOpen ? <form role="group" aria-label="참가 취소 확인" onSubmit={(event) => { event.preventDefault(); void cancel(); }}>
         <p className="text-sm font-semibold">참가를 취소할까요?</p>
         {participation.composition.phase === "ACTION_REQUIRED" ? <p className="mt-2 rounded-xl bg-amber-50 p-3 text-sm leading-6">경기 구성 문제는 운영자에게 확인해 주세요. 아래 버튼은 본인 사유의 취소예요. 운영자가 제공 불가로 취소하는 경우에는 실제 입금액을 전액 반환해요.</p> : null}
         {cancelChanged ? <p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm leading-6 text-amber-900">신청 상태나 환불 금액이 바뀌었어요. 아직 취소되지 않았어요. 최신 내용을 확인한 뒤 다시 취소해 주세요.</p> : null}
         {cancelPreview ? <p className="mt-2 text-sm leading-6 text-slate-600">
           {cancelPreview.refundAmountKrw > 0
-            ? <>환불 예정 금액은 <strong className="font-semibold">{cancelPreview.refundAmountKrw.toLocaleString("ko-KR")}원</strong>이에요. 취소한 뒤 환불받을 계좌를 입력하면 운영자가 보내요.</>
+            ? <>환불 예정 금액은 <strong className="font-semibold">{cancelPreview.refundAmountKrw.toLocaleString("ko-KR")}원</strong>이에요. {cancelPreview.refundAccountLocked ? "진행 중인 송금의 계좌는 변경할 수 없어요." : "환불받을 계좌를 확인하고 취소해 주세요."}</>
             : cancelPreview.applicationStatus !== "CONFIRMED"
               ? "아직 참가가 확정되지 않았어요. 실제 입금이 확인되면 자리 복구 없이 전액 반환해요."
               : "지금 취소하면 돌려받을 금액이 없어요."}
         </p> : <p role="status" className="mt-2 text-sm text-slate-500">{busy ? "최신 취소 금액을 확인하고 있어요…" : "취소 금액을 다시 확인해 주세요."}</p>}
+        {cancelPreview && cancelPreview.refundAmountKrw > 0 && !cancelPreview.refundAccountLocked ? <fieldset disabled={busy} className="mt-4 space-y-3">
+          <legend className="text-sm font-semibold">환불 계좌 (필수)</legend>
+          <label className="block text-sm font-semibold">은행<input className={inputClass} required maxLength={50} autoComplete="off" value={bank} onChange={(event) => setBank(event.target.value)} /></label>
+          <label className="block text-sm font-semibold">계좌번호<input className={inputClass} required pattern="(?=.*[0-9])[0-9\-]{5,40}" inputMode="numeric" maxLength={40} autoComplete="off" value={accountNumber} onChange={(event) => setAccountNumber(event.target.value)} /></label>
+          <label className="block text-sm font-semibold">예금주<input className={inputClass} required maxLength={50} autoComplete="off" value={accountHolder} onChange={(event) => setAccountHolder(event.target.value)} /></label>
+          <p className="text-xs leading-5 text-slate-500">계좌 저장과 참가 취소를 함께 처리해요. 실제 이체는 운영자가 진행해요.</p>
+        </fieldset> : null}
         <div className="mt-4 grid grid-cols-2 gap-3">
-          <Button disabled={busy} fullWidth onClick={() => setCancelOpen(false)} size="medium" variant="secondary">닫기</Button>
-          {cancelPreview ? <Button disabled={busy} fullWidth onClick={() => void cancel()} size="medium">{cancelChanged ? "변경 내용 확인 후 취소" : "참가 취소하기"}</Button>
-            : <Button disabled={busy} fullWidth onClick={() => void openCancel()} size="medium">취소 금액 다시 확인</Button>}
+          <Button type="button" disabled={busy} fullWidth onClick={() => setCancelOpen(false)} size="medium" variant="secondary">닫기</Button>
+          {cancelPreview ? <Button type="submit" disabled={busy} fullWidth size="medium">{cancelChanged ? "변경 내용 확인 후 취소" : "참가 취소하기"}</Button>
+            : <Button type="button" disabled={busy} fullWidth onClick={() => void openCancel()} size="medium">취소 금액 다시 확인</Button>}
         </div>
-      </div> : <div className="flex items-center justify-between gap-4">
+      </form> : <div className="flex items-center justify-between gap-4">
         <p className="text-xs leading-5 text-slate-500">시작일 기준 이틀 전까지 전액, 하루 전 절반,<br />당일은 환불이 없어요.</p>
         <button className="min-h-11 shrink-0 text-sm font-semibold text-slate-500 underline" disabled={busy} onClick={() => void openCancel()} type="button">참가 취소</button>
       </div>}

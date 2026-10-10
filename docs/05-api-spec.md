@@ -1510,9 +1510,10 @@ PUT  /api/v1/operator/courts/{courtId}/settlement-account     운영자 입금 �
 
 `GET /court-match-applications/{id}/cancel`은 본인의 최신 취소 미리보기를 반환한다(`no-store`).
 `fingerprint`, `policyVersion`, `validUntil`, `applicationStatus`, `refundPercent`,
-`refundAmountKrw`와 실제 수령·지급·처리 중 금액을 포함한다.
+`refundAmountKrw`와 실제 수령·지급·처리 중 금액, `refundAccountVersion`, `refundAccountLocked`를 포함한다.
 `POST /court-match-applications/{id}/cancel`은 본인의 신청만 취소하며
 `{ "cancellationFingerprint": "미리보기의 64자리 해시" }`를 필수로 받는다.
+2026-10-10부터 미지급 반환액이 양수이고 송금 잠금이 없으면 `refundAccount: { bank, accountNumber, accountHolder }`도 필수다. 누락 시 `422 REFUND_ACCOUNT_REQUIRED`로 취소하지 않는다. 계좌 저장·버전 증가·취소를 같은 트랜잭션에서 처리한다. 송금 처리/재확인 중에는 기존 고정 계좌를 사용하며 새 계좌를 보내면 `409 REFUND_ACCOUNT_LOCKED`다. 반환액이 0원이면 계좌를 요구하거나 저장하지 않는다. 계좌 버전·잠금 변경도 미리보기 재확인 대상이다.
 누락·잘못된 형식은 422(빈/잘못된 JSON은 400)이고, 최신 조건과 다르면
 `409 CANCELLATION_PREVIEW_CHANGED`로 개인 취소를 실행하지 않는다. 클라이언트는 GET으로
 새 금액을 읽고 다시 확인받는다. 서버는 잠금 획득 후 현재 시각으로 계산한다.

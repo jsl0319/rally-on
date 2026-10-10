@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { getRefundAmountKrw, getRefundPercent } from "./court-match";
+import { getRefundAmountKrw, getRefundPercent, refundAccountInputSchema } from "./court-match";
 import { courtMoneySummary, type MoneyApplication } from "./court-match-money";
 
 export const courtCancellationInputSchema = z.object({
   cancellationFingerprint: z.string().regex(/^[a-f0-9]{64}$/, "최신 취소 금액을 다시 확인해 주세요."),
+  refundAccount: refundAccountInputSchema.optional(),
 });
 export type CourtCancellationInput = z.infer<typeof courtCancellationInputSchema>;
 
-type CancellationApplication = MoneyApplication & { id: string; depositClaimedAt: Date | null };
+type CancellationApplication = MoneyApplication & { id: string; depositClaimedAt: Date | null; refundAccountVersion: number };
 type CancellationMatch = { id: string; startsAt: Date; totalCourtFeeKrw: number | null };
 const dayMs = 86400000;
 const seoulOffsetMs = 9 * 3600000;
@@ -25,11 +26,13 @@ export function buildCourtCancellationPreview(application: CancellationApplicati
     ? startDay - (refundPercent === 100 ? dayMs : 0)
     : match.startsAt.getTime();
   const preview = {
-    policyVersion: "court-cancellation-2026-10-01-v1",
+    policyVersion: "court-cancellation-2026-10-10-v2",
     applicationId: application.id, matchId: match.id, applicationStatus: application.status,
     startsAt: match.startsAt.toISOString(), feeKrw: fee,
     refundPercent, refundAmountKrw: money.outstandingKrw,
     receivedKrw: money.receivedKrw, paidKrw: money.paidKrw, reservedKrw: money.reservedKrw,
+    refundAccountVersion: application.refundAccountVersion,
+    refundAccountLocked: application.refundAttempts.some((r) => r.status === "PROCESSING" || r.status === "REVIEW"),
     paidBeforeConfirmation: application.status === "ACCEPTED" && application.depositClaimedAt !== null,
     validUntil: new Date(validUntil).toISOString(),
   };

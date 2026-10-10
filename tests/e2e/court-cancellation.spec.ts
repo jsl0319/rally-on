@@ -42,6 +42,11 @@ for (const failRefresh of [false, true]) {
       await page.getByRole("button", { name: "참가 취소", exact: true }).click();
       const confirmation = page.getByRole("group", { name: "참가 취소 확인" });
       await expect(confirmation.getByText("36,000원", { exact: true })).toBeVisible();
+      await confirmation.getByRole("button", { name: "참가 취소하기", exact: true }).click();
+      expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: application.id } })).status).toBe("CONFIRMED");
+      await confirmation.getByLabel("은행", { exact: true }).fill("검증 은행");
+      await confirmation.getByLabel("계좌번호", { exact: true }).fill("123456789");
+      await confirmation.getByLabel("예금주", { exact: true }).fill("검증 참가자");
       const receipt = await operator.request.post(`/api/v1/court-match-applications/${application.id}/receipt`, { data: {
         amountKrw: 40000, receivedAt: now.toISOString(), expectedVersion: 1, clientRequestId: randomUUID(), note: "추가 입금 대조",
       } });
@@ -77,7 +82,7 @@ for (const failRefresh of [false, true]) {
       ]);
       expect(cancelled.ok(), await cancelled.text()).toBeTruthy();
       await expect(page.getByRole("status").filter({ hasText: "참가를 취소했어요" })).toBeVisible();
-      expect((await prisma.matchApplication.findUniqueOrThrow({ where: { id: application.id } })).status).toBe("CANCELLED");
+      expect(await prisma.matchApplication.findUniqueOrThrow({ where: { id: application.id } })).toMatchObject({ status: "CANCELLED", refundBank: "검증 은행", refundAccountNumber: "123456789", refundAccountVersion: 2 });
       expect(errors).toEqual([]);
     } finally { await member.close(); await operator.close(); }
   });

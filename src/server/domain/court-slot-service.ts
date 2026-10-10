@@ -8,7 +8,7 @@ import { gameTypeLabels } from "@/matches/game-type";
 import { courtCompositionIssues, courtCompositionPolicyVersion } from "@/matches/court-composition";
 import { describeCourtComposition } from "./court-match-composition";
 import { courtServiceScopeSchema, readCourtServiceScope } from "@/matches/court-service-scope";
-import { courtMoneySummary } from "./court-match-money";
+import { courtMoneyActions, emptyCourtMoneyActions, type CourtMoneyActions } from "./court-money-actions";
 import { makeConversationReadOnly } from "@/server/domain/match-chat-service";
 import { canAcceptCourtApplication, seatHoldingStatuses } from "./court-match";
 import { currentCourtContact } from "./court-contact";
@@ -444,12 +444,12 @@ export async function createCourtSlot(prisma: PrismaClient, viewer: { id: string
  * 이 값이 없으면 운영자는 알림을 놓쳤을 때 코트 매칭을 하나씩 열어봐야 한다.
  */
 async function getOperatorActionCounts(prisma: PrismaClient, matchIds: string[]) {
-  const counts = new Map<string, { pendingApproval: number; depositToConfirm: number; refundToComplete: number; confirmed: number; compositionNeedsAction: boolean }>();
+  const counts = new Map<string, CourtMoneyActions & { pendingApproval: number; confirmed: number; compositionNeedsAction: boolean }>();
   if (matchIds.length === 0) return counts;
 
   const applications = await prisma.matchApplication.findMany({
     where: { matchId: { in: matchIds } },
-    select: { matchId: true, applicantGender: true, status: true, depositClaimedAt: true, confirmedAt: true, refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, receivedAmountKrw: true, legacyRefundPaidKrw: true, refundAttempts: { select: { status: true, amountKrw: true } }, match: { select: { totalCourtFeeKrw: true, status: true, startsAt: true, gameType: true, courtCompositionPolicyVersion: true, courtCompositionPassedAt: true, courtSlot: { select: { minParticipantCount: true } } } } },
+    select: { matchId: true, applicantGender: true, status: true, depositClaimedAt: true, confirmedAt: true, refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, receivedAmountKrw: true, refundBank: true, refundAccountNumber: true, refundAccountHolder: true, receiptRecords: { take: 1, orderBy: { createdAt: "desc" }, select: { createdAt: true } }, legacyRefundPaidKrw: true, refundAttempts: { select: { status: true, amountKrw: true } }, match: { select: { totalCourtFeeKrw: true, status: true, startsAt: true, gameType: true, courtCompositionPolicyVersion: true, courtCompositionPassedAt: true, courtSlot: { select: { minParticipantCount: true } } } } },
   });
   const compositions = new Map<string, typeof applications>();
   for (const application of applications) {
@@ -457,12 +457,11 @@ async function getOperatorActionCounts(prisma: PrismaClient, matchIds: string[])
     group.push(application);
     compositions.set(application.matchId, group);
     const entry = counts.get(application.matchId)
-      ?? { pendingApproval: 0, depositToConfirm: 0, refundToComplete: 0, confirmed: 0, compositionNeedsAction: false };
+      ?? { ...emptyCourtMoneyActions(), pendingApproval: 0, confirmed: 0, compositionNeedsAction: false };
     if (application.status === "PENDING") entry.pendingApproval += 1;
-    if (application.status === "ACCEPTED" && application.depositClaimedAt) entry.depositToConfirm += 1;
     if (application.status === "CONFIRMED") entry.confirmed += 1;
-    // 환불 대기 중이면서 참가자가 계좌까지 넣은 건만 운영자가 지금 처리할 수 있다.
-    if (courtMoneySummary(application, application.match.totalCourtFeeKrw ?? 0).outstandingKrw > 0 && application.refundRequestedAt) entry.refundToComplete += 1;
+    const moneyActions = courtMoneyActions(application, application.match.totalCourtFeeKrw ?? 0);
+    for (const key of Object.keys(moneyActions) as (keyof CourtMoneyActions)[]) entry[key] += moneyActions[key];
     counts.set(application.matchId, entry);
   }
   const now = new Date();
@@ -497,7 +496,7 @@ export async function getMyCourtSlots(prisma: PrismaClient, viewer: { id: string
     items: slots.map((slot) => ({
       ...toCourtSlotView(slot, now),
       actions: (slot.match && actionCounts.get(slot.match.id))
-        || { pendingApproval: 0, depositToConfirm: 0, refundToComplete: 0, confirmed: 0, compositionNeedsAction: false },
+        || { ...emptyCourtMoneyActions(), pendingApproval: 0, confirmed: 0, compositionNeedsAction: false },
     })),
     supplyRestriction: restriction
       ? { active: true, triggeredAt: restriction.triggeredAt.toISOString(), reasonCode: restriction.reasonCode }
