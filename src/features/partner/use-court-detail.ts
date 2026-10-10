@@ -5,9 +5,12 @@ import { apiMessage } from "./partner-session";
 
 /** Revalidate on return and business deadlines, without keeping the database awake by polling. */
 export function useCourtDetail<T>(url: string, deadlines: (data: T) => (string | null | undefined)[]) {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState("");
-  const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<{ url: string; data: T; checkedAt: string } | null>(null);
+  const [failure, setFailure] = useState<{ url: string; message: string } | null>(null);
+  // App Router can reuse the component when navigating between two court matches.
+  const data = snapshot?.url === url ? snapshot.data : null;
+  const checkedAt = snapshot?.url === url ? snapshot.checkedAt : null;
+  const error = failure?.url === url ? failure.message : "";
   const sequence = useRef(0);
   const controller = useRef<AbortController | null>(null);
   const load = useCallback(async () => {
@@ -21,11 +24,11 @@ export function useCourtDetail<T>(url: string, deadlines: (data: T) => (string |
       const body = await response.json();
       if (!response.ok) throw new Error(apiMessage(body, "최신 상태를 불러오지 못했어요."));
       if (sequence.current !== id) return;
-      setData(body as T); setError(""); setCheckedAt(new Date().toISOString());
+      setSnapshot({ url, data: body as T, checkedAt: new Date().toISOString() }); setFailure(null);
     } catch (caught) {
       if (sequence.current !== id) return;
       const message = current.signal.aborted ? "응답이 늦어지고 있어요. 다시 확인해 주세요." : caught instanceof Error ? caught.message : "최신 상태를 불러오지 못했어요.";
-      setError(message);
+      setFailure({ url, message });
       throw new Error(message);
     } finally { window.clearTimeout(timeout); }
   }, [url]);

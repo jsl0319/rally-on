@@ -1,5 +1,8 @@
 # 무료 크론 운영
 
+
+> **최신 상태:** 안전장치를 운영에 반영하고 Cloudflare 15분 예약을 활성화했다. 아래 이전 단계 기록의 “비활성/승인 대기”는 당시 상태이며, 최신 결과는 이 문서 마지막 활성화 기록을 따른다.
+
 기준: 2026-10-10 · 사용자 승인: 크론 보류 해제, 무료 방식부터 도입.
 
 ## 목적과 범위
@@ -37,7 +40,7 @@ Cloudflare Workers Free의 예약 실행 1개로 기존 앱을 호출한다. 더
 2. `triggers.crons: []` 상태로 먼저 Worker를 배포한다. Cloudflare 계정이 Free인지 확인한다.
 3. 전용 키를 두 서비스의 보호된 환경변수에 등록한다. Preview/Development에는 등록하지 않는다.
 4. 해당 키를 수용하는 앱 코드를 운영에 배포하고, 인증 없는 요청 401·새 키의 성공 응답을 확인한다. 기존 키 호환성은 단위 테스트로 검증하며 기존 운영 키 원문은 조회하지 않는다. 인증 호출은 실제 만료 상태를 정리할 수 있다.
-5. 설정의 `crons`를 `["*/15 * * * *"]`로 바꾸고 Worker를 다시 배포한다. 변경 전파는 최대 15분, 처음 Cron Events 표시에는 최대 30분이 걸릴 수 있다.
+5. 설정의 `crons`를 `["5,20,35,50 * * * *"]`로 바꾸고 Worker를 다시 배포한다. 변경 전파는 최대 15분, 처음 Cron Events 표시에는 최대 30분이 걸릴 수 있다.
 6. 실제 예약 이벤트의 성공과 Vercel 작업 완료 로그를 확인한다. 단순 수동 API 성공이나 설정 저장만으로 예약 실행 검증 완료라고 쓰지 않는다.
 
 ## 1인 운영 확인·재실행·중지
@@ -74,3 +77,13 @@ Wrangler 4.149.0 dry-run 번들링도 통과했다.
 - [Cloudflare 제한](https://developers.cloudflare.com/workers/platform/limits/), [무료 요금제](https://developers.cloudflare.com/workers/platform/pricing/), [Cron Triggers·전파·실행 이력](https://developers.cloudflare.com/workers/configuration/cron-triggers/).
 - [Neon Free 월 100 CU-hours](https://neon.com/blog/neon-free-plan-1-gb-per-project), [5분 자동 중지](https://github.com/neondatabase/website/blob/main/content/docs/introduction/scale-to-zero.md).
 - 무료 크론은 상업용 호스팅 요금제 조건과 별개다. 기존 [무료 옵션 비교 및 한계](03-21-small-pilot-operations-readiness.md)의 호스팅 조건을 함께 확인한다.
+
+
+## 2026-10-10 안전장치 배포 및 활성화
+
+- 사용자 확인: 기존 시작 3시간 전 자동 판정 유지. 실제 운영 정리·15분 예약 실행 승인 유효.
+- 안전장치 커밋 `092738f` main 푸시 완료. Vercel 운영 배포 `dpl_3P5aBakXo6PrcpuYrZrkteVWzxCN` READY 및 `tennis-mate-ochre.vercel.app` 연결 확인. GitHub CI `38026913446` 성공. DB 스키마 변경 없음.
+- 2026-10-10 14:18 KST 운영 API 검증: 무인증 401, 전용 키 상태 정리 200 두 번, 다른 파기 API 세 경로 모두 401. 처리 대상·실패·미처리 모두 0. 실제 송금 없음.
+- Cloudflare Worker 버전 `e15c98f9-3904-43e6-ac2d-f30823b73a07`, Free 계정에서 15분 간격 활성화. 매시 5·20·35·50분. `workers.dev`/preview URL은 계속 비활성.
+- 첫 예약 실행 로그 확인은 아래에 추가 기록한다. 예약 등록만으로 실제 호출 성공을 단정하지 않는다.
+- 이후 코드에서 실행 보류가 필요하면 `triggers.crons: []`로 Worker를 재배포한다. 이때도 기존 Vercel 일일 크론·요청 시 보정은 별개로 남는다.
