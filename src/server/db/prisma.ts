@@ -13,11 +13,7 @@ function createPrismaClient(): PrismaClient {
 }
 
 export function getPrisma(): PrismaClient {
-  const prisma = globalForPrisma.prisma ?? createPrismaClient();
-
-  if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.prisma = prisma;
-  }
-
-  return prisma;
+  // Reuse the connection pool in production too, including calls within one request.
+  // Only the client is shared; user data and transactions remain request-scoped.
+  return globalForPrisma.prisma ??= createPrismaClient();
 }

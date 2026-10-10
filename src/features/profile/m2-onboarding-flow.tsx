@@ -122,6 +122,7 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
           return;
         }
         const profile = me.tennisProfile;
+        const onboardingComplete = me.onboardingCompleted && profile !== null;
         setDraft({
           gender: profile?.gender ?? null,
           nickname: me.nickname,
@@ -131,11 +132,11 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
           playPurposes: profile?.playPurposes ?? [],
           version: profile?.version ?? null,
         });
-        if (me.onboardingCompleted && redirectWhenOnboarded) {
+        if (onboardingComplete && redirectWhenOnboarded) {
           router.replace(safeReturnTo);
           return;
         }
-        setScreen(!me.nicknameConfirmed ? "nickname" : me.onboardingCompleted ? "result" : 0);
+        setScreen(!me.nicknameConfirmed ? "nickname" : onboardingComplete ? "result" : 0);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "서비스를 불러오지 못했어요.");
         setScreen("error");

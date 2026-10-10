@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
@@ -14,34 +15,38 @@ import { DEFAULT_MATCH_FILTERS, MatchDiscoveryFilters, MatchDiscoveryHeader, typ
 
 import { MatchCard, type MatchCardData } from "./m3-match-card";
 
-type MeResponse = {
-  nickname: string;
-  onboardingCompleted: boolean;
-  tennisProfile: null | { rallyLevel: string };
-};
-
 type MatchListResponse = { items: MatchCardData[] };
-type Screen = "loading" | "entry" | "onboarding" | "home" | "error";
+type Screen = "entry" | "onboarding" | "home";
 type ListStatus = "loading" | "ready" | "error";
-function getErrorMessage(body: unknown) {
+function getApiError(body: unknown) {
   if (typeof body === "object" && body !== null && "error" in body) {
     const error = body.error;
-    if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") return error.message;
+    if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") {
+      return { message: error.message, code: "code" in error && typeof error.code === "string" ? error.code : undefined };
+    }
   }
-  return "매칭을 불러오지 못했어요. 다시 시도해 주세요.";
+  return { message: "매칭을 불러오지 못했어요. 다시 시도해 주세요.", code: undefined };
+}
+
+class MatchListError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) { super(message); }
 }
 
 async function requestJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, { cache: "no-store", signal });
   const body: unknown = await response.json();
-  if (!response.ok) throw new Error(getErrorMessage(body));
+  if (!response.ok) {
+    const error = getApiError(body);
+    throw new MatchListError(error.message, response.status, error.code);
+  }
   return body as T;
 }
 
-export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
+export function RallyOnHome({ initialScreen, returnTo = "/" }: { initialScreen: Screen; returnTo?: string }) {
+  const router = useRouter();
   const safeReturnTo = getSafeReturnTo(returnTo);
-  const [screen, setScreen] = useState<Screen>("loading");
-  const [error, setError] = useState("");
+  // The server already checked the account. The list API rechecks current access.
+  const [screen, setScreen] = useState<Screen>(initialScreen);
 
   const [matches, setMatches] = useState<MatchCardData[]>([]);
   const [listStatus, setListStatus] = useState<ListStatus>("loading");
@@ -49,32 +54,6 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   const [filters, setFilters] = useState<MatchFilters>(DEFAULT_MATCH_FILTERS);
   const { gameType, date, sort } = filters;
   const latestListRequest = useRef(0);
-
-  const loadMe = useCallback(async () => {
-    try {
-      const meResponse = await fetch("/api/v1/me", { cache: "no-store" });
-      if (meResponse.status === 401) {
-        setScreen("entry");
-        return;
-      }
-      const meBody: unknown = await meResponse.json();
-      if (!meResponse.ok) throw new Error(getErrorMessage(meBody));
-      const current = meBody as MeResponse;
-      if (!current.onboardingCompleted) {
-        setScreen("onboarding");
-        return;
-      }
-      setScreen("home");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "서비스를 불러오지 못했어요.");
-      setScreen("error");
-    }
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => { void loadMe(); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [loadMe]);
 
   const loadMatches = useCallback(async (signal?: AbortSignal) => {
     const requestId = ++latestListRequest.current;
@@ -89,10 +68,15 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
       setListStatus("ready");
     } catch (caught) {
       if (signal?.aborted || requestId !== latestListRequest.current) return;
+      if (caught instanceof MatchListError) {
+        if (caught.status === 401) { setMatches([]); setScreen("entry"); return; }
+        if (caught.code === "ONBOARDING_REQUIRED") { setMatches([]); setScreen("onboarding"); return; }
+        if (caught.status === 403 && caught.code === "FORBIDDEN") { setMatches([]); router.replace("/account/transactions"); return; }
+      }
       setListError(caught instanceof Error ? caught.message : "매칭을 불러오지 못했어요.");
       setListStatus("error");
     }
-  }, [gameType, sort, date]);
+  }, [gameType, sort, date, router]);
 
   useEffect(() => {
     if (screen !== "home") return;
@@ -101,13 +85,11 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
     return () => { controller.abort(); window.clearTimeout(timer); };
   }, [screen, loadMatches]);
 
-  if (screen === "loading") return <HomeLoading />;
   if (screen === "entry") return <EntrySelection returnTo={safeReturnTo} />;
   // 온보딩을 마치면 M2는 returnTo로 router.replace를 한다. 그런데 이 화면의 주소가
   // 이미 "/"라 같은 주소로의 replace는 아무 일도 하지 않고, 완성 화면에 그대로 머문다.
   // 돌아갈 곳이 홈일 때는 이 화면이 직접 상태를 홈으로 바꾼다.
-  if (screen === "onboarding") return <M2OnboardingFlow onCompleted={safeReturnTo === "/" ? () => { setScreen("loading"); void loadMe(); } : undefined} returnTo={safeReturnTo} />;
-  if (screen === "error") return <HomeStateFrame><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">{error}</p><Button className="mt-6" onClick={() => void loadMe()}>다시 불러오기</Button></div></HomeStateFrame>;
+  if (screen === "onboarding") return <M2OnboardingFlow onCompleted={safeReturnTo === "/" ? () => setScreen("home") : undefined} returnTo={safeReturnTo} />;
 
   const hasFilter = gameType !== null || date !== null;
 
@@ -187,18 +169,4 @@ function EmptyMatchState() {
     <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">예약한 코트에서 함께 칠 메이트를 모집해 보세요. 코트가 필요하면 코트 매칭을 이용해 주세요.</p>
     <Button as={Link} className="mt-4" fullWidth href="/matches/new" size="medium">매칭 만들기</Button>
   </div>;
-}
-
-function HomeLoading() {
-  return <HomeStateFrame><CourtRallyLoader className="max-w-[560px]" label="매칭을 준비하고 있어요." /></HomeStateFrame>;
-}
-
-function HomeStateFrame({ children }: { children: React.ReactNode }) {
-  return <main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] pb-32 text-[var(--tm-text-primary)]">
-    <header className="bg-[var(--tm-bg-page)]">
-      <div className="mx-auto max-w-[560px] px-5 py-4"><h1 className="rally-page-title">매칭</h1></div>
-    </header>
-    <section className="mx-auto flex w-full max-w-[560px] flex-1 items-center justify-center px-5 text-center">{children}</section>
-    <BottomNavigation />
-  </main>;
 }
