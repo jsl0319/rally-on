@@ -178,6 +178,7 @@ export async function getOperatorCourtMatch(prisma: PrismaClient, viewer: { id: 
   const showProfile = !handoff && match.courtSlot?.approvalMode === "OPERATOR";
   return {
     ...summary(match),
+    canResolveLateReview: !handoff && match.host.status === "ACTIVE" && describeCourtComposition(match, new Date()).phase === "REVIEW_REQUIRED",
     canCancelForComposition: !handoff && match.host.status === "ACTIVE" && ["OPEN", "CLOSED"].includes(match.status) && describeCourtComposition(match, new Date()).phase === "ACTION_REQUIRED",
     applications: match.applications.map((application) => ({
       ...toApplication(application, match.totalCourtFeeKrw ?? 0, true),

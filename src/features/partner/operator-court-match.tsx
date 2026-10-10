@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCourtDetail } from "./use-court-detail";
+import { CourtFreshness } from "./court-freshness";
+import { CourtLateReview } from "./court-late-review";
+import { useState } from "react";
 
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { BackButton } from "@/components/navigation/back-button";
@@ -31,27 +34,10 @@ function badgeTone(application: Application) {
 }
 
 export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
-  const [match, setMatch] = useState<OperatorCourtMatch | null>(null);
-  const [error, setError] = useState("");
+  const { data: match, error, checkedAt, load, reload } = useCourtDetail<OperatorCourtMatch>(
+    `/api/v1/operator/court-matches/${encodeURIComponent(matchId)}`, (m) => [m.judgementAt, m.applicationDeadline, m.lateConfirmationDeadline, m.startsAt, m.endsAt, ...m.applications.flatMap((a) => [a.paymentDueAt, a.confirmationDueAt])]);
   const [busyId, setBusyId] = useState("");
   const [actionError, setActionError] = useState("");
-
-  const load = useCallback(async () => {
-    const response = await fetch(`/api/v1/operator/court-matches/${encodeURIComponent(matchId)}`, { cache: "no-store" });
-    const body: unknown = await response.json();
-    if (!response.ok) throw new Error(apiMessage(body, "코트 매칭을 불러오지 못했어요."));
-    setMatch(body as OperatorCourtMatch);
-    setError("");
-  }, [matchId]);
-
-  const reload = useCallback(() => {
-    void load().catch((caught) => setError(caught instanceof Error ? caught.message : "불러오지 못했어요."));
-  }, [load]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(reload, 0);
-    return () => window.clearTimeout(timer);
-  }, [reload]);
 
   /** 승인·거절·입금 확인·환불 표시가 모두 같은 모양이라 한 곳에서 처리한다. */
   const act = async (application: Application, action: "decision" | "confirm", accept?: boolean) => {
@@ -102,6 +88,7 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
           <MatchBadge tone="green">{match.approvalMode === "AUTO" ? "선착순 자동 승인" : "직접 승인"}</MatchBadge>
         </div>
       </header>
+      <CourtFreshness checkedAt={checkedAt} error={error} reload={reload} />
 
       <section className="border-t-[8px] border-slate-50 px-5 py-6">
         <div className="grid grid-cols-3 gap-3">
@@ -109,12 +96,13 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
           <Stat label="자리 잡음" value={`${match.seatCount}/${match.maxParticipantCount}명`} />
           <Stat label="최소 인원" value={`${match.minParticipantCount}명`} />
         </div>
-        {!match.composition.enabled && match.status === "OPEN" ? <p className={`mt-4 rounded-2xl px-4 py-3 text-sm leading-6 ${shortfall > 0 ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-600"}`}>
+        {!match.composition.enabled && match.composition.phase !== "REVIEW_REQUIRED" && match.status === "OPEN" ? <p className={`mt-4 rounded-2xl px-4 py-3 text-sm leading-6 ${shortfall > 0 ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-600"}`}>
           {shortfall > 0
             ? `${formatStatusChangedAt(match.judgementAt)}까지 입금 확인 인원이 ${shortfall}명 더 필요해요. 못 채우면 자동으로 취소돼요.`
             : `최소 인원을 채웠어요. ${formatStatusChangedAt(match.applicationDeadline)}까지 추가 신청을 받을 수 있어요.`}
         </p> : null}
         <CourtCompositionNotice match={match} operator />
+        <CourtLateReview match={match} refresh={load} />
         <CourtCompositionCancel match={match} refresh={load} />
         {match.cancellationReason ? <p className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700">{match.cancellationReason}</p> : null}
         {actionError ? <p className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700" role="alert">{actionError}</p> : null}
@@ -122,7 +110,7 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
 
       {refunds.length ? <Group title="반환·환불 처리" description="처리 시작 후 고정된 금액과 계좌로 송금하고 결과를 기록해 주세요.">
         {refunds.map((application) => <Card application={application} busy={busyId === application.id} key={application.id} match={match} refresh={load}>
-          {application.status === "ACCEPTED" ? <Button size="medium" onClick={() => void act(application, "confirm")}>입금 확인하고 확정</Button> : null}
+          {application.status === "ACCEPTED" && application.receivedAmountKrw !== null ? <Button size="medium" onClick={() => void act(application, "confirm")}>입금 확인하고 확정</Button> : null}
         </Card>)}
       </Group> : null}
 
@@ -145,8 +133,8 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
             {application.paymentDueAt ? <Row label="이체 기한">{formatStatusChangedAt(application.paymentDueAt)}</Row> : null}
             {application.confirmationDueAt ? <Row label="확인 기한">{formatStatusChangedAt(application.confirmationDueAt)}</Row> : null}
           </dl>
-          <Button className="mt-3" disabled={busyId === application.id} fullWidth onClick={() => void act(application, "confirm")} size="medium">입금 확인하고 확정</Button>
-          {!application.depositClaimedAt ? <p className="mt-2 text-xs leading-5 text-slate-500">참가자가 아직 입금했다고 알리지 않았어요. 통장 대조 기록을 저장한 뒤 확정해 주세요.</p> : null}
+          {application.receivedAmountKrw !== null ? <Button className="mt-3" disabled={busyId === application.id} fullWidth onClick={() => void act(application, "confirm")} size="medium">기존 입금 기록으로 참가 확정</Button> : null}
+          {!application.depositClaimedAt ? <p className="mt-2 text-xs leading-5 text-slate-500">참가자가 아직 입금했다고 알리지 않았어요. 아래에서 통장 내역을 기록하면 정시 입금은 참가 확정까지 함께 처리돼요.</p> : null}
         </Card>)}
       </Group> : null}
 
@@ -199,7 +187,7 @@ function Card({ application, busy, children, match, refresh }: { application: Ap
     </div>
     {profile ? <p className="mt-2 text-xs leading-5 text-slate-500">{profile}</p> : null}
     {children}
-    <OperatorMoneyPanel application={application} refresh={refresh} />
+    <OperatorMoneyPanel key={application.receiptVersion} application={application} refresh={refresh} />
   </article>;
 }
 

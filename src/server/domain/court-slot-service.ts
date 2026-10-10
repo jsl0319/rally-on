@@ -44,7 +44,7 @@ const courtSlotInclude = {
       },
     },
   },
-  match: { select: { id: true, hostUserId: true, status: true } },
+  match: { select: { id: true, hostUserId: true, status: true, startsAt: true, courtCompositionPassedAt: true } },
 } satisfies Prisma.CourtSlotInclude;
 
 type CourtWithRelations = Prisma.CourtGetPayload<{ include: typeof courtInclude }>;
@@ -63,6 +63,8 @@ const publicCourtSlotInclude = {
       status: true,
       title: true,
       recruitCount: true,
+      startsAt: true,
+      courtCompositionPassedAt: true,
       partnerPreference: true,
       host: { select: { nickname: true, status: true } },
       purposes: { select: { purpose: true } },
@@ -466,7 +468,7 @@ async function getOperatorActionCounts(prisma: PrismaClient, matchIds: string[])
   }
   const now = new Date();
   for (const [id, group] of compositions) {
-    counts.get(id)!.compositionNeedsAction = describeCourtComposition({ ...group[0].match, applications: group }, now).phase === "ACTION_REQUIRED";
+    counts.get(id)!.compositionNeedsAction = ["ACTION_REQUIRED", "REVIEW_REQUIRED"].includes(describeCourtComposition({ ...group[0].match, applications: group }, now).phase);
   }
   return counts;
 }
@@ -496,7 +498,7 @@ export async function getMyCourtSlots(prisma: PrismaClient, viewer: { id: string
     items: slots.map((slot) => ({
       ...toCourtSlotView(slot, now),
       actions: (slot.match && actionCounts.get(slot.match.id))
-        || { ...emptyCourtMoneyActions(), pendingApproval: 0, confirmed: 0, compositionNeedsAction: false },
+        || { ...emptyCourtMoneyActions(), pendingApproval: 0, confirmed: 0, compositionNeedsAction: Boolean(slot.match && ["OPEN", "CLOSED"].includes(slot.match.status) && slot.match.startsAt <= now && !slot.match.courtCompositionPassedAt) },
     })),
     supplyRestriction: restriction
       ? { active: true, triggeredAt: restriction.triggeredAt.toISOString(), reasonCode: restriction.reasonCode }

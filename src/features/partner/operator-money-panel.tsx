@@ -44,16 +44,16 @@ export function OperatorMoneyPanel({ application: a, refresh, endpoint = "/api/v
       {a.money.paidKrw > 0 ? <p className="col-span-2 text-xs text-slate-500">반환 완료 기록 {won(a.money.paidKrw)}</p> : null}
     </div>
     {a.money.needsReview ? <p className="mt-2 text-rose-700">반환 의무와 송금 기록을 다시 대조해 주세요.</p> : null}
-    <details className="mt-3">
-      <summary className="min-h-11 cursor-pointer py-3 font-semibold text-blue-700">입금 대조·정정</summary>
+    <details className="mt-3" open={a.status === "ACCEPTED" || undefined}>
+      <summary className="min-h-11 cursor-pointer py-3 font-semibold text-blue-700">{a.status === "ACCEPTED" ? "입금 확인 및 참가 확정" : "입금 대조·정정"}</summary>
       <form onSubmit={(e) => { e.preventDefault(); void mutate("receipt", { amountKrw: Number(amount), receivedAt: receivedAt ? new Date(`${receivedAt}+09:00`).toISOString() : null, feeReceivedAt: feeAt ? new Date(`${feeAt}+09:00`).toISOString() : null, note, expectedVersion: a.receiptVersion }); }}>
         <fieldset className="space-y-3" disabled={busy || a.refundLocked}>
-          <p className="text-xs leading-5 text-slate-500">이 신청에서 받은 누적 금액을 기록해 주세요. 정정 이력은 남고, 종료된 자리는 복구되지 않아요.</p>
+          <p className="text-xs leading-5 text-slate-500">이 신청에서 받은 누적 금액을 기록해 주세요. {endpoint === "/api/v1/court-match-applications" ? "정시 정상 입금은 확인 기한 안에 저장하면 참가 확정도 함께 처리돼요." : "인계 담당자는 수령 사실만 기록하며 참가를 복구하지 않아요."} 부족·늦은 입금은 기록만 남고, 종료된 자리는 복구되지 않아요.</p>
           <label className="block">누적 수령 금액<input className={field} type="number" min={0} max={100000000} required value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
           <label className="block">은행 수령 시각 (한국 시간)<input className={field} type="datetime-local" step="1" required={Number(amount) > 0} value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} /></label>
           <label className="block">참가비를 모두 받은 시각 (선택)<input className={field} type="datetime-local" step="1" value={feeAt} onChange={(e) => setFeeAt(e.target.value)} /><span className="mt-1 block text-xs text-slate-500">여러 번 받았다면 참가비가 충족된 시각을 적어 주세요. 비우면 위 수령 시각을 사용해요.</span></label>
           <label className="block">대조·정정 사유<textarea className={field} required minLength={2} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="예: 통장 내역 대조, 중복 입금 확인" /></label>
-          <Button type="submit" fullWidth size="medium">수령 기록 저장</Button>
+          <Button type="submit" fullWidth size="medium">{a.status === "ACCEPTED" && endpoint === "/api/v1/court-match-applications" ? "입금 기록 및 참가 확정" : "수령 기록 저장"}</Button>
         </fieldset>
       </form>
       {a.receiptRecords.map((r) => <p className="mt-3 break-words text-xs leading-5 text-slate-500" key={r.id}>{formatStatusChangedAt(r.createdAt)} · {won(r.previousAmountKrw)} → {won(r.amountKrw)}<br />{r.note}</p>)}

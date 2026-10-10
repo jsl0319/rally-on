@@ -1379,3 +1379,9 @@ Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_
 마이그레이션: `20261010120000_court_refund_agreements`. 기존 신청은 0/0으로 시작하며
 이전 금액과 신청 안내를 재작성하지 않는다. 합의액 변경은 금융 최종 대조 지문을 무효화하고,
 읽기 전용 보존 점검에도 미처리 반환으로 반영한다. 계좌나 입금자명을 이력에 복제하지 않는다.
+
+### 2026-10-10 지연 진행 판정 확인 기록 (스키마 변경 없음)
+
+`Match.courtCompositionSnapshot.lateReview`에 `{expectedVersion, clientRequestId, outcome, note, actorUserId, reviewedAt}`를 보존한다. 기존 판정 근거 JSON을 덮어버리지 않고 이 속성만 추가한다. 실제 제공 완료는 `COMPLETED/completedAt`, 미제공은 `CANCELLED/cancelledAt`로 처리한다. 수동 확인으로 `courtCompositionPassedAt`을 소급 생성하지 않는다. 이미 기록한 수동 결과는 다른 요청으로 덮어쓰지 않는다.
+
+`REVIEW_REQUIRED`는 새 DB enum이 아니라 활성 Match의 `startsAt <= now && courtCompositionPassedAt == null`에서 파생하는 API/UI 상태다. 과거 정책 버전의 경기에도 앞으로 정상 판정을 통과하면 통과 시각을 저장해 미판정 상태와 구분한다. 개인정보가 포함될 수 있는 확인 메모는 공개 참가자 응답에 원문으로 노출하지 않는다.

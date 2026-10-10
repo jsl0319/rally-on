@@ -86,7 +86,7 @@ function transactionFor(match: ReturnType<typeof courtMatch>, seatCount: number)
   return {
     // 동시 신청을 막기 위해 Match 행을 잠근 뒤 읽는다.
     $queryRaw: vi.fn().mockResolvedValue([{ id: "match-id" }]),
-    match: { findUnique: vi.fn().mockResolvedValue(match), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    match: { findUnique: vi.fn().mockResolvedValue(match), update: vi.fn().mockResolvedValue({}), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     matchApplication: {
       findUnique: vi.fn().mockResolvedValue(null),
       count: vi.fn().mockResolvedValue(seatCount),

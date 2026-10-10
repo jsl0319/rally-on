@@ -93,4 +93,19 @@ describe("match lifecycle cron endpoint", () => {
     await expect(response.json()).resolves.toEqual({ status: "error", message: "상태 보정 작업을 완료하지 못했어요." });
     errorSpy.mockRestore();
   });
+  it.each(["one match", "court database"])("continues other stages but reports failure for %s", async (kind) => {
+    vi.stubEnv("CRON_SECRET", "test-cron-secret");
+    if (kind === "one match") reconcileCourtMatches.mockResolvedValue({ checked: 2, cancelled: 1, expired: 0, failed: 1 });
+    else reconcileCourtMatches.mockRejectedValue(new Error("private database detail"));
+    reconcileStartedMatches.mockResolvedValue({ checked: 1, closed: 1, expired: 0 });
+    reconcileExpiredConversations.mockResolvedValue({ checked: 1, readOnly: 1 });
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = await GET(new Request("http://localhost/api/cron/reconcile-matches", { headers: { authorization: "Bearer test-cron-secret" } }));
+    expect(response.status).toBe(500);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(reconcileStartedMatches).toHaveBeenCalled();
+    expect(reconcileExpiredConversations).toHaveBeenCalled();
+    expect(await response.text()).not.toContain("private");
+  });
+
 });

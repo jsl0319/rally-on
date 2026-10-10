@@ -1980,3 +1980,11 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 - 기록은 취소나 송금을 실행하지 않는다. 기존 `refund-account`, `refund/start`, `refund`
   절차가 미처리 차액을 처리한다. 기록/알림은 같은 트랜잭션이며 `COURT_REFUND_AGREEMENT_RECORDED`
   필수 금융 알림을 참가자에게 보낸다. 새 신청 안내는 v3, 기존 신청 스냅샷은 보존한다.
+
+### 2026-10-10 크론 안전장치와 지연 판정
+
+- `POST /api/v1/court-match-applications/{id}/receipt`: 기존 입력·응답을 유지한다. 유효한 운영자가 정시 정상 입금을 확인 기한 안에 저장하면 참가 확정·채팅 가입·확정 알림을 **같은 트랜잭션**에서 처리한다. 부족/지연 입금·종료 신청은 기록만 저장한다. 내부 인계 담당자 경로는 기록만 저장한다. 동일 요청 ID는 같은 기록을 반환하며 다시 확정하지 않는다.
+- `POST .../{id}/confirm`: 과거에 따로 저장한 입금 기록을 처리하는 호환 경로를 유지한다. 이미 CONFIRMED이면 같은 확정 결과를 반환하며 알림·멤버십을 중복 생성하지 않는다.
+- 운영자/참가자 상세의 `composition.phase`에 `REVIEW_REQUIRED`를 추가한다. 시작 시각 이후 미판정·미종료 경기이며 자동 진행 확정이나 전체 취소를 뜻하지 않는다. 운영자 상세의 `canResolveLateReview`로 처리 가능 여부를 알린다.
+- `POST /api/v1/operator/court-matches/{matchId}/late-review`: 본인 운영자만 `{expectedVersion, clientRequestId, outcome: "PROVIDED" | "NOT_PROVIDED", note}`를 제출한다. `note`는 10~450자. PROVIDED는 일정 종료 후에만 가능하며 COMPLETED로 기록한다. NOT_PROVIDED는 전혀 제공하지 못했음을 확인한 경우 CANCELLED로 기록한다. 남은 활성 신청만 전체 취소하고 이전 개인 취소·이미 송금한 금액은 보존한다. 응답 `{id, status}`. 같은 요청 재시도는 동일 결과, 다른 결과/버전은 409, 무권한은 403, 입력 오류는 422. 일부 제공은 기존 합의 반환 API로 처리한다.
+- 크론 API는 경기별 실패/시간 예산으로 남은 처리가 있어도 다른 정리 단계를 실행한 후 500을 반환한다. 성공은 기존 집계와 `courtMatches.failed`, `courtMatches.deferred`(둘 다 0)를 반환한다. 응답은 no-store. 원문 오류·은행 내역은 반환/로그에 포함하지 않는다.

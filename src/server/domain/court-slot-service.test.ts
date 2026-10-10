@@ -322,7 +322,7 @@ describe("Court Partner time supply authorization and state transitions", () => 
     await getMyCourtSlots(prisma, viewer);
 
     const [{ include }] = findMany.mock.calls[0] as [{ include: { match: { select: Record<string, unknown> } } }];
-    expect(include.match.select).toEqual({ id: true, hostUserId: true, status: true });
+    expect(include.match.select).toEqual({ id: true, hostUserId: true, status: true, startsAt: true, courtCompositionPassedAt: true });
   });
 
   it("only offers still-upcoming available times when a session host picks a slot", async () => {

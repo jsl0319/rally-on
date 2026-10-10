@@ -19,6 +19,13 @@ export function describeCourtComposition(match: {
 }, now: Date) {
   const enabled = match.courtCompositionPolicyVersion === courtCompositionPolicyVersion;
   const checked = checkCourtComposition(match.gameType, match.courtSlot?.minParticipantCount ?? 0, countCourtComposition(match.applications.filter((a) => a.status === "CONFIRMED")));
-  const phase = !enabled ? "LEGACY" : match.status === "CANCELLED" ? "CANCELLED" : now >= match.startsAt ? "STARTED" : match.courtCompositionPassedAt ? checked.ready ? "PASSED" : "ACTION_REQUIRED" : "BEFORE_JUDGEMENT";
+  const reviewRequired = ["OPEN", "CLOSED"].includes(match.status) && now >= match.startsAt && !match.courtCompositionPassedAt;
+  const phase = reviewRequired ? "REVIEW_REQUIRED" : !enabled ? "LEGACY" : match.status === "CANCELLED" ? "CANCELLED" : now >= match.startsAt ? "STARTED" : match.courtCompositionPassedAt ? checked.ready ? "PASSED" : "ACTION_REQUIRED" : "BEFORE_JUDGEMENT";
   return { ...checked, enabled, phase, passedAt: match.courtCompositionPassedAt?.toISOString() ?? null };
 }
+
+export const courtLateReviewInputSchema = z.object({
+  expectedVersion: z.number().int().positive(), clientRequestId: z.uuid(),
+  outcome: z.enum(["PROVIDED", "NOT_PROVIDED"]),
+  note: z.string().trim().min(10, "실제 제공 여부를 확인한 근거를 10자 이상 남겨 주세요.").max(450),
+}).strict();

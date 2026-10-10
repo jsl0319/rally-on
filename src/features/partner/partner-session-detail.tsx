@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCourtDetail } from "./use-court-detail";
+import { CourtFreshness } from "./court-freshness";
+import { useState } from "react";
 import { CalendarBlank, MapPin } from "@phosphor-icons/react";
 import { Modal, ModalContainer, ModalNavigation, ModalClose, ModalContent, ModalContentItem, ActionArea, ActionAreaButton } from "@wanteddev/wds";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
@@ -21,22 +23,13 @@ import { formatCourtContactPhone } from "@/matches/court-contact";
 type Detail = PublicCourtSlot & { participation: CourtMatchParticipation | null };
 
 export function PartnerSessionDetail({ slotId }: { slotId: string }) {
-  const [slot, setSlot] = useState<Detail | null>(null);
-  const [error, setError] = useState("");
+  const { data: slot, error, checkedAt, load, reload } = useCourtDetail<Detail>(
+    `/api/v1/partner-session-slots/${encodeURIComponent(slotId)}`, (s) => [s.startsAt, s.endsAt, s.participation?.judgementAt, s.participation?.applicationDeadline, s.participation?.lateConfirmationDeadline, s.participation?.application?.paymentDueAt, s.participation?.application?.confirmationDueAt]);
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [applyError, setApplyError] = useState("");
   const [noticeAccepted, setNoticeAccepted] = useState(false);
-  const load = useCallback(async () => {
-    const response = await fetch(`/api/v1/partner-session-slots/${encodeURIComponent(slotId)}`, { cache: "no-store" });
-    const body = await response.json();
-    if (!response.ok) throw new Error(apiMessage(body, "코트 매칭을 불러오지 못했어요."));
-    setSlot(body); setError("");
-  }, [slotId]);
-  const reload = useCallback(() => { void load().catch((caught) => setError(caught instanceof Error ? caught.message : "불러오지 못했어요.")); }, [load]);
-  useEffect(() => { const timer = window.setTimeout(reload, 0); return () => window.clearTimeout(timer); }, [reload]);
-
   const apply = async () => {
     if (!slot?.participation || busy || !noticeAccepted) return;
     setBusy(true); setApplyError("");
@@ -57,12 +50,13 @@ export function PartnerSessionDetail({ slotId }: { slotId: string }) {
   return <main className="min-h-svh bg-slate-50 pb-28 text-[var(--tm-text-primary)]"><article className="mx-auto max-w-[560px] bg-white">
     <div className="relative"><CourtMedia alt={`${slot.court.name} 코트 사진`} className="aspect-[7/4] w-full !rounded-none" fallbackLabel="코트 사진 준비 중" image={slot.court.image} priority /><div className="absolute left-5 top-5 grid size-11 place-items-center rounded-full bg-white/95 shadow-sm"><BackButton fallbackPath="/partner-sessions" /></div></div>
     <header className="px-5 py-6"><div className="flex flex-wrap gap-2"><MatchBadge tone={participation?.status === "OPEN" ? "blue" : "neutral"}>{slot.session?.statusLabel ?? slot.statusLabel}</MatchBadge>{slot.gameType ? <MatchBadge>{slot.gameType.label}</MatchBadge> : null}<MatchBadge tone="green">{slot.approvalMode === "AUTO" ? "선착순 자동 승인" : "운영자 승인"}</MatchBadge></div><h1 className="mt-4 break-words text-[26px] font-bold leading-snug tracking-tight">{slot.court.name}</h1><p className="mt-2 flex items-start gap-1.5 text-sm leading-6 text-slate-500"><MapPin className="mt-0.5 shrink-0" size={18} aria-hidden />{slot.court.address}</p></header>
+    <CourtFreshness checkedAt={checkedAt} error={error} reload={reload} />
     <Section title="일정과 모집"><p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold tabular-nums"><CalendarBlank size={20} className="text-slate-400" aria-hidden /><span>{date.day}</span><span>{date.time}</span></p><dl className="mt-5 space-y-4 text-sm"><Row label="코트 번호">{slot.court.courtNumber}</Row><Row label="모집 인원">최소 {slot.minParticipantCount}명 · 최대 {slot.maxParticipantCount}명</Row><Row label="남은 자리">{participation?.remainingGenderSpots ? `남 ${participation.remainingGenderSpots.male}명 · 여 ${participation.remainingGenderSpots.female}명` : `${participation?.remainingSpots ?? slot.session?.remainingSpots ?? 0}명`}</Row><Row label="참가 확정">{participation?.confirmedCount ?? 0}명</Row><Row label="게스트 참가비">{slot.guestFeeKrw.toLocaleString("ko-KR")}원</Row></dl></Section>
     {participation ? <Section title={participation.application ? "내 참가 신청" : "참가 안내"}>
       {participation.cancellationReason ? <p className="mb-4 rounded-2xl bg-rose-50 p-4 text-sm leading-6 text-rose-700">{participation.cancellationReason}</p> : null}
       {participation.application ? <CourtMatchPayment participation={participation} onRefresh={load} /> : <div className="space-y-2 text-sm leading-6 text-slate-600"><p>{slot.approvalMode === "AUTO" ? "신청하면 조건과 남은 자리를 확인해 자동 승인해요." : "운영자가 프로필과 신청 내용을 확인한 뒤 승인해요."}</p><p>승인 후 안내된 계좌로 이체하고, 운영자가 입금을 확인하면 참가가 확정돼요.</p></div>}
       <CourtCompositionNotice match={participation} />
-      {!participation.composition.enabled ? <p className="mt-5 text-xs leading-6 text-slate-500">{formatStatusChangedAt(participation.judgementAt)} 기준으로 입금 확인 인원이 {slot.minParticipantCount}명 미만이면 자동 취소돼요. 신청은 {formatStatusChangedAt(participation.applicationDeadline)}까지 가능해요.</p> : null}
+      {!participation.composition.enabled && participation.composition.phase !== "REVIEW_REQUIRED" ? <p className="mt-5 text-xs leading-6 text-slate-500">{formatStatusChangedAt(participation.judgementAt)} 기준으로 입금 확인 인원이 {slot.minParticipantCount}명 미만이면 자동 취소돼요. 신청은 {formatStatusChangedAt(participation.applicationDeadline)}까지 가능해요.</p> : null}
       {participation.chatHref ? <Button as={Link} className="mt-4" fullWidth href={participation.chatHref} variant="secondary">채팅방 열기</Button> : null}
     </Section> : null}
     <Section title="참가비 포함 항목"><CourtServiceScopeContent scope={slot.serviceScope} /></Section>

@@ -25,8 +25,16 @@ export async function GET(request: Request) {
     const prisma = getPrisma();
     // 코트 매칭 정리를 먼저 돌린다. 입금 기한 만료로 취소가 나면 그만큼 자리가
     // 풀리고, 그 결과가 아래의 시작 시각 기반 보정에도 반영돼야 한다.
-    const courtMatches = await reconcileCourtMatches(prisma);
-    const [result, conversations] = await Promise.all([reconcileStartedMatches(prisma), reconcileExpiredConversations(prisma)]);
+    const courtResult = await Promise.allSettled([reconcileCourtMatches(prisma)]);
+    const [ordinary, chat] = await Promise.allSettled([reconcileStartedMatches(prisma), reconcileExpiredConversations(prisma)]);
+    const court = courtResult[0];
+    if (court.status === "rejected" || ordinary.status === "rejected" || chat.status === "rejected"
+      || (court.status === "fulfilled" && (court.value.failed > 0 || court.value.deferred > 0))) {
+      throw new Error("LifecycleReconciliationIncomplete");
+    }
+    const courtMatches = court.value;
+    const result = ordinary.value;
+    const conversations = chat.value;
 
     console.info({ event: "cron.reconcile_started_matches.completed", durationMs: Date.now() - startedAt, ...result, conversations, courtMatches });
 
@@ -39,7 +47,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       { status: "error", message: "상태 보정 작업을 완료하지 못했어요." },
-      { status: 500 },
+      { status: 500, headers: { "Cache-Control": "no-store" } },
     );
   }
 }

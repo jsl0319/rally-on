@@ -2,7 +2,7 @@ import { lockAccountTransactions, assertActiveTransactionUser } from "./account-
 import { assertHandoffAccess } from "./court-transaction-handoff";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { z } from "zod";
-import { lockApplicationMatch, reconcileCourtMatch } from "./court-match-service";
+import { courtMatchSelect, confirmCourtMatchDepositLocked, lockApplicationMatch, reconcileCourtMatch, reconcileLockedCourtMatch } from "./court-match-service";
 import { DomainError } from "./profile-service";
 import { courtMoneySummary, courtRefundAgreementInputSchema, type courtReceiptInputSchema, type courtRefundStartInputSchema, type courtRefundResultInputSchema } from "./court-match-money";
 import type { RefundAccountInput } from "./court-match";
@@ -42,7 +42,12 @@ async function reconcile(prisma: PrismaClient, applicationId: string) {
 export async function recordCourtReceipt(prisma: PrismaClient, operator: { id: string }, applicationId: string, input: z.infer<typeof courtReceiptInputSchema>, handoff = false) {
   await reconcile(prisma, applicationId);
   return prisma.$transaction(async (tx) => {
-    const a = await readLocked(tx, applicationId); await assertOperator(tx, a, operator.id, handoff);
+    let a = await readLocked(tx, applicationId); await assertOperator(tx, a, operator.id, handoff);
+    const now = new Date();
+    // The earlier reconciliation does not cover time spent waiting for this lock.
+    const match = await tx.match.findUniqueOrThrow({ where: { id: a.match.id }, select: courtMatchSelect });
+    await reconcileLockedCourtMatch(tx, match, now);
+    a = await readLocked(tx, applicationId);
     const receivedAt = input.receivedAt ? new Date(input.receivedAt) : null;
     // 참가비 충족 시각을 별도로 기록해 이후 초과 입금이 정시 입금을 무효화하지 않게 한다.
     const feeReceivedAt = receivedAt && input.amountKrw >= (a.match.totalCourtFeeKrw ?? 0)
@@ -65,6 +70,8 @@ export async function recordCourtReceipt(prisma: PrismaClient, operator: { id: s
       amountKrw: input.amountKrw, receivedAt, feeReceivedAt, note: input.note,
     } });
     await tx.matchApplication.update({ where: { id: applicationId }, data: { receivedAmountKrw: input.amountKrw, lastReceivedAt: receivedAt, feeReceivedAt, receiptVersion: { increment: 1 } } });
+    // Handoff staff record money only; they cannot resume participant recruitment.
+    if (!handoff && a.status === "ACCEPTED") await confirmCourtMatchDepositLocked(tx, operator, applicationId, now, true);
     return { id: record.id };
   });
 }
