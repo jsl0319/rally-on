@@ -1,4 +1,4 @@
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createPrismaPg } from "../../src/server/db/prisma-adapter";
 import { PrismaClient } from "@/generated/prisma/client";
 
 import { requireE2eDatabaseUrl } from "./e2e-environment";
@@ -11,7 +11,7 @@ export const e2eUsers = {
   operator: { id: "20000000-0000-4000-8000-000000000004", nickname: "E2E운영자", gender: "MALE" },
 } as const;
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: requireE2eDatabaseUrl() }) });
+const prisma = new PrismaClient({ adapter: createPrismaPg(requireE2eDatabaseUrl()) });
 
 export type E2eFixture = {
   matchTitle: string;

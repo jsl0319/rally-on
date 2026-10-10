@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createPrismaPg } from "../src/server/db/prisma-adapter";
 import { config } from "dotenv";
 
 import { PrismaClient } from "../src/generated/prisma/client";
@@ -28,7 +28,7 @@ config();
  */
 
 const databaseUrl = getDatabaseUrl();
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+const prisma = new PrismaClient({ adapter: createPrismaPg(databaseUrl) });
 
 function usage(): never {
   console.log(`

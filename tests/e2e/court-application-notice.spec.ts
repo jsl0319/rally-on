@@ -1,11 +1,11 @@
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createPrismaPg } from "../../src/server/db/prisma-adapter";
 import { encode } from "next-auth/jwt";
 import { expect, test, type Browser } from "@playwright/test";
 import { PrismaClient } from "@/generated/prisma/client";
 import { E2E_AUTH_SECRET, E2E_BASE_URL, requireE2eDatabaseUrl } from "./e2e-environment";
 import { disconnectE2eDatabase, e2eUsers, resetE2eDatabase, type E2eFixture } from "./fixtures";
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: requireE2eDatabaseUrl() }) });
+const prisma = new PrismaClient({ adapter: createPrismaPg(requireE2eDatabaseUrl()) });
 let fixture: E2eFixture;
 test.beforeEach(async () => { fixture = await resetE2eDatabase(); });
 test.afterAll(async () => { await prisma.$disconnect(); await disconnectE2eDatabase(); });

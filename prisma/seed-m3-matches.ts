@@ -1,5 +1,5 @@
 import { config } from "dotenv";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createPrismaPg } from "../src/server/db/prisma-adapter";
 
 import { PrismaClient } from "../src/generated/prisma/client";
 import { getDatabaseUrl } from "../src/server/env";
@@ -7,7 +7,7 @@ import { getDatabaseUrl } from "../src/server/env";
 config({ path: ".env.local" });
 config();
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: getDatabaseUrl() }) });
+const prisma = new PrismaClient({ adapter: createPrismaPg(getDatabaseUrl()) });
 
 const hosts = [
   { id: "10000000-0000-4000-8000-000000000001", nickname: "랠리민지", rallyLevel: "SHORT_RALLY", gameExperience: "NONE", purposes: ["RALLY_PRACTICE"] },

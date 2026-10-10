@@ -6,7 +6,7 @@ import { assertHandoffAccess, claimCourtHandoff, cancelHandedOffCourtMatch, list
 import { updateCourtContact, createCourtSlot, updateCourtSlot, getMyCourtSlots, getPublicCourtSlot, getPublicCourtSlots, publishCourtSlot } from "@/server/domain/court-slot-service";
 import { randomUUID } from "node:crypto";
 
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createPrismaPg } from "../../src/server/db/prisma-adapter";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PrismaClient } from "@/generated/prisma/client";
@@ -41,7 +41,7 @@ import { requireE2eDatabaseUrl } from "../e2e/e2e-environment";
  */
 const databaseUrl = process.env.E2E_DATABASE_URL?.trim() ? requireE2eDatabaseUrl() : null;
 
-const newClient = () => new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl! }) });
+const newClient = () => new PrismaClient({ adapter: createPrismaPg(databaseUrl!) });
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const HOUR = 60 * 60 * 1000;
 

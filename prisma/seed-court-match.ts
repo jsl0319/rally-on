@@ -1,5 +1,5 @@
 import { config } from "dotenv";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createPrismaPg } from "../src/server/db/prisma-adapter";
 
 import { PrismaClient } from "../src/generated/prisma/client";
 import { getDatabaseUrl } from "../src/server/env";
@@ -21,7 +21,7 @@ config();
  *     이때 신청은 시드 참가자들이 이미 여러 상태로 넣어 둔다.
  */
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: getDatabaseUrl() }) });
+const prisma = new PrismaClient({ adapter: createPrismaPg(getDatabaseUrl()) });
 
 const seedOperatorId = "30000000-0000-4000-8000-000000000001";
 const applicants = [

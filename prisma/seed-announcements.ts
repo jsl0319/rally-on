@@ -1,5 +1,5 @@
 import { config } from "dotenv";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createPrismaPg } from "../src/server/db/prisma-adapter";
 
 import { PrismaClient } from "../src/generated/prisma/client";
 import { getDatabaseUrl } from "../src/server/env";
@@ -8,7 +8,7 @@ config({ path: ".env.local" });
 config();
 
 const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: getDatabaseUrl() }),
+  adapter: createPrismaPg(getDatabaseUrl()),
 });
 
 const announcements: Array<{ title: string; body: string }> = [

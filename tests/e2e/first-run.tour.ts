@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createPrismaPg } from "../../src/server/db/prisma-adapter";
 import { test, type BrowserContext, type Page } from "@playwright/test";
 import { encode } from "next-auth/jwt";
 
@@ -18,7 +18,7 @@ import { e2eUsers, resetE2eDatabase, type E2eFixture } from "./fixtures";
  */
 
 const SHOT_DIR = path.join(process.cwd(), ".claude-transfer/tour-shots");
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: requireE2eDatabaseUrl() }) });
+const prisma = new PrismaClient({ adapter: createPrismaPg(requireE2eDatabaseUrl()) });
 const newcomer = { id: "20000000-0000-4000-8000-000000000009", nickname: "새사용자" };
 
 let fixture: E2eFixture;

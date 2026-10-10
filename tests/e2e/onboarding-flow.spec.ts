@@ -1,4 +1,4 @@
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createPrismaPg } from "../../src/server/db/prisma-adapter";
 import { expect, test, type BrowserContext } from "@playwright/test";
 import { encode } from "next-auth/jwt";
 
@@ -16,7 +16,7 @@ import { resetE2eDatabase } from "./fixtures";
  */
 
 const newcomer = { id: "20000000-0000-4000-8000-000000000009", nickname: "새사용자" };
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: requireE2eDatabaseUrl() }) });
+const prisma = new PrismaClient({ adapter: createPrismaPg(requireE2eDatabaseUrl()) });
 
 async function signInAs(context: BrowserContext, userId: string) {
   const value = await encode({

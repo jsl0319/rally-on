@@ -1355,3 +1355,10 @@ Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_
 ## 코트 운영자 문의 연락처 확장 (2026-10-02)
 
 `Court`에 `operatorContactPhone`(varchar 12 nullable), `operatorContactHours`(varchar 80 nullable), `contactPublishedAt`(timestamptz nullable), `contactVersion`(int, 기본 0)을 추가한다. 기존 레코드는 NULL/0으로 유지하고 심사 정보에서 복사하지 않는다. 현재 연락처만 보관하며 공개 중단 시 세 nullable 필드를 지우고 버전을 증가시킨다. 신청 안내 스냅샷과 공개 Slot 응답에는 포함하지 않는다. 신청 상태·입금 대조·환불 기록을 기준으로 조회할 때 공개 권한을 계산한다. [03-15](03-15-court-operator-contact.md).
+
+
+## 금융 대조·보존 기록 확장 (2026-10-10)
+
+`CourtFinancialReview`는 `MatchApplication`별 추가 전용 이력이다. `applicationId`, `actorUserId`, `clientRequestId`, `action(RECONCILE/HOLD/RELEASE_HOLD)`, `requestFingerprint`, `stateFingerprint`, `scopes`, `reason`, `caseReference`, `reviewDueAt`, `releasesReviewId`, `createdAt`을 저장한다. 신청과 처리자는 삭제 제한 외래키, `(applicationId, clientRequestId)`와 `releasesReviewId`는 유일하다. DB CHECK로 동작별 필수/금지 필드를 제한한다.
+
+보존 범위는 `DEPOSITOR_NAME`, `REFUND_ACCOUNT`, `REFUND_ATTEMPTS`, `MATCH_ACCOUNT`. 해제는 같은 신청의 유효한 보존 기록 하나를 참조하도록 서버에서 검증한다. 계좌·이름·문의 원문은 스냅샷으로 복사하지 않는다. 실제 원문 삭제나 법정 보존 검토 완료 컬럼은 추가하지 않는다. 상세 기준은 [03-20](03-20-financial-reconciliation-records.md).

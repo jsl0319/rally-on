@@ -1,4 +1,4 @@
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createPrismaPg } from "./prisma-adapter";
 
 import { PrismaClient } from "@/generated/prisma/client";
 import { getDatabaseUrl } from "@/server/env";
@@ -8,7 +8,7 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient(): PrismaClient {
-  const adapter = new PrismaPg({ connectionString: getDatabaseUrl() });
+  const adapter = createPrismaPg(getDatabaseUrl());
   return new PrismaClient({ adapter });
 }
 

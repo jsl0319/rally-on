@@ -1,12 +1,12 @@
 import { config } from "dotenv";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createPrismaPg } from "../src/server/db/prisma-adapter";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { getDatabaseUrl } from "../src/server/env";
 import { matchCreateInputSchema } from "../src/server/domain/match";
 
 config({ path: ".env.local", quiet: true });
 config({ quiet: true });
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: getDatabaseUrl() }) });
+const prisma = new PrismaClient({ adapter: createPrismaPg(getDatabaseUrl()) });
 const fixtures = [
   { name: "[테스트] 한강 블루 테니스장", address: "서울 마포구 월드컵로 25", gameType: "OTHER", male: null, female: null, count: 3, time: "10:00", end: "12:00", fee: 12000, purposes: ["RALLY_PRACTICE", "GAME_INTRO"], level: "COMFORTABLE_RALLY", game: "PLAYED_FEW", gender: "MALE", welcome: true, intro: "천천히 랠리하고 게임 규칙도 함께 익혀요." },
   { name: "[테스트] 서울숲 테니스코트", address: "서울 성동구 살곶이길 200", gameType: "MIXED_DOUBLES", male: 1, female: 2, count: 3, time: "18:30", end: "20:30", fee: 15000, purposes: ["GAME_INTRO", "GAME"], level: "SHORT_RALLY", game: "KNOWS_RULES", gender: "FEMALE", welcome: true, intro: "혼합 복식을 처음 해보는 분도 환영해요. 점수는 천천히 함께 세요." },

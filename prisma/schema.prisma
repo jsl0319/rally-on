@@ -313,6 +313,7 @@ model User {
   courtReceiptRecords                CourtReceiptRecord[]
   courtRefundAttempts                CourtRefundAttempt[]
   courtRefundEvents                  CourtRefundEvent[]
+  financialReviews                   CourtFinancialReview[]
   assignedCourtHandoffs CourtTransactionHandoff[] @relation("CourtHandoffAssignee")
   courtHandoffEvents CourtTransactionHandoffEvent[]
   courtCompositionCancellations CourtMatchCompositionCancellation[]
@@ -556,6 +557,7 @@ model Match {
   supplyNoticeRecipients MatchSupplyNoticeRecipient[]
   conversation MatchConversation?
   supportInquiries SupportInquiry[]
+
   transactionHandoff CourtTransactionHandoff?
   compositionCancellation CourtMatchCompositionCancellation?
 
@@ -665,12 +667,50 @@ model MatchApplication {
   receiptRecords   CourtReceiptRecord[]
   refundAttempts   CourtRefundAttempt[]
   supportInquiries SupportInquiry[]
+  financialReviews CourtFinancialReview[]
 
   @@unique([matchId, applicantUserId])
   @@unique([matchId, depositCode])
   @@index([matchId, status, createdAt])
   @@index([applicantUserId, status, createdAt(sort: Desc)])
   @@map("match_applications")
+}
+
+enum CourtFinancialReviewAction {
+  RECONCILE
+  HOLD
+  RELEASE_HOLD
+}
+
+enum CourtFinancialDataScope {
+  DEPOSITOR_NAME
+  REFUND_ACCOUNT
+  REFUND_ATTEMPTS
+  MATCH_ACCOUNT
+}
+
+model CourtFinancialReview {
+  id String @id @default(uuid()) @db.Uuid
+  applicationId String @map("application_id") @db.Uuid
+  actorUserId String @map("actor_user_id") @db.Uuid
+  clientRequestId String @map("client_request_id") @db.Uuid
+  action CourtFinancialReviewAction
+  requestFingerprint String @map("request_fingerprint") @db.VarChar(64)
+  stateFingerprint String @map("state_fingerprint") @db.VarChar(64)
+  scopes CourtFinancialDataScope[]
+  reason String? @db.VarChar(500)
+  caseReference String? @map("case_reference") @db.VarChar(100)
+  reviewDueAt DateTime? @map("review_due_at") @db.Timestamptz(6)
+  releasesReviewId String? @unique @map("releases_review_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  application MatchApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  releasesReview CourtFinancialReview? @relation("FinancialHoldRelease", fields: [releasesReviewId], references: [id], onDelete: Restrict)
+  release CourtFinancialReview? @relation("FinancialHoldRelease")
+
+  @@unique([applicationId, clientRequestId])
+  @@index([applicationId, createdAt])
+  @@map("court_financial_reviews")
 }
 
 model CourtReceiptRecord {

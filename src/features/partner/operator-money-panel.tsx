@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { CourtFinancialReviewPanel } from "./court-financial-review-panel";
 import { CourtApplicationNoticeRecord } from "./court-application-notice";
 import { Button } from "@/components/ui/button";
 import type { OperatorCourtMatch } from "@/server/domain/court-match-view";
@@ -60,6 +61,7 @@ export function OperatorMoneyPanel({ application: a, refresh, endpoint = "/api/v
       {a.refundAccount ? <><p>{a.refundAccount.bank} · {a.refundAccount.accountHolder}</p><p className="my-2 break-all font-semibold">{a.refundAccount.accountNumber}</p><Button fullWidth size="medium" disabled={busy || a.money.needsReview} onClick={() => void mutate("refund/start", { amountKrw: a.money.availableKrw, accountVersion: a.refundAccountVersion })}>환불 처리 시작 · {won(a.money.availableKrw)}</Button><p className="mt-2 text-xs leading-5">시작 후 표시되는 고정 계좌로 송금해 주세요. 시작 버튼은 돈을 보내지 않아요.</p></> : <p>참가자의 환불 계좌 입력을 기다리고 있어요.</p>}
     </div> : null}
     {a.refundAttempts.map((r) => <RefundResult key={r.id} attempt={r} busy={busy} mutate={mutate} />)}
+    <CourtFinancialReviewPanel key={JSON.stringify([a.receiptVersion, a.refundAccountVersion, a.status, a.refundAttempts.map((r) => [r.id, r.version])])} applicationId={a.id} endpoint={endpoint} />
     {error ? <p className="mt-3 text-rose-700" role="alert">{error}</p> : null}
   </div>;
 }

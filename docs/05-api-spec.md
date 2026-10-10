@@ -1941,3 +1941,18 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 `GET /api/v1/partner-session-slots/{slotId}`의 `participation.operatorContact`는 조회자 본인의 신청과 공개 기간·거래 상태·운영자 활동 상태가 충족된 경우에만 `{ phone, hours, telHref }`, 나머지는 null이다. 전화번호가 포함된 응답에는 `Cache-Control: no-store`를 적용한다. 일반 공개 목록·Slot view·신청 안내에는 번호를 넣지 않는다. 기존 문의 API·단체 채팅 권한은 그대로 유지한다. [03-15](03-15-court-operator-contact.md)의 확정 기준을 따른다.
 
 탈퇴·정지 후 본인의 거래를 조회하는 `GET /api/v1/me/transactions`도 각 항목의 `operatorContact`에 동일한 공개 기준과 no-store를 적용한다. 운영자 본인 거래에는 참가자 전화 문의 정보를 추가하지 않으며 일반 상세·채팅 권한은 재개하지 않는다.
+
+
+## 금융 대조·보존 기록 API (2026-10-10)
+
+- `GET/POST /api/v1/court-match-applications/{applicationId}/financial-review`: 해당 코트 운영자.
+- `GET/POST /api/internal/court-handoff-applications/{applicationId}/financial-review`: 운영자가 비활성일 때 배정된 내부 담당자.
+- 양쪽 모두 활성 계정과 기존 금융 업무 권한을 확인한다. 본인 신청 검토는 불가하며 성공·실패 응답 모두 `Cache-Control: private, no-store`다.
+- GET: `expectedFingerprint`, `canReconcile`, `blockers`, `reconciliation: {createdAt,current}|null`, 활성 `holds`, `history` 반환. 원문 계좌·입금자명은 반환하지 않는다.
+- POST 공통 필수: UUID `clientRequestId`, GET의 `expectedFingerprint`(64자리 hex). 성공 `{id}`.
+- `action: RECONCILE`: `bankChecked: true` 필수. 실제 수령 기록과 모든 입금·반환·문의 종료 조건을 서버에서 재검증한다.
+- `action: HOLD`: 중복 없는 `scopes` 1~4개, `reason` 10~500자, `caseReference` 2~100자, 미래 `reviewDueAt`(offset 포함 ISO) 필수.
+- `action: RELEASE_HOLD`: 같은 신청의 활성 보존 기록 `holdId`와 `reason` 10~500자 필수.
+- 미인증 401, 권한 없음 403, 대상 없음 404, 형식 오류 422, 상태·지문·요청 충돌 409 `FINANCIAL_REVIEW_CONFLICT`. 같은 요청의 정확한 재전송은 최초 결과를 반환하되 현재 권한을 다시 확인한다.
+
+보존 기한 경과·해제는 개인정보 삭제를 실행하지 않는다. 동시성·보존 범위와 실제 파기 전 남은 조건은 [03-20](03-20-financial-reconciliation-records.md)을 따른다.
