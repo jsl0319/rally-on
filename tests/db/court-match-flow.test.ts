@@ -7,7 +7,7 @@ import { updateCourtContact, createCourtSlot, updateCourtSlot, getMyCourtSlots, 
 import { randomUUID } from "node:crypto";
 
 import { createPrismaPg } from "../../src/server/db/prisma-adapter";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PrismaClient } from "@/generated/prisma/client";
 import { getApplicationDeadline, getJudgementAt, getRefundAmountKrw, getRefundPercent } from "@/server/domain/court-match";
@@ -46,9 +46,10 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const HOUR = 60 * 60 * 1000;
 
 describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
-  const prisma = newClient();
+  let prisma: PrismaClient;
 
-  afterAll(async () => { await prisma.$disconnect(); });
+  beforeAll(() => { prisma = newClient(); });
+  afterAll(async () => { await prisma?.$disconnect(); });
 
   beforeEach(async () => {
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "users", "regions" RESTART IDENTITY CASCADE');

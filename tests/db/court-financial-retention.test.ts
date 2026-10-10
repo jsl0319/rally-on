@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createPrismaPg } from "../../src/server/db/prisma-adapter";
 import { Client } from "pg";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PrismaClient, type Prisma } from "@/generated/prisma/client";
 import { auditCourtFinancialRetention } from "@/server/domain/court-financial-retention-audit";
 import { getCourtFinancialReview, recordCourtFinancialReview } from "@/server/domain/court-financial-review-service";
@@ -11,12 +11,13 @@ import { requireE2eDatabaseUrl } from "../e2e/e2e-environment";
 const databaseUrl = process.env.E2E_DATABASE_URL?.trim() ? requireE2eDatabaseUrl() : null;
 
 describe.skipIf(!databaseUrl)("금융 원문 점검 · 실제 DB", () => {
-  const prisma = new PrismaClient({ adapter: createPrismaPg(databaseUrl!) });
+  let prisma: PrismaClient;
   let operatorId: string;
   let unitId: string;
   let sequence = 0;
 
-  afterAll(async () => { await prisma.$disconnect(); });
+  beforeAll(() => { prisma = new PrismaClient({ adapter: createPrismaPg(databaseUrl!) }); });
+  afterAll(async () => { await prisma?.$disconnect(); });
   beforeEach(async () => {
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "users", "regions" RESTART IDENTITY CASCADE');
     sequence = 0;

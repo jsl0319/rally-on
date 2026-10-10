@@ -1,5 +1,5 @@
 import { createPrismaPg } from "../../src/server/db/prisma-adapter";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { PrismaClient } from "@/generated/prisma/client";
 import {
@@ -29,9 +29,10 @@ const databaseUrl = process.env.E2E_DATABASE_URL?.trim() ? requireE2eDatabaseUrl
 const HOUR = 60 * 60 * 1000;
 
 describe.skipIf(!databaseUrl)("일반 매칭 · 실제 DB", () => {
-  const prisma = new PrismaClient({ adapter: createPrismaPg(databaseUrl!) });
+  let prisma: PrismaClient;
 
-  afterAll(async () => { await prisma.$disconnect(); });
+  beforeAll(() => { prisma = new PrismaClient({ adapter: createPrismaPg(databaseUrl!) }); });
+  afterAll(async () => { await prisma?.$disconnect(); });
 
   beforeEach(async () => {
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "users", "regions" RESTART IDENTITY CASCADE');
