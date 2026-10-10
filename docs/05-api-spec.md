@@ -1250,7 +1250,7 @@ POST /api/v1/applications/{applicationId}/withdraw
 - `EXPIRED` 전환 시 `PENDING` Application을 `CANCELLED`로 바꾼다.
 - 정원 충족, 조기 마감 또는 수락자가 있는 Match의 시작 시각 도달 시 남은 `PENDING` Application을 `CANCELLED`로 바꾼다.
 - 자동 전환 작업이 반복 실행되어도 결과가 달라지지 않아야 한다.
-- 상태 전이는 일반 Match 조회·변경 요청의 트랜잭션 보정과 production 전용 내부 Cron endpoint(`/api/cron/reconcile-matches`)가 같은 도메인 함수를 호출한다. Cron은 `CRON_SECRET` Bearer 인증이 없으면 실행하지 않는다.
+- 상태 전이는 일반 Match 조회·변경 요청의 트랜잭션 보정과 production 전용 내부 Cron endpoint(`/api/cron/reconcile-matches`)가 같은 도메인 함수를 호출한다. 이 endpoint는 기존 Vercel용 `CRON_SECRET` 또는 외부 예약 실행 전용 `RECONCILE_CRON_SECRET`의 Bearer 인증이 있어야 실행한다. 전용 키는 다른 정리 endpoint에 적용하지 않는다. HTTP 200의 `status: ok`만 전체 작업 성공이며, 부분 처리 후 실패하면 다음 실행에서 미완료 상태를 다시 판정한다. [실행 주기·검증·실패 대응](03-23-free-cron-operations.md)을 따른다.
 
 ### 16.3 응답 일관성
 

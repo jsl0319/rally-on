@@ -8,7 +8,7 @@ export default defineConfig({
     projects: [
       {
         resolve: { alias },
-        test: { name: "unit", environment: "node", include: ["src/**/*.test.ts"] },
+        test: { name: "unit", environment: "node", include: ["src/**/*.test.ts", "ops/**/*.test.ts"] },
       },
       {
         resolve: { alias },

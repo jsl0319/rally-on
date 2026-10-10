@@ -254,7 +254,8 @@ docker compose stop
 | `AUTH_KAKAO_ID` | 카카오 REST API 키 |
 | `AUTH_KAKAO_SECRET` | 카카오 Client Secret |
 | `KAKAO_REST_API_KEY` | 카카오맵 장소 검색용 서버 전용 REST API 키(선택). 기본적으로 `AUTH_KAKAO_ID`를 재사용하며, 다른 카카오 앱 키를 쓸 때만 설정 |
-| `CRON_SECRET` | 운영 매칭 상태 보정 Cron의 요청 인증 비밀값 |
+| `CRON_SECRET` | 기존 Vercel 일일 Cron 인증 비밀값 |
+| `RECONCILE_CRON_SECRET` | Cloudflare 상태 보정 전용 비밀값. 다른 정리 API에는 사용할 수 없음 |
 | `APP_BASE_URL` | 로컬 애플리케이션 기준 URL |
 | `E2E_DATABASE_URL` | Playwright 전용 PostgreSQL 연결 문자열. DB 이름에 `e2e` 필수 |
 
@@ -263,15 +264,15 @@ docker compose stop
 
 ### 코트 매칭 자동 처리
 
-**2026-09-09 사용자 결정: 크론 작업 보류. 명시적인 재개 요청 전까지 진행하지 않습니다.**
-`/api/cron/reconcile-matches`는 `vercel.json`의 기존 일일 실행 설정을 유지합니다.
-입금 기한 만료, 시작 3시간 전 최소 인원 미달 취소, 시작 30분 전 신청 마감을 처리합니다.
-상세 조회와 참가 관련 요청에서도 동일한 판정을 수행하지만, 접속자가 없을 때에도
-제시간에 알림을 보내는 예약 실행은 아직 미완료입니다. 로컬·미리보기 서버에서는
-Vercel Cron이 자동 실행되지 않습니다.
-
-Vercel의 매분 실행 설정·Pro 전환·Cloudflare 등 외부 스케줄러 연동은 보류합니다.
-재개할 때 실행 수단과 `CRON_SECRET`, 무접속 상태의 실제 취소·알림 시각을 검증합니다.
+**2026-10-10 사용자 결정: 보류를 해제하고 무료 크론을 도입합니다.**
+Cloudflare Worker(`ops/cron`)가 전용 키로 `/api/cron/reconcile-matches`를 호출하는
+15분 주기 구성을 사용합니다. 실제 활성화·검증 상태와 재실행/중지 절차는
+[무료 크론 운영 문서](docs/03-23-free-cron-operations.md)를 따릅니다.
+입금 확인 기한 만료, 시작 3시간 전 최소 구성 미달 취소, 시작 90분 전 신청 마감,
+일반 매칭 시작 시 마감과 채팅 종료를 기존 도메인 규칙으로 처리합니다.
+크론은 기한 자체를 연장하지 않으며, 무접속 상태의 처리·알림은 다음 실행까지 늦어질 수 있습니다.
+상세 조회·참가 관련 요청의 즉시 판정과 Vercel의 기존 일일 작업도 유지합니다.
+로컬·미리보기 서버에는 운영 예약 실행을 연결하지 않습니다.
 
 ## 저장소에 포함하지 않는 파일
 

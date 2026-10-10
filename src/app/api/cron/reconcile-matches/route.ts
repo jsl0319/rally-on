@@ -6,10 +6,13 @@ import { reconcileStartedMatches } from "@/server/domain/match-service";
 import { reconcileExpiredConversations } from "@/server/domain/match-chat-service";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 function hasValidCronSecret(request: Request) {
-  const cronSecret = process.env.CRON_SECRET;
-  return Boolean(cronSecret) && request.headers.get("authorization") === `Bearer ${cronSecret}`;
+  const authorization = request.headers.get("authorization");
+  // 외부 스케줄러에는 다른 정리 API를 실행할 수 없는 전용 키만 전달한다.
+  return [process.env.CRON_SECRET, process.env.RECONCILE_CRON_SECRET]
+    .some((secret) => Boolean(secret?.trim()) && authorization === `Bearer ${secret}`);
 }
 
 export async function GET(request: Request) {
@@ -17,6 +20,7 @@ export async function GET(request: Request) {
     return new NextResponse(null, { status: 401 });
   }
 
+  const startedAt = Date.now();
   try {
     const prisma = getPrisma();
     // 코트 매칭 정리를 먼저 돌린다. 입금 기한 만료로 취소가 나면 그만큼 자리가
@@ -24,9 +28,9 @@ export async function GET(request: Request) {
     const courtMatches = await reconcileCourtMatches(prisma);
     const [result, conversations] = await Promise.all([reconcileStartedMatches(prisma), reconcileExpiredConversations(prisma)]);
 
-    console.info({ event: "cron.reconcile_started_matches.completed", ...result, conversations, courtMatches });
+    console.info({ event: "cron.reconcile_started_matches.completed", durationMs: Date.now() - startedAt, ...result, conversations, courtMatches });
 
-    return NextResponse.json({ status: "ok", ...result, conversations, courtMatches });
+    return NextResponse.json({ status: "ok", ...result, conversations, courtMatches }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error({
       event: "cron.reconcile_started_matches.failed",

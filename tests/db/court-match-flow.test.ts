@@ -21,6 +21,7 @@ import {
   confirmCourtMatchDeposit,
   decideCourtMatchApplication,
   reconcileCourtMatch,
+  reconcileCourtMatches,
 } from "@/server/domain/court-match-service";
 import { recordCourtRefundAgreement, recordCourtReceipt, startCourtRefund, completeCourtMatchRefund, submitCourtMatchRefundAccount } from "@/server/domain/court-match-money-service";
 import { actOnSupportInquiry, listSupportQueue } from "@/server/domain/support-service";
@@ -169,6 +170,31 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
   }
 
   const errorCode = (caught: unknown) => (caught as { code?: string }).code;
+
+  it("무접속 상태의 크론 배치가 겹쳐도 만료·미달 취소·알림을 한 번만 처리한다", async () => {
+    const operator = await makeUser("크론 운영자", "MALE");
+    const confirmed = await makeUser("확정 참가자", "FEMALE");
+    const unpaid = await makeUser("미입금 참가자", "MALE");
+    const { matchId, startsAt } = await makeCourtMatch(operator.id, { startsAt: new Date(Date.now() + 5 * HOUR), compositionPolicyVersion: 1 });
+    const first = await applyToCourtMatch(prisma, confirmed.viewer, matchId);
+    const second = await applyToCourtMatch(prisma, unpaid.viewer, matchId);
+    await receiveAndConfirm(operator, first.id);
+    // 이후에는 이용자의 상세 조회/신청 요청 없이 예약 실행만 발생한다.
+    const tick = new Date(getJudgementAt(startsAt).getTime() + 60_000);
+    await prisma.matchApplication.update({ where: { id: second.id }, data: { paymentDueAt: new Date(tick.getTime() - 60_000) } });
+    const results = await Promise.all([reconcileCourtMatches(prisma, tick), reconcileCourtMatches(prisma, tick)]);
+    expect(results.reduce((n, r) => n + r.cancelled, 0)).toBe(1);
+    expect(results.reduce((n, r) => n + r.expired, 0)).toBe(1);
+    expect(await prisma.match.findUnique({ where: { id: matchId } })).toMatchObject({ status: "CANCELLED" });
+    expect(await prisma.matchApplication.findUnique({ where: { id: first.id } })).toMatchObject({ status: "CANCELLED", receivedAmountKrw: 36000 });
+    const notifications = await prisma.notification.count();
+    expect(await prisma.notification.count({ where: { type: "COURT_MATCH_DEPOSIT_EXPIRED" } })).toBe(1);
+    expect(await prisma.notification.count({ where: { type: "COURT_MATCH_CANCELLED" } })).toBe(2);
+    await reconcileCourtMatches(prisma, new Date(tick.getTime() + 15 * 60_000));
+    expect(await prisma.notification.count()).toBe(notifications);
+    const participation = await getCourtMatchParticipation(prisma, confirmed.viewer, matchId);
+    expect(participation.application).toMatchObject({ money: { availableKrw: 36000 } });
+  });
 
   async function agreementFixture() {
     const op = await makeUser("합의 운영자", "MALE");

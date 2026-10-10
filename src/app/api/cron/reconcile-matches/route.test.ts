@@ -16,10 +16,30 @@ import { GET } from "./route";
 
 describe("match lifecycle cron endpoint", () => {
   beforeEach(() => {
+    vi.stubEnv("CRON_SECRET", "");
+    vi.stubEnv("RECONCILE_CRON_SECRET", "");
     getPrisma.mockReset();
     reconcileStartedMatches.mockReset();
     reconcileExpiredConversations.mockReset();
     reconcileCourtMatches.mockReset().mockResolvedValue({ checked: 2, expired: 1, cancelled: 0 });
+  });
+
+  it.each(["", "Bearer undefined", "Bearer ", "Bearer wrong", "test-scoped-secret"])("rejects invalid credentials (%s) before database access", async (authorization) => {
+    vi.stubEnv("RECONCILE_CRON_SECRET", "test-scoped-secret");
+    const response = await GET(new Request("http://localhost/api/cron/reconcile-matches", { headers: { authorization } }));
+    expect(response.status).toBe(401);
+    expect(getPrisma).not.toHaveBeenCalled();
+  });
+
+  it("accepts the dedicated scheduler key without enabling other cron credentials", async () => {
+    vi.stubEnv("RECONCILE_CRON_SECRET", "test-scoped-secret");
+    getPrisma.mockReturnValue({ match: {} });
+    reconcileStartedMatches.mockResolvedValue({ checked: 0, closed: 0, expired: 0 });
+    reconcileExpiredConversations.mockResolvedValue({ checked: 0, readOnly: 0 });
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const response = await GET(new Request("http://localhost/api/cron/reconcile-matches", { headers: { authorization: "Bearer test-scoped-secret" } }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
   afterEach(() => {

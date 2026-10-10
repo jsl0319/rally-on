@@ -38,6 +38,8 @@ yarn-error.log*
 
 # vercel
 .vercel
+.wrangler/
+.dev.vars*
 
 # local integrations and agent tooling
 .agents/
