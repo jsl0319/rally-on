@@ -5,6 +5,7 @@ import { DateCalendar, Modal, ModalClose, ModalContainer, ModalContent, ModalCon
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 
+import { Brand } from "@/components/ui/brand";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { Button } from "@/components/ui/button";
@@ -156,23 +157,12 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
 
   return (
     <main className="min-h-svh bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
-      <header className="sticky top-0 z-20 border-b border-[var(--tm-border-default)] bg-[var(--tm-bg-page)] backdrop-blur">
-        <div className="mx-auto max-w-[560px] px-5 pb-4 pt-8">
-          <p className="text-sm font-semibold text-[var(--tm-action-primary)]">Rally On</p>
-          <h1 className="mt-3 text-2xl font-bold leading-snug">{me?.nickname}님, 오늘도<br />부담 없이 테니스해요.</h1>
-        </div>
+      <header className="border-b border-[var(--tm-border-default)] bg-white">
+        <div className="mx-auto max-w-[560px] px-5 pb-6 pt-6"><div className="flex items-center justify-between"><Brand /><Link className="inline-flex min-h-11 items-center rounded-full bg-[var(--tm-bg-subtle)] px-4 text-xs font-semibold text-[var(--tm-action-primary)]" href="/activity/received">내 매칭</Link></div><p className="mt-5 text-sm text-[var(--tm-text-secondary)]">{me?.nickname}님, 코트에서 만나요.</p><h1 className="mt-1 text-[28px] font-bold leading-tight tracking-tight">함께할 메이트 찾기</h1></div>
       </header>
-
-      <section className="mx-auto max-w-[560px] px-5 pt-6">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-xl font-bold">매칭 둘러보기</h2>
-          {/* 만든 매칭이 지금 어떤 상태인지 보러 가는 길이 마이 안쪽에만 있었다. */}
-          <Link className="shrink-0 text-sm font-semibold text-[var(--tm-action-primary)]" href="/activity/received">내가 만든 매칭 →</Link>
-        </div>
-        <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">조건에 맞는 매칭을 찾아보세요.</p>
-        <Link className="mt-4 flex min-h-12 items-center justify-between rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 text-sm font-semibold text-[var(--tm-action-primary)]" href="/partner-sessions"><span>코트 걱정 없이 함께 테니스해요</span><span aria-hidden>→</span></Link>
-
-        <div className="mt-5 flex items-center gap-2">
+      <section className="mx-auto max-w-[560px] px-5 pt-5">
+        <Link className="flex min-h-14 items-center justify-between gap-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm text-[var(--tm-action-primary)]" href="/partner-sessions"><span>코트 예약이 어렵다면 <strong>코트 매칭</strong></span><span aria-hidden>↗</span></Link>
+        <div className="mt-5 flex flex-wrap items-center gap-2">
           <FilterChip active={date !== null} icon={<CalendarBlank aria-hidden size={15} weight="bold" />} label={dateLabel(date)} onClick={() => setIsDateOpen(true)} />
           <FilterChip active={gameType !== null} icon={<Funnel aria-hidden size={15} weight="bold" />} label={gameTypeLabel(gameType)} onClick={() => setIsFilterOpen(true)} />
           <FilterChip active={sort !== "recommended"} label={sortLabel(sort)} onClick={() => setIsSortOpen(true)} />
@@ -181,7 +171,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
         {listStatus === "loading" ? (
           <CourtRallyLoader className="mt-4" label="매칭을 불러오고 있어요." />
         ) : listStatus === "error" ? (
-          <div className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-6"><p className="font-bold">매칭을 불러오지 못했어요.</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{listError}</p><Button className="mt-4" onClick={() => void loadMatches()} variant="neutral">다시 시도</Button></div>
+          <div className="mt-4 rounded-[20px] bg-[var(--tm-bg-subtle)] p-6"><p className="font-bold">매칭을 불러오지 못했어요.</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{listError}</p><Button className="mt-4" onClick={() => void loadMatches()} variant="neutral">다시 시도</Button></div>
         ) : matches.length > 0 ? (
           <div className="mt-4 grid gap-4">{matches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
         ) : hasFilter ? (
@@ -191,7 +181,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
         )}
       </section>
 
-      <Link aria-label="매칭 만들기" className="fixed bottom-24 right-5 z-30 inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[var(--tm-action-primary)] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(49,94,158,0.26)] transition-transform active:scale-95" href="/matches/new">
+      <Link aria-label="매칭 만들기" className="fixed bottom-24 right-[max(20px,calc((100vw-520px)/2))] z-30 inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[var(--tm-action-primary)] px-5 text-sm font-semibold text-white shadow-[0_6px_20px_#174c3c26] transition-transform active:scale-95" href="/matches/new">
         <span aria-hidden="true" className="text-lg leading-none text-[var(--tm-tennis-ball)]">+</span>
         매칭 만들기
       </Link>
@@ -308,7 +298,7 @@ function SheetOptionRow({ label, onClick, selected }: { label: string; onClick: 
 }
 
 function EmptyFilteredState({ onReset }: { onReset: () => void }) {
-  return <div className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-5"><p className="font-bold">조건에 맞는 매칭이 아직 없어요.</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">필터를 초기화하면 더 많은 매칭을 볼 수 있어요.</p><button className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)] underline" onClick={onReset} type="button">필터 초기화</button></div>;
+  return <div className="mt-4 rounded-[20px] bg-[var(--tm-bg-subtle)] p-5"><p className="font-bold">조건에 맞는 매칭이 아직 없어요.</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">필터를 초기화하면 더 많은 매칭을 볼 수 있어요.</p><button className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)] underline" onClick={onReset} type="button">필터 초기화</button></div>;
 }
 
 /**
@@ -340,7 +330,7 @@ function EmptyMatchState() {
   }, []);
 
   if (openCourtMatches !== null && openCourtMatches > 0) {
-    return <div className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-6">
+    return <div className="mt-4 rounded-[20px] bg-[var(--tm-bg-subtle)] p-6">
       <p className="font-bold">직접 예약한 코트로 열린 매칭은 아직 없어요.</p>
       <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">대신 코트 매칭에 <strong className="font-semibold text-[var(--tm-text-primary)]">{openCourtMatches}개</strong>가 열려 있어요. 코트는 운영자가 준비해 두어서 장소 걱정 없이 참가할 수 있어요.</p>
       <Button as={Link} className="mt-4" fullWidth href="/partner-sessions" size="medium">코트 매칭 보기</Button>
@@ -348,9 +338,9 @@ function EmptyMatchState() {
     </div>;
   }
 
-  return <div className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-6">
+  return <div className="mt-4 rounded-[20px] bg-[var(--tm-bg-subtle)] p-6">
     <p className="font-bold">아직 열린 매칭이 없어요.</p>
-    <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">첫 매칭을 열면 함께 칠 메이트가 신청할 수 있어요. 코트를 아직 예약하지 않았어도 일정과 지역만으로 시작할 수 있어요.</p>
+    <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">예약한 코트에서 함께 칠 메이트를 모집해 보세요. 코트가 필요하면 코트 매칭을 이용해 주세요.</p>
     <Button as={Link} className="mt-4" fullWidth href="/matches/new" size="medium">매칭 만들기</Button>
   </div>;
 }

@@ -1,9 +1,10 @@
 "use client";
 
+import { PageHeader } from "@/components/ui/page-header";
+
 import { useCallback, useEffect, useState } from "react";
 import { Megaphone } from "@phosphor-icons/react";
 
-import { BackButton } from "@/components/navigation/back-button";
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 
@@ -41,11 +42,10 @@ export function MAnnouncements() {
 
   return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-10 pt-6 text-[var(--tm-text-primary)]">
     <div className="mx-auto max-w-[560px]">
-      <BackButton ariaLabel="마이로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/my" />
-      <h1 className="mt-4 text-2xl font-bold">공지사항</h1>
+      <PageHeader backHref="/my" title="공지사항" />
 
-      {items === null ? error ? <section className="mt-8 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5"><p className="text-sm leading-6">{error}</p><Button className="mt-4" onClick={() => void load()} size="medium">다시 불러오기</Button></section> : <CourtRallyLoader className="mt-8" label="공지사항을 불러오고 있어요." /> : items.length === 0 ? <section className="mt-10 rounded-3xl border border-dashed border-[var(--tm-border-strong)] bg-white px-5 py-10 text-center"><Megaphone aria-hidden="true" className="mx-auto size-8 text-[var(--tm-text-muted)]" /><h2 className="mt-4 font-bold">아직 공지사항이 없어요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">새로운 소식이 있으면 이곳에 올려드릴게요.</p></section> : <ul className="mt-4 space-y-3">
-        {items.map((item) => <li className="rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)]" key={item.id}>
+      {items === null ? error ? <section className="mt-8 rally-card p-5"><p className="text-sm leading-6">{error}</p><Button className="mt-4" onClick={() => void load()} size="medium">다시 불러오기</Button></section> : <CourtRallyLoader className="mt-8" label="공지사항을 불러오고 있어요." /> : items.length === 0 ? <section className="mt-10 rounded-[20px] border border-dashed border-[var(--tm-border-strong)] bg-white px-5 py-10 text-center"><Megaphone aria-hidden="true" className="mx-auto size-8 text-[var(--tm-text-muted)]" /><h2 className="mt-4 font-bold">아직 공지사항이 없어요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">새로운 소식이 있으면 이곳에 올려드릴게요.</p></section> : <ul className="mt-4 space-y-3">
+        {items.map((item) => <li className="rally-card p-5" key={item.id}>
           <p className="text-xs text-[var(--tm-text-muted)]">{formatDate(item.publishedAt)}</p>
           <h2 className="mt-1 font-bold">{item.title}</h2>
           <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[var(--tm-text-secondary)]">{item.body}</p>

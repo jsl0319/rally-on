@@ -6,7 +6,7 @@ export function CourtCompositionNotice({ match, operator = false }: { match: Pic
   if (c.phase === "REVIEW_REQUIRED") return <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-900" role="status"><p className="font-bold">실제 진행 여부 확인 필요</p><p className="mt-2">시작 전 진행 판정이 완료되지 않았어요. 자동으로 취소하거나 진행 확정으로 표시하지 않아요. {operator ? "참가자와 실제 제공 여부를 확인하고 아래에 결과를 기록해 주세요." : "이 화면만으로 이동·참가 여부를 판단하지 말고 운영자에게 확인해 주세요."}</p></div>;
   if (!c.enabled || c.phase === "CANCELLED") return null;
   const needsAction = c.phase === "ACTION_REQUIRED";
-  return <div className={`mt-4 rounded-2xl p-4 text-sm leading-6 ${needsAction ? "bg-amber-50 text-amber-900" : "bg-slate-50 text-slate-600"}`} role={needsAction ? "status" : undefined}>
+  return <div className={`mt-4 rounded-2xl p-4 text-sm leading-6 ${needsAction ? "bg-amber-50 text-amber-900" : "bg-[var(--tm-bg-subtle-muted)] text-[var(--tm-text-muted)]"}`} role={needsAction ? "status" : undefined}>
     <p className="font-bold">{needsAction ? "운영자 조치 필요" : c.phase === "PASSED" ? "진행 판정 통과" : "진행 조건"}</p>
     <p className="mt-1">{c.requirementLabel}</p>
     <p className="mt-1 tabular-nums">현재 확정 {c.counts.total}명 · 남 {c.counts.male}명 · 여 {c.counts.female}명</p>

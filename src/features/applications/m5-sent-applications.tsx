@@ -1,12 +1,14 @@
 "use client";
 
+import { PageHeader } from "@/components/ui/page-header";
+
 import { ActionArea, ActionAreaButton, Modal, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalHeading, ModalSummary } from "@wanteddev/wds";
 import Link from "next/link";
+import { CalendarBlank, MapPin, TennisBall } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 
 import { ActivityTabs } from "@/components/navigation/activity-tabs";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
-import { BackButton } from "@/components/navigation/back-button";
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { isFinishedSchedule, matchScheduleText } from "@/matches/schedule";
@@ -122,9 +124,7 @@ export function M5SentApplications() {
 
   return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-28 pt-6 text-[var(--tm-text-primary)]">
     <div className="mx-auto max-w-[560px]">
-      <BackButton ariaLabel="마이로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/my" />
-      <p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">내 활동</p>
-      <h1 className="mt-1 text-2xl font-bold">내가 보낸 신청</h1>
+      <PageHeader backHref="/my" title="내가 보낸 신청" />
       <ActivityTabs current="sent" />
       <p className="mt-4 text-sm leading-6 text-[var(--tm-text-secondary)]">신청 결과와 다음 행동을 한눈에 확인해요.</p>
       {error && items !== null ? <div aria-live="polite" className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]">{error}</div> : null}
@@ -136,11 +136,11 @@ export function M5SentApplications() {
 }
 
 function LoadError({ error, onRetry }: { error: string; onRetry: () => Promise<void> }) {
-  return <section className="mt-8 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5"><p>{error}</p><Button onClick={() => void onRetry()}>다시 불러오기</Button></section>;
+  return <section className="mt-8 rally-card p-5"><p>{error}</p><Button onClick={() => void onRetry()}>다시 불러오기</Button></section>;
 }
 
 function EmptySentApplications() {
-  return <section className="mt-10 rounded-3xl border border-dashed border-[var(--tm-border-strong)] bg-white px-5 py-10 text-center"><p className="text-2xl">🎾</p><h2 className="mt-4 font-bold">아직 보낸 신청이 없어요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">마음에 드는 매칭을 찾아 부담 없이 신청해 보세요.</p><Button as={Link} className="mt-5" href="/" size="medium">매칭 찾아보기</Button></section>;
+  return <section className="mt-10 rounded-[20px] border border-dashed border-[var(--tm-border-strong)] bg-white px-5 py-10 text-center"><TennisBall aria-hidden size={32} className="mx-auto text-[var(--tm-action-primary)]" /><h2 className="mt-4 font-bold">아직 보낸 신청이 없어요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">마음에 드는 매칭을 찾아 부담 없이 신청해 보세요.</p><Button as={Link} className="mt-5" href="/" size="medium">매칭 찾아보기</Button></section>;
 }
 
 /** 지난 일정임을 카드 안에서 바로 알 수 있게 한다. 목록은 다가오는 것부터 보여 준다. */
@@ -150,12 +150,12 @@ function PastBadge() {
 
 function SentApplicationCard({ item, withdrawing, onWithdraw }: { item: SentApplication; withdrawing: boolean; onWithdraw: () => void }) {
   const active = item.status === "PENDING" || item.status === "ACCEPTED" || item.status === "CONFIRMED";
-  return <article className="rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)]">
+  return <article className="rally-card p-5">
     <Link className="block transition-colors hover:text-[var(--tm-action-primary)]" href={item.match.courtSlotId ? `/partner-sessions/${item.match.courtSlotId}` : `/matches/${item.match.id}?returnTo=${encodeURIComponent("/activity/sent")}`}>
       <div className="flex items-start justify-between gap-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${active ? "bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "bg-[var(--tm-bg-subtle-muted)] text-[var(--tm-text-secondary)]"}`}>{item.statusLabel}</span><span className="text-xs text-[var(--tm-text-secondary)]">{appliedDate(item.createdAt)}</span></div>
       <h2 className="mt-4 text-lg font-bold">{item.match.title}</h2>
-      <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--tm-text-muted)]">{isFinishedSchedule(item.match.endsAt) ? <PastBadge /> : null}<span>🗓 {schedule(item.match.startsAt)}</span></p>
-      <p className="mt-1 text-sm text-[var(--tm-text-muted)]">📍 {item.match.courtName ?? "코트는 함께 정해요"}</p>
+      <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--tm-text-muted)]">{isFinishedSchedule(item.match.endsAt) ? <PastBadge /> : null}<span className="inline-flex items-center gap-1.5"><CalendarBlank size={16} aria-hidden className="shrink-0" />{schedule(item.match.startsAt)}</span></p>
+      <p className="mt-1 flex items-start gap-1.5 text-sm text-[var(--tm-text-muted)]"><MapPin size={16} aria-hidden className="mt-0.5 shrink-0" />{item.match.courtName ?? "코트는 함께 정해요"}</p>
       <p className="mt-3 text-sm font-semibold text-[var(--tm-action-primary)]">{item.match.courtSource === "COURT_TBD" ? "코트와 비용을 함께 정해요" : item.match.estimatedFeePerPersonKrw === null ? "참가비를 확인해 주세요" : `게스트 참가비 ${item.match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p>
       {item.supplyNotice ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm font-semibold leading-6 text-[var(--tm-status-error-text)]">{item.supplyNotice.message}</p> : <p className="mt-4 border-t border-[var(--tm-border-subtle)] pt-3 text-sm font-medium leading-6 text-[var(--tm-text-muted)]">{courtMatchNextStep(item) ?? nextStepMessage(item.status, item.match.status, item.decidedAt !== null)}</p>}
       {item.message ? <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">“{item.message}”</p> : null}
@@ -198,8 +198,8 @@ function WithdrawalConfirm({ busy, mode, onCancel, onConfirm }: { busy: boolean;
         </ModalContentItem>
       </ModalContent>
       <ActionArea variant="strong">
-        <ActionAreaButton disabled={busy} loading={busy} onClick={onConfirm} variant="main">{copy.confirm}</ActionAreaButton>
-        <ActionAreaButton buttonColor="assistive" disabled={busy} onClick={onCancel} variant="alternative">돌아가기</ActionAreaButton>
+        <ActionAreaButton sx={{ borderRadius: 14, minHeight: 48 }} disabled={busy} loading={busy} onClick={onConfirm} variant="main">{copy.confirm}</ActionAreaButton>
+        <ActionAreaButton sx={{ borderRadius: 14, minHeight: 48 }} buttonColor="assistive" disabled={busy} onClick={onCancel} variant="alternative">돌아가기</ActionAreaButton>
       </ActionArea>
     </ModalContainer>
   </Modal>;

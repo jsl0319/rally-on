@@ -21,24 +21,25 @@
 @import "@wanteddev/wds/global.css" layer(wds-reset);
 
 :root {
-  --tm-bg-page: #f7fbff;
+  --tm-bg-page: #f7f8f2;
   --tm-bg-surface: #ffffff;
-  --tm-bg-subtle: #eaf2fe;
-  --tm-bg-subtle-muted: #f0f6fe;
-  --tm-bg-highlight: #f7f8d6;
-  --tm-text-primary: #1e2a40;
-  --tm-text-secondary: #5e6c80;
-  --tm-text-muted: #475569;
-  --tm-text-placeholder: #748198;
-  --tm-action-primary: #0066ff;
-  --tm-action-hover: #005eeb;
-  --tm-border-default: #c9defe;
-  --tm-border-strong: #9ec5ff;
-  --tm-border-subtle: #edf3fc;
-  --tm-tennis-ball: #d8de35;
-  --tm-tennis-ball-muted: #5f6814;
+  --tm-bg-subtle: #edf3e9;
+  --tm-bg-subtle-muted: #f3f5ef;
+  --tm-bg-highlight: #eef5d5;
+  --tm-text-primary: #202d27;
+  --tm-text-secondary: #5d6b62;
+  --tm-text-muted: #48574e;
+  --tm-text-placeholder: #718075;
+  --tm-action-primary: #174c3c;
+  --tm-action-hover: #103c2e;
+  --tm-border-default: #dfe5dd;
+  --tm-border-strong: #91ad9b;
+  --tm-border-subtle: #edf0e9;
+  --tm-tennis-ball: #d9ed92;
+  --tm-tennis-ball-muted: #4a591e;
   --tm-status-error-bg: #fff1ef;
   --tm-status-error-text: #a13d32;
+  --tm-shadow-card: 0 4px 20px #173c2e04;
   --background: var(--tm-bg-page);
   --foreground: var(--tm-text-primary);
 }
@@ -46,7 +47,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-noto-sans-kr), -apple-system,
+  --font-sans: "Pretendard", var(--font-noto-sans-kr), -apple-system,
     BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -66,3 +67,60 @@ body {
     left: 72px;
   }
 }
+
+/* Brand tokens on body override inherited WDS tokens without replacing its behavior. */
+body {
+  --semantic-primary-normal: #174c3c;
+  --semantic-primary-strong: #103c2e;
+  --semantic-primary-heavy: #0b2d22;
+  --semantic-label-normal: #202d27;
+  --semantic-label-neutral: #48574e;
+  --semantic-label-alternative: #5d6b62;
+  --semantic-background-normal-alternative: #f7f8f2;
+  --semantic-line-normal-normal: #dfe5dd;
+  --semantic-line-normal-neutral: #e6ebe3;
+  line-height: 1.55;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+:where(button, a, input, textarea, select):focus-visible {
+  outline: 2px solid var(--tm-action-primary);
+  outline-offset: 3px;
+}
+input, textarea, select { scroll-margin-block: 100px; }
+.rally-brand { display: inline-flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; letter-spacing: -.8px; color: var(--tm-action-primary); }
+.rally-brand svg { width: 29px; height: 29px; }
+.rally-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--tm-action-primary); }
+.rally-title { font-size: 30px; line-height: 1.3; font-weight: 700; letter-spacing: -1.1px; }
+.rally-card { border: 1px solid var(--tm-border-default); border-radius: 20px; background: var(--tm-bg-surface); box-shadow: var(--tm-shadow-card); }
+.rally-page-title { font-size: 26px; line-height: 1.35; font-weight: 700; letter-spacing: -.7px; }
+/* Keep per-form textarea heights above the common minimum in the cascade. */
+@layer components {
+  .rally-input { min-height: 48px; }
+  textarea.rally-input { min-height: 128px; }
+}
+.rally-input { min-width: 0; max-width: 100%; border-radius: 14px; font-size: 16px; line-height: 1.5; accent-color: var(--tm-action-primary); }
+.rally-input::placeholder { color: var(--tm-text-placeholder); }
+.rally-input:disabled { opacity: .6; cursor: not-allowed; }
+.rally-input[aria-invalid="true"] { border-color: var(--tm-status-error-text); }
+body [wds-component="text-field"], body [wds-component="text-area"] { border-radius: 14px; }
+.rally-text-action { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--tm-action-primary); }
+.rally-section { border-top: 1px solid var(--tm-border-default); padding: 24px; }
+.rally-section h2 { font-size: 18px; font-weight: 700; letter-spacing: -.4px; }
+.rally-welcome { width: 100%; max-width: 480px; margin: auto; padding: max(24px,env(safe-area-inset-top)) 24px max(24px,env(safe-area-inset-bottom)); min-height: 100svh; display: flex; flex-direction: column; }
+.rally-welcome-art { width: calc(100% + 48px); max-width: none; margin: 16px -24px 20px; height: auto; aspect-ratio: 3/2; object-fit: cover; mix-blend-mode: multiply; }
+.rally-form { min-height: 100svh; max-width: 480px; margin: auto; padding: max(20px,env(safe-area-inset-top)) 24px max(28px,env(safe-area-inset-bottom)); }
+.rally-form-content { padding-top: 36px; }
+.rally-form-content > h1 { font-size: 28px; line-height: 1.35; letter-spacing: -.8px; font-weight: 700; }
+.rally-form-content > p { margin-top: 12px; color: var(--tm-text-secondary); font-size: 15px; line-height: 1.6; }
+.rally-choice { display: flex; align-items: center; gap: 12px; min-height: 72px; width: 100%; padding: 16px; text-align: left; border: 1px solid var(--tm-border-default); border-radius: 16px; background: white; transition: background .15s, border-color .15s; }
+.rally-choice[aria-pressed="true"] { border-color: var(--tm-action-primary); background: var(--tm-bg-subtle); }
+.rally-choice-mark { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid #a8b6ab; border-radius: 50%; flex-shrink: 0; }
+.rally-choice[aria-pressed="true"] .rally-choice-mark { background: var(--tm-action-primary); color: white; border-color: var(--tm-action-primary); }
+.rally-form-actions { margin-top: 32px; }
+.rally-navigation { display:grid; grid-template-columns:repeat(4,1fr); max-width:560px; margin:auto; padding:6px 12px max(8px,env(safe-area-inset-bottom)); }
+.rally-navigation a { min-height:56px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:11px; color:var(--tm-text-secondary); font-weight:500; }
+.rally-navigation a[aria-current="page"] { color:var(--tm-action-primary); font-weight:700; }
+.rally-navigation a[aria-current="page"] > span:first-child { border-radius:12px; background:var(--tm-bg-subtle); }
+.rally-navigation a > span:first-child { padding:3px 16px; }
+@media (prefers-reduced-motion: reduce) { .rally-choice { transition:none; } }

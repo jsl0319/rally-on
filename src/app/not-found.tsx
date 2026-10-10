@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 export default function NotFound() {
   return (
     <main className="flex min-h-svh items-center justify-center px-5 py-12">
-      <section className="w-full max-w-md rounded-3xl bg-white p-7 text-center shadow-sm">
+      <section className="rally-card w-full max-w-md p-7 text-center">
         <p className="text-sm font-semibold text-[var(--tm-action-primary)]">404</p>
-        <h1 className="mt-3 text-2xl font-bold text-[var(--tm-text-primary)]">
+        <h1 className="rally-page-title mt-3 text-2xl font-bold text-[var(--tm-text-primary)]">
           찾는 화면이 없어요.
         </h1>
         <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">

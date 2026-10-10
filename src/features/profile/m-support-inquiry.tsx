@@ -1,9 +1,10 @@
 "use client";
 
+import { PageHeader } from "@/components/ui/page-header";
+
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { BackButton } from "@/components/navigation/back-button";
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 
@@ -64,15 +65,13 @@ export function MSupportInquiry() {
 
   return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-10 pt-6 text-[var(--tm-text-primary)]">
     <div className="mx-auto max-w-[560px]">
-      <BackButton ariaLabel="마이로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/my" />
-      <h1 className="mt-4 text-2xl font-bold">1:1 문의</h1>
-      <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">궁금한 점이나 불편한 점을 남겨주시면 확인 후 도와드릴게요.</p>
+      <PageHeader backHref="/my" title="1:1 문의" description="궁금한 점이나 불편한 점을 남겨주시면 확인 후 도와드릴게요." />
       {matchId ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-text-secondary)]">방금 보던 매칭에 대한 문의로 접수돼요. 어떤 건인지 따로 적지 않으셔도 돼요.</p> : null}
 
-      <section className="mt-5 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)]">
+      <section className="mt-5 rally-card p-5">
         <label className="block text-sm font-semibold" htmlFor="support-message">문의 내용</label>
         <textarea
-          className="mt-2 min-h-[140px] w-full resize-none rounded-2xl border border-[var(--tm-border-default)] p-3 text-sm leading-6"
+          className="rally-input mt-2 min-h-[140px] w-full resize-none rounded-2xl border border-[var(--tm-border-default)] p-3 text-sm leading-6"
           id="support-message"
           maxLength={1000}
           onChange={(event) => { setMessage(event.target.value); setSubmitError(""); }}
@@ -86,7 +85,7 @@ export function MSupportInquiry() {
       </section>
 
       <h2 className="mt-8 font-bold">내 문의 내역</h2>
-      {items === null ? error ? <section className="mt-4 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5"><p className="text-sm leading-6">{error}</p><Button className="mt-4" onClick={() => void load()} size="medium">다시 불러오기</Button></section> : <CourtRallyLoader className="mt-4" label="문의 내역을 불러오고 있어요." /> : items.length === 0 ? <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">아직 보낸 문의가 없어요.</p> : <ul className="mt-3 space-y-3">
+      {items === null ? error ? <section className="mt-4 rally-card p-5"><p className="text-sm leading-6">{error}</p><Button className="mt-4" onClick={() => void load()} size="medium">다시 불러오기</Button></section> : <CourtRallyLoader className="mt-4" label="문의 내역을 불러오고 있어요." /> : items.length === 0 ? <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">아직 보낸 문의가 없어요.</p> : <ul className="mt-3 space-y-3">
         {items.map((item) => <li key={item.id}><SupportThread inquiry={item} audience="member" refresh={load} /></li>)}
       </ul>}
     </div>

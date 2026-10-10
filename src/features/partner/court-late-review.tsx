@@ -32,9 +32,9 @@ export function CourtLateReview({ match, refresh }: { match: OperatorCourtMatch;
   return <form className="mt-4 rounded-2xl border border-amber-200 p-4 text-sm" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
     <fieldset disabled={busy} className="space-y-3">
       <legend className="font-bold">실제 제공 결과 기록</legend>
-      <label className="block" htmlFor="late-review-outcome">확인 결과</label><select id="late-review-outcome" className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 p-3" value={outcome} onChange={(e) => setOutcome(e.target.value)}><option value="PROVIDED">제공 완료 (일정 종료 후)</option><option value="NOT_PROVIDED">전혀 제공하지 못함 · 취소 및 전액 반환</option></select>
-      <p className="leading-6 text-slate-600">참가자와 실제 이용 여부를 확인해 주세요. 일부만 제공했다면 제공 완료 후 합의 반환 금액을 별도로 기록해 주세요. 이전 개인 취소의 환불 기준은 유지돼요.</p>
-      <label className="block">확인 근거<textarea className="mt-2 min-h-28 w-full rounded-xl border border-slate-200 p-3" required minLength={10} maxLength={450} autoComplete="off" value={note} onChange={(e) => setNote(e.target.value)} /></label>
+      <label className="block" htmlFor="late-review-outcome">확인 결과</label><select id="late-review-outcome" className="rally-input mt-2 min-h-11 w-full rounded-xl border border-[var(--tm-border-default)] p-3" value={outcome} onChange={(e) => setOutcome(e.target.value)}><option value="PROVIDED">제공 완료 (일정 종료 후)</option><option value="NOT_PROVIDED">전혀 제공하지 못함 · 취소 및 전액 반환</option></select>
+      <p className="leading-6 text-[var(--tm-text-muted)]">참가자와 실제 이용 여부를 확인해 주세요. 일부만 제공했다면 제공 완료 후 합의 반환 금액을 별도로 기록해 주세요. 이전 개인 취소의 환불 기준은 유지돼요.</p>
+      <label className="block">확인 근거<textarea className="rally-input mt-2 min-h-28 w-full rounded-xl border border-[var(--tm-border-default)] p-3" required minLength={10} maxLength={450} autoComplete="off" value={note} onChange={(e) => setNote(e.target.value)} /></label>
       <Button type="submit" fullWidth disabled={busy || note.trim().length < 10}>확인 결과 저장</Button>
       {error ? <p role="alert" className="text-rose-700">{error}</p> : null}
     </fieldset>

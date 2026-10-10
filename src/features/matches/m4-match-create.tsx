@@ -318,9 +318,9 @@ export function M4MatchCreate() {
   };
 
   return (
-    <main className="min-h-svh bg-[#F4F6FA] pb-36 text-[var(--tm-text-primary)]">
+    <main className="min-h-svh bg-[var(--tm-bg-page)] pb-36 text-[var(--tm-text-primary)]">
       <section className="mx-auto max-w-[560px]">
-        <header className="sticky top-0 z-20 bg-[#F4F6FA]/95 px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur">
+        <header className="sticky top-0 z-20 bg-[var(--tm-bg-page)]/95 px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur">
           <div className="relative flex min-h-11 items-center">
             <button
               aria-label="이전 화면으로 돌아가기"
@@ -517,7 +517,7 @@ function CourtPlaceDialog({ error, form, isLoading, isManualEntry, isOpen, onAdd
 
         {isManualEntry ? (
           <ActionArea variant="strong">
-            <ActionAreaButton disabled={!canFinishManualEntry} onClick={onClose} variant="main">입력 완료</ActionAreaButton>
+            <ActionAreaButton sx={{ borderRadius: 14, minHeight: 48 }} disabled={!canFinishManualEntry} onClick={onClose} variant="main">입력 완료</ActionAreaButton>
           </ActionArea>
         ) : null}
       </ModalContainer>
@@ -550,7 +550,7 @@ function RecruitDetailsSection({ form, onRecruitChange, onTogglePurpose, set }: 
         <div className="mt-6 border-t border-[var(--tm-border-subtle)] pt-5">
           <p className="mb-3 text-sm font-semibold">모집 인원</p>
           {!needsGenderQuota(form.gameType) ? <div className="mb-4 flex gap-2">{[false, true].map((split) => <button aria-pressed={form.splitRecruitment === split} className="min-h-11 rounded-xl border border-[var(--tm-border-default)] px-3 text-sm aria-pressed:border-[var(--tm-action-primary)] aria-pressed:text-[var(--tm-action-primary)]" key={String(split)} onClick={() => { set("splitRecruitment", split); set("maleRecruitCount", form.recruitCount); set("femaleRecruitCount", 0); }} type="button">{split ? "남녀 구분" : "성별 무관"}</button>)}</div> : null}
-          {form.splitRecruitment ? <div><div className="grid grid-cols-2 gap-3">{([["maleRecruitCount", "남자 모집 인원"], ["femaleRecruitCount", "여자 모집 인원"]] as const).map(([key, label]) => <label className="text-sm font-semibold" key={key}>{label}<select className="mt-2 min-h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white px-3 disabled:bg-neutral-100" disabled={key === "maleRecruitCount" ? form.gameType === "WOMENS_DOUBLES" : form.gameType === "MENS_DOUBLES"} onChange={(event) => changeGenderCount(key, Number(event.target.value))} value={form[key]}>{Array.from({ length: 11 }, (_, count) => <option key={count} value={count}>{count}명</option>)}</select></label>)}</div><p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">추가 모집: 남자 {form.maleRecruitCount}명 · 여자 {form.femaleRecruitCount}명</p></div> : <>
+          {form.splitRecruitment ? <div><div className="grid grid-cols-2 gap-3">{([["maleRecruitCount", "남자 모집 인원"], ["femaleRecruitCount", "여자 모집 인원"]] as const).map(([key, label]) => <label className="text-sm font-semibold" key={key}>{label}<select className="rally-input mt-2 min-h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white px-3 disabled:bg-[var(--tm-bg-subtle-muted)]" disabled={key === "maleRecruitCount" ? form.gameType === "WOMENS_DOUBLES" : form.gameType === "MENS_DOUBLES"} onChange={(event) => changeGenderCount(key, Number(event.target.value))} value={form[key]}>{Array.from({ length: 11 }, (_, count) => <option key={count} value={count}>{count}명</option>)}</select></label>)}</div><p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">추가 모집: 남자 {form.maleRecruitCount}명 · 여자 {form.femaleRecruitCount}명</p></div> : <>
           <div className="flex items-center justify-between rounded-2xl border border-[var(--tm-border-default)] bg-white p-3">
             <div>
               <p className="text-sm font-bold">추가 모집 인원</p>
@@ -623,7 +623,7 @@ function CostAndNoticeSection({ form, set }: { form: MatchCreateForm; set: FormS
           <FormField>
             <FormLabel>은행</FormLabel>
             <FormControl>
-              <select className="min-h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white px-3 text-sm" onChange={(event) => set("settlementBank", event.target.value)} value={form.settlementBank}>
+              <select className="rally-input min-h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white px-3 text-sm" onChange={(event) => set("settlementBank", event.target.value)} value={form.settlementBank}>
                 <option value="">은행을 선택해 주세요</option>
                 {bankNames.map((name) => <option key={name} value={name}>{name}</option>)}
               </select>
@@ -639,7 +639,7 @@ function CostAndNoticeSection({ form, set }: { form: MatchCreateForm; set: FormS
 }
 
 function FormPanel({ children, description, icon, title }: { children: ReactNode; description: string; icon?: ReactNode; title: ReactNode }) {
-  return <section className="mt-6 rounded-3xl bg-white p-5 shadow-[0_10px_30px_rgba(29,50,84,0.06)]"><div className="flex gap-3">{icon ? <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]">{icon}</span> : null}<div><h2 className="text-lg font-bold">{title}</h2><p className="mt-1 text-sm leading-6 text-[var(--tm-text-secondary)]">{description}</p></div></div><div className="mt-5">{children}</div></section>;
+  return <section className="mt-6 rally-card p-5"><div className="flex gap-3">{icon ? <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]">{icon}</span> : null}<div><h2 className="text-lg font-bold">{title}</h2><p className="mt-1 text-sm leading-6 text-[var(--tm-text-secondary)]">{description}</p></div></div><div className="mt-5">{children}</div></section>;
 }
 
 function FieldTitle({ children, required = false }: { children: ReactNode; required?: boolean }) {
@@ -647,7 +647,7 @@ function FieldTitle({ children, required = false }: { children: ReactNode; requi
 }
 
 function ChoiceCard({ children, description, onClick, selected }: { children: ReactNode; description: string; onClick: () => void; selected: boolean }) {
-  return <button aria-pressed={selected} className={`relative min-h-[78px] rounded-2xl border p-4 pr-11 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)] ${selected ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white text-[var(--tm-text-primary)] hover:border-[var(--tm-action-primary)]"}`} onClick={onClick} type="button"><strong className="text-sm">{children}</strong><span className="mt-1 block text-xs font-normal leading-5 text-[var(--tm-text-secondary)]">{description}</span>{selected ? <CheckCircle aria-label="선택됨" className="absolute right-4 top-4" size={20} weight="fill" /> : null}</button>;
+  return <button aria-pressed={selected} className={`relative min-h-[72px] rounded-2xl border p-4 pr-11 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)] ${selected ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white text-[var(--tm-text-primary)] hover:border-[var(--tm-action-primary)]"}`} onClick={onClick} type="button"><strong className="text-sm">{children}</strong><span className="mt-1 block text-xs font-normal leading-5 text-[var(--tm-text-secondary)]">{description}</span>{selected ? <CheckCircle aria-label="선택됨" className="absolute right-4 top-4" size={20} weight="fill" /> : null}</button>;
 }
 
 function ActionFooter({ onPreview }: { onPreview: () => void }) {
@@ -698,7 +698,7 @@ function MatchPreviewSheet({
         <ModalContent>
           <ModalContentItem>
             <ModalDescription>공개하면 매칭 목록에 보여지고, 원할 때 참가 신청을 받을 수 있어요.</ModalDescription>
-            <article className="mt-4 overflow-hidden rounded-3xl border border-[var(--tm-border-default)] bg-white shadow-[0_12px_30px_rgba(29,50,84,0.08)]">
+            <article className="mt-4 overflow-hidden rally-card shadow-[var(--tm-shadow-card)]">
               <div className="p-5">
                 <p className="inline-flex rounded-full bg-[var(--tm-bg-subtle)] px-3 py-1.5 text-xs font-bold text-[var(--tm-action-primary)]">모집자가 코트를 예약했어요</p>
                 <h2 className="mt-3 text-xl font-bold leading-7">{form.courtName}</h2>
@@ -732,7 +732,7 @@ function MatchPreviewSheet({
         </ModalContent>
 
         <ActionArea variant="strong">
-          <ActionAreaButton disabled={saving} onClick={onSubmit} variant="main">{saving ? "등록 중…" : "매칭 공개하기"}</ActionAreaButton>
+          <ActionAreaButton sx={{ borderRadius: 14, minHeight: 48 }} disabled={saving} onClick={onSubmit} variant="main">{saving ? "등록 중…" : "매칭 공개하기"}</ActionAreaButton>
         </ActionArea>
       </ModalContainer>
     </Modal>

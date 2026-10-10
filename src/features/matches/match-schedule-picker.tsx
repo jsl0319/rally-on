@@ -21,7 +21,7 @@ function Wheel({ label, options, value, onChange }: { label: string; options: Op
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   const choose = (index: number) => onChange(options[Math.max(0, Math.min(options.length - 1, index))].value);
   return <div className="relative min-w-0 flex-1">
-    <div aria-hidden className="pointer-events-none absolute inset-x-1 top-[88px] h-11 rounded-xl bg-neutral-100" />
+    <div aria-hidden className="pointer-events-none absolute inset-x-1 top-[88px] h-11 rounded-xl bg-[var(--tm-bg-subtle-muted)]" />
     <div
       aria-activedescendant={`${id}-${selectedIndex}`} aria-label={label} className="relative h-[220px] snap-y snap-mandatory overflow-y-auto overscroll-contain py-[88px] text-center outline-offset-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       onKeyDown={(event) => {
@@ -33,7 +33,7 @@ function Wheel({ label, options, value, onChange }: { label: string; options: Op
         timer.current = setTimeout(() => { if (list.current) choose(Math.round(list.current.scrollTop / ROW_HEIGHT)); }, 100);
       }}
       ref={list} role="listbox" tabIndex={0}
-    >{options.map((option, index) => <div aria-selected={index === selectedIndex} className={`flex h-11 shrink-0 cursor-pointer snap-center items-center justify-center text-[24px] ${index === selectedIndex ? "font-semibold text-neutral-950" : "text-neutral-400"}`} id={`${id}-${index}`} key={option.value} onClick={() => choose(index)} role="option">{option.label}</div>)}</div>
+    >{options.map((option, index) => <div aria-selected={index === selectedIndex} className={`flex h-11 shrink-0 cursor-pointer snap-center items-center justify-center text-[24px] ${index === selectedIndex ? "font-semibold text-[var(--tm-text-primary)]" : "text-[var(--tm-text-placeholder)]"}`} id={`${id}-${index}`} key={option.value} onClick={() => choose(index)} role="option">{option.label}</div>)}</div>
     <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-white to-transparent" />
     <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white to-transparent" />
   </div>;
@@ -74,7 +74,7 @@ function ScheduleSheet({ draft, kind, label, minDate, selectedDate, afterTime, b
   const setTime = (nextHour: number, nextMinute: number) => onChange(`${String(nextHour).padStart(2, "0")}:${String(nextMinute).padStart(2, "0")}`);
   const firstYear = Number(minDate?.slice(0, 4) || new Date().getFullYear());
   return <Modal open onOpenChange={(next) => { if (!next) onCancel(); }}><ModalContainer handle={false} resize="hug" size="large" variant="bottom" sx={{ borderRadius: 0 }}>
-    <ModalNavigation leadingContent={<button className="px-2 py-3 text-base text-neutral-500" onClick={onCancel} type="button">취소</button>} trailingContent={<button className="px-2 py-3 text-base font-semibold text-[var(--tm-action-primary)] disabled:opacity-40" disabled={invalid} onClick={() => { const current = Date.now(); setNow(current); if (!invalid && (kind === "date" || !timeSelectionError(selectedDate, draft, afterTime, beforeTime, current))) onConfirm(); }} type="button">완료</button>}>{label}</ModalNavigation>
+    <ModalNavigation leadingContent={<button className="px-2 py-3 text-base text-[var(--tm-text-secondary)]" onClick={onCancel} type="button">취소</button>} trailingContent={<button className="px-2 py-3 text-base font-semibold text-[var(--tm-action-primary)] disabled:opacity-40" disabled={invalid} onClick={() => { const current = Date.now(); setNow(current); if (!invalid && (kind === "date" || !timeSelectionError(selectedDate, draft, afterTime, beforeTime, current))) onConfirm(); }} type="button">완료</button>}>{label}</ModalNavigation>
     <div className="border-t border-[var(--tm-border-default)] bg-white px-4 pb-[max(24px,env(safe-area-inset-bottom))] pt-5">
       <div className="flex gap-2">{kind === "date" ? <>
         <Wheel label="연도" onChange={(value) => setDate(Number(value), month, day)} options={numbers(11, firstYear).map((option) => ({ ...option, label: `${option.value}년` }))} value={String(year)} />

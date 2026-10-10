@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Capacitor-generated projects contain vendor bundles, not application source.
+    "mobile/prototype/android/**",
+    "mobile/prototype/ios/**",
+    "mobile/prototype/www/**",
   ]),
 ]);
 

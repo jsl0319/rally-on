@@ -35,21 +35,21 @@ export function LegalNoticePage({ title, summary, updatedDate, sections, notice,
         </Link>
         <header className="mt-6 border-b border-[var(--tm-border-default)] pb-6">
           <p className="text-sm font-semibold text-[var(--tm-action-primary)]">Rally On 비공개 MVP 안내</p>
-          <h1 className="mt-2 text-2xl font-bold leading-tight">{title}</h1>
+          <h1 className="rally-page-title mt-2 text-2xl font-bold leading-tight">{title}</h1>
           <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{summary}</p>
           <p className="mt-3 text-xs text-[var(--tm-text-secondary)]">안내 갱신일 · {updatedDate}</p>
         </header>
 
         <div className="mt-6 space-y-4">
           {sections.map((section) => (
-            <section className="rounded-3xl border border-[var(--tm-border-default)] bg-white p-5" key={section.title}>
+            <section className="rally-card p-5" key={section.title}>
               <h2 className="text-base font-bold">{section.title}</h2>
               <p className="mt-3 text-sm leading-6 text-[var(--tm-text-muted)]">{section.body}</p>
             </section>
           ))}
         </div>
 
-        <section className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-5">
+        <section className="mt-4 rounded-[20px] bg-[var(--tm-bg-subtle)] p-5">
           <h2 className="text-sm font-semibold text-[var(--tm-action-primary)]">확인해 주세요</h2>
           <p className="mt-2 text-sm leading-6 text-[var(--tm-text-muted)]">{notice}</p>
         </section>

@@ -119,7 +119,7 @@ export function M8MyPage() {
   return <main className="flex min-h-svh flex-col bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]">
     <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col">
       <header className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">내 테니스 이야기</h1>
+        <h1 className="rally-page-title text-2xl font-bold">마이</h1>
         <NotificationBell unreadCount={unreadNotificationCount} />
       </header>
 
@@ -130,14 +130,14 @@ export function M8MyPage() {
         <Card>
           <LinkRow
             badge={<CountBadge count={pendingReceivedCount} />}
-            description="내가 만든 매칭과 새로 들어온 신청을 확인해요"
+            description="모집과 신청자 관리"
             href="/activity/received"
             icon={<IconChip><ClipboardText aria-hidden="true" className="size-5" /></IconChip>}
             title="내가 만든 매칭"
           />
           <LinkRow
             badge={<CountBadge count={pendingSentCount} />}
-            description="내가 신청한 매칭의 진행 상황과 남은 할 일을 확인해요"
+            description="신청 상태와 남은 할 일"
             href="/activity/sent"
             icon={<IconChip><PaperPlaneTilt aria-hidden="true" className="size-5" /></IconChip>}
             title="내가 보낸 신청"
@@ -187,7 +187,7 @@ function NotificationBell({ unreadCount }: { unreadCount: number }) {
 }
 
 function LoadError({ error, onRetry }: { error: string; onRetry: () => Promise<void> }) {
-  return <section className="mt-8 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5"><p className="text-sm leading-6">{error}</p><Button className="mt-4" onClick={() => void onRetry()} size="medium">다시 불러오기</Button></section>;
+  return <section className="mt-8 rally-card p-5"><p className="text-sm leading-6">{error}</p><Button className="mt-4" onClick={() => void onRetry()} size="medium">다시 불러오기</Button></section>;
 }
 
 /** 프로필 카드 전체가 프로필 수정(닉네임 포함)으로 가는 입구다. */
@@ -198,7 +198,7 @@ function ProfileCard({ me }: { me: Me }) {
     : "내게 잘 맞는 메이트를 찾기 위한 정보예요.";
 
   return <Link
-    className="mt-5 flex items-center gap-4 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)] transition-colors hover:bg-[var(--tm-bg-subtle-muted)]"
+    className="mt-5 flex items-center gap-4 rally-card p-5 transition-colors hover:bg-[var(--tm-bg-subtle-muted)]"
     href={profile ? "/my/profile" : "/"}
   >
     <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]">
@@ -220,7 +220,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <section className="mt-2 rounded-3xl border border-[var(--tm-border-default)] bg-white px-3 py-1 shadow-[0_4px_14px_rgba(49,94,158,0.05)]">
+  return <section className="mt-2 rally-card px-3 py-1 shadow-[var(--tm-shadow-card)]">
     <div className="divide-y divide-[var(--tm-border-subtle)]">{children}</div>
   </section>;
 }

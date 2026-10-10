@@ -21,7 +21,7 @@ export function CourtDirectionsButton({ matchId, name, address }: { matchId: str
     } finally { setLoading(false); }
   }
   return <div className="mt-3">
-    <button type="button" disabled={loading} onClick={() => void openDirections()} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#FEE500] px-4 text-sm font-semibold text-[#191919] transition hover:bg-[#f4dc00] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-60"><NavigationArrow size={18} aria-hidden />{loading ? "길찾기 준비 중…" : "카카오맵 길찾기"}</button>
-    {error ? <div className="mt-3 text-xs leading-6"><p role="alert" className="text-red-700">{error}</p><a className="font-semibold text-blue-700 underline" href={`https://map.kakao.com/link/search/${encodeURIComponent(`${address} ${name}`)}`}>카카오맵에서 위치 검색</a></div> : null}
+    <button type="button" disabled={loading} onClick={() => void openDirections()} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#FEE500] px-4 text-sm font-semibold text-[#191919] transition hover:bg-[#f4dc00] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)] disabled:opacity-60"><NavigationArrow size={18} aria-hidden />{loading ? "길찾기 준비 중…" : "카카오맵 길찾기"}</button>
+    {error ? <div className="mt-3 text-xs leading-6"><p role="alert" className="text-red-700">{error}</p><a className="font-semibold text-[var(--tm-action-primary)] underline" href={`https://map.kakao.com/link/search/${encodeURIComponent(`${address} ${name}`)}`}>카카오맵에서 위치 검색</a></div> : null}
   </div>;
 }

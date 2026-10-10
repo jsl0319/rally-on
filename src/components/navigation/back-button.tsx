@@ -14,7 +14,7 @@ export function BackButton({ ariaLabel = "이전 화면으로 돌아가기", cla
   const router = useRouter();
 
   return (
-    <IconButton aria-label={ariaLabel} className={className} onClick={() => router.replace(fallbackPath)}>
+    <IconButton sx={{ minWidth: 44, minHeight: 44, borderRadius: 14 }} aria-label={ariaLabel} className={className} onClick={() => router.replace(fallbackPath)}>
       <IconArrowLeft height={20} width={20} />
     </IconButton>
   );

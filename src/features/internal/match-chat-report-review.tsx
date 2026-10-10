@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/ui/page-header";
+
 import { Tab, TabList, TabListItem } from "@wanteddev/wds";
 import { useCallback, useEffect, useState } from "react";
 
@@ -104,15 +106,13 @@ export function InternalMatchChatReportReview() {
     }
   };
 
-  if (reports === null) return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[390px]" label="채팅 신고를 불러오고 있어요." /></main>;
+  if (reports === null) return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[560px]" label="채팅 신고를 불러오고 있어요." /></main>;
 
   const emptyTitle = status === "OPEN" ? "처리할 채팅 신고가 없어요" : "처리 완료된 채팅 신고가 없어요";
   const emptyDescription = status === "OPEN" ? "새 신고가 들어오면 이 목록에서 필요한 범위로만 검토할 수 있어요." : "처리한 신고는 이 목록에서 감사 목적으로 확인할 수 있어요.";
 
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-12 pt-11 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[390px]">
-    <p className="text-sm font-semibold text-[var(--tm-action-primary)]">INTERNAL REVIEW</p>
-    <h1 className="mt-2 text-2xl font-bold leading-[34px]">채팅 신고를<br />검토해 주세요</h1>
-    <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">신고 사유와 해당 메시지만 확인해요. 조치 기록은 심사자와 시각, 선택한 조치·메모로 남고 수정할 수 없어요.</p>
+  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-12 pt-11 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[560px]">
+    <PageHeader eyebrow="내부 관리" title="채팅 신고 검토" description="신고 사유와 해당 메시지만 확인해요. 조치 기록은 심사자와 시각, 선택한 조치·메모로 남고 수정할 수 없어요." />
     <Tab onValueChange={(value) => { const nextStatus = value as ReportStatus; if (status === nextStatus) { void load(); return; } setReports(null); setStatus(nextStatus); }} value={status}>
       <TabList aria-label="채팅 신고 상태" className="mt-5">
         {statusTabs.map((tab) => <TabListItem key={tab.value} value={tab.value}>{tab.label}</TabListItem>)}
@@ -131,6 +131,6 @@ function ReportCard({ report, draft, onActionChange, onReasonChange, onSubmit, s
     <p className="mt-1 text-sm text-[var(--tm-text-secondary)]">{report.reporter.nickname}님이 {reasonLabels[report.reason]} 사유로 신고했어요.</p>
     <div className="mt-4 rounded-xl bg-[var(--tm-bg-subtle)] p-4"><p className="text-xs font-semibold text-[var(--tm-text-secondary)]">신고된 메시지 · {report.message.senderNickname ?? "시스템"}</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{report.message.body}</p></div>
     {report.description ? <p className="mt-3 rounded-xl border border-[var(--tm-border-default)] px-4 py-3 text-sm leading-5 text-[var(--tm-text-secondary)]">신고 설명: {report.description}</p> : null}
-    {report.status === "OPEN" ? <><fieldset className="mt-5"><legend className="text-sm font-semibold">조치</legend><div className="mt-2 grid gap-2">{actionOptions.map((option) => <button aria-pressed={draft.action === option.value} className={`rounded-xl border p-3 text-left ${draft.action === option.value ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)]" : "border-[var(--tm-border-default)]"}`} key={option.value} onClick={() => onActionChange(report.id, option.value)} type="button"><span className="block text-sm font-semibold">{option.label}</span><span className="mt-1 block text-xs leading-5 text-[var(--tm-text-secondary)]">{option.description}</span></button>)}</div></fieldset><label className="mt-4 block text-sm font-semibold">검토 메모 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span><textarea className="mt-2 min-h-20 w-full rounded-xl border border-[var(--tm-border-default)] px-3 py-2 text-sm font-normal leading-5" maxLength={200} onChange={(event) => onReasonChange(report.id, event.target.value)} placeholder="운영 검토에 필요한 사실만 짧게 남겨 주세요." value={draft.reason} /></label><p className="mt-2 text-xs leading-5 text-[var(--tm-text-secondary)]">선택한 조치: {selected.label}. 참여자에게 심사자 정보나 신고자 정보는 공개되지 않아요.</p><Button className="mt-5" disabled={submitting} fullWidth loading={submitting} onClick={() => void onSubmit(report)}>신고 조치 저장하기</Button></> : <p className="mt-5 rounded-xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-text-secondary)]">처리 완료된 신고예요. 감사 이력은 수정할 수 없어요.</p>}
+    {report.status === "OPEN" ? <><fieldset className="mt-5"><legend className="text-sm font-semibold">조치</legend><div className="mt-2 grid gap-2">{actionOptions.map((option) => <button aria-pressed={draft.action === option.value} className={`rounded-xl border p-3 text-left ${draft.action === option.value ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)]" : "border-[var(--tm-border-default)]"}`} key={option.value} onClick={() => onActionChange(report.id, option.value)} type="button"><span className="block text-sm font-semibold">{option.label}</span><span className="mt-1 block text-xs leading-5 text-[var(--tm-text-secondary)]">{option.description}</span></button>)}</div></fieldset><label className="mt-4 block text-sm font-semibold">검토 메모 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span><textarea className="rally-input mt-2 min-h-20 w-full rounded-xl border border-[var(--tm-border-default)] px-3 py-2 text-sm font-normal leading-5" maxLength={200} onChange={(event) => onReasonChange(report.id, event.target.value)} placeholder="운영 검토에 필요한 사실만 짧게 남겨 주세요." value={draft.reason} /></label><p className="mt-2 text-xs leading-5 text-[var(--tm-text-secondary)]">선택한 조치: {selected.label}. 참여자에게 심사자 정보나 신고자 정보는 공개되지 않아요.</p><Button className="mt-5" disabled={submitting} fullWidth loading={submitting} onClick={() => void onSubmit(report)}>신고 조치 저장하기</Button></> : <p className="mt-5 rounded-xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-text-secondary)]">처리 완료된 신고예요. 감사 이력은 수정할 수 없어요.</p>}
   </section>;
 }

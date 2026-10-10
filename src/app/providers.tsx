@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 
 export function WdsProviders({ children }: { children: ReactNode }) {
   return (
-    <ThemeProvider>
+    <ThemeProvider disableDefaultGlobalStyle>
       <AppRouterCacheProvider>{children}</AppRouterCacheProvider>
     </ThemeProvider>
   );

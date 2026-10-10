@@ -56,7 +56,7 @@ export function ProfileImageField({ nickname, onChange, url }: { nickname: strin
     }
   };
 
-  return <section className="mt-6 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)]">
+  return <section className="mt-6 rally-card p-5">
     <h2 className="text-sm font-semibold text-[var(--tm-action-primary)]">프로필 사진</h2>
     <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">카카오 계정 사진을 기본으로 사용해요. 다른 사진으로 바꿀 수 있어요.</p>
 

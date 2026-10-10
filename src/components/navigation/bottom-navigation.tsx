@@ -1,6 +1,5 @@
 "use client";
 
-import { BottomNavigation as WdsBottomNavigation, BottomNavigationItem } from "@wanteddev/wds";
 import { ChatCircleDots, TennisBall, UserCircle, UsersThree } from "@phosphor-icons/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -80,21 +79,5 @@ export function BottomNavigation() {
   const badges = useBadges();
   const activeValue = navigationItems.find((item) => item.isActive(pathname))?.value;
 
-  return (
-    <nav aria-label="주요 메뉴" className="fixed inset-x-0 bottom-0 z-40 bg-white/95 backdrop-blur">
-      <WdsBottomNavigation className="mx-auto max-w-[560px] px-2 pb-[max(8px,env(safe-area-inset-bottom))]" value={activeValue}>
-        {navigationItems.map((item) => {
-          const count = item.badge?.(badges) ?? 0;
-          return <BottomNavigationItem
-            as={Link}
-            href={item.href}
-            icon={<BadgedIcon count={count} label={`${item.label} 새 소식`}>{item.icon}</BadgedIcon>}
-            key={item.value}
-            label={item.label}
-            value={item.value}
-          />;
-        })}
-      </WdsBottomNavigation>
-    </nav>
-  );
+  return <nav aria-label="주요 메뉴" className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--tm-border-default)] bg-white/95 backdrop-blur"><div className="rally-navigation">{navigationItems.map((item) => <Link href={item.href} key={item.value} aria-current={activeValue === item.value ? "page" : undefined}><span><BadgedIcon count={item.badge?.(badges) ?? 0} label={`${item.label} 새 소식`}>{item.icon}</BadgedIcon></span><span>{item.label}</span></Link>)}</div></nav>;
 }

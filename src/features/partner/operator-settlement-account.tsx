@@ -1,12 +1,13 @@
 "use client";
 
+import { PageHeader } from "@/components/ui/page-header";
+
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { FormControl, FormField, FormLabel, TextField } from "@wanteddev/wds";
 
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
-import { BackButton } from "@/components/navigation/back-button";
 import { Button } from "@/components/ui/button";
 import { bankNames } from "@/matches/bank-list";
 
@@ -93,17 +94,14 @@ export function OperatorSettlementAccount() {
 
   return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-32 pt-6 text-[var(--tm-text-primary)]">
     <section className="mx-auto max-w-[560px]">
-      <BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/partner" />
-      <p className="mt-5 text-sm font-semibold text-[var(--tm-action-primary)]">입금 계좌 관리</p>
-      <h1 className="mt-1 text-2xl font-bold">참가비를 받을<br />계좌를 등록해요</h1>
-      <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{court.name}에서 여는 코트 매칭의 참가비를 받을 계좌예요. 참가자에게는 승인된 뒤에만 보여요.</p>
+      <PageHeader backHref="/partner" title="정산 계좌" description={<>{court.name}에서 여는 코트 매칭의 참가비를 받을 계좌예요. 참가자에게는 승인된 뒤에만 보여요.</>} />
 
-      <section className="mt-6 rounded-3xl bg-white p-5 shadow-[0_10px_30px_rgba(29,50,84,0.06)]">
+      <section className="mt-6 rounded-[20px] bg-white p-5 shadow-[var(--tm-shadow-card)]">
         <div className="grid gap-4">
           <FormField>
             <FormLabel required>은행</FormLabel>
             <FormControl>
-              <select className="min-h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white px-3 text-sm" onChange={(event) => set("bank", event.target.value)} value={form.bank}>
+              <select className="rally-input min-h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white px-3 text-sm" onChange={(event) => set("bank", event.target.value)} value={form.bank}>
                 <option value="">은행을 선택해 주세요</option>
                 {bankNames.map((name) => <option key={name} value={name}>{name}</option>)}
               </select>

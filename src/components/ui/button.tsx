@@ -8,8 +8,8 @@ type ButtonSize = "small" | "medium" | "large";
 
 type ButtonOwnProps = {
   /**
-   * "primary" renders a solid Wanted-blue button. "secondary" renders an
-   * outlined Wanted-blue button. "neutral" renders an outlined gray button,
+   * "primary" renders a solid brand-green button. "secondary" renders an
+   * outlined brand-green button. "neutral" renders an outlined gray button,
    * for de-emphasized actions like "취소"/"돌아가기".
    */
   variant?: ButtonVariant;
@@ -46,5 +46,5 @@ const VARIANT_TO_WDS = {
 export function Button<E extends ElementType = "button">({ variant = "primary", size = "large", as, leadingContent, trailingContent, ...rest }: ButtonProps<E>) {
   const Component = WdsButton as unknown as ElementType;
   const { color, variant: wdsVariant } = VARIANT_TO_WDS[variant];
-  return <Component as={as} color={color} leadingContent={leadingContent} size={size} trailingContent={trailingContent} variant={wdsVariant} {...rest} />;
+  return <Component sx={{ minHeight: size === "small" ? 44 : size === "medium" ? 48 : 52, borderRadius: 14 }} as={as} color={color} leadingContent={leadingContent} size={size} trailingContent={trailingContent} variant={wdsVariant} {...rest} />;
 }
