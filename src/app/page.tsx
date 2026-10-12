@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { BrandLaunch } from "@/components/feedback/brand-launch";
+import { HomeLoading } from "@/features/matches/home-loading";
 import { auth } from "@/auth";
 import { getPrisma } from "@/server/db/prisma";
 import { redirect } from "next/navigation";
@@ -21,5 +21,5 @@ async function HomeContent({ searchParams }: { searchParams: Promise<{ returnTo?
 }
 
 export default function Home(props: { searchParams: Promise<{ returnTo?: string | string[] }> }) {
-  return <Suspense fallback={<BrandLaunch />}><HomeContent {...props} /></Suspense>;
+  return <Suspense fallback={<HomeLoading />}><HomeContent {...props} /></Suspense>;
 }

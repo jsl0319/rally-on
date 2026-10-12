@@ -3,6 +3,7 @@ import { Noto_Sans_KR } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { WdsProviders } from "./providers";
+import { InitialEntryProvider } from "@/components/feedback/initial-entry";
 
 import "./globals.css";
 
@@ -44,7 +45,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="flex min-h-dvh flex-col">
-        <WdsProviders>{children}</WdsProviders>
+        <WdsProviders><InitialEntryProvider>{children}</InitialEntryProvider></WdsProviders>
       </body>
     </html>
   );
