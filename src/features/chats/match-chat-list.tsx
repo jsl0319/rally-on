@@ -6,6 +6,8 @@ import { ChatCircle, TennisBall } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+import { StickyPageHeader } from "@/components/navigation/sticky-page-header";
+import { PullToRefresh } from "@/components/feedback/pull-to-refresh";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { Button } from "@/components/ui/button";
 import { matchScheduleText } from "@/matches/schedule";
@@ -84,9 +86,9 @@ export function MatchChatList() {
   const otherRole: ChatRole = role === "HOST" ? "PARTICIPANT" : "HOST";
   const otherCount = lists ? lists[otherRole].length : 0;
 
-  return <main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] px-5 pb-28 pt-4 text-[var(--tm-text-primary)]">
-    <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col">
-      <h1 className="rally-page-title flex min-h-11 items-center text-2xl font-bold">채팅</h1>
+  return <PullToRefresh onRefresh={load}><main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
+    <StickyPageHeader title="채팅" />
+    <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-5">
       <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">참가가 확정된 메이트와 준비를 나눠요.</p>
       <Tab onValueChange={(value) => setRole(value as ChatRole)} value={role ?? "HOST"}>
         <TabList aria-label="채팅 목록 구분" className="mt-6" resize="fill">
@@ -97,7 +99,7 @@ export function MatchChatList() {
       {items === null ? <div className="grid flex-1 place-items-center"><CourtRallyLoader label="채팅을 준비하고 있어요." /></div> : error ? <LoadError error={error} onRetry={() => void load()} /> : items.length === 0 ? <EmptyChatList onSwitch={() => setRole(otherRole)} otherCount={otherCount} role={role ?? "HOST"} /> : <div className="mt-6 space-y-3">{items.map((item) => <ConversationCard item={item} key={item.match.id} />)}</div>}
     </section>
     <BottomNavigation />
-  </main>;
+  </main></PullToRefresh>;
 }
 
 function ConversationCard({ item }: { item: ConversationListItem }) {

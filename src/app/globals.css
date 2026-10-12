@@ -200,3 +200,11 @@ body:has(.rally-welcome-surface)::before { background: #e0ebd0; }
 .rally-navigation a[aria-current="page"] > span:first-child { border-radius:12px; background:var(--tm-bg-subtle); }
 .rally-navigation a > span:first-child { padding:3px 16px; }
 @media (prefers-reduced-motion: reduce) { .rally-choice { transition:none; } }
+
+/* One top inset for Safari and the native WKWebView; sheets remain above titles. */
+.rally-sticky-header { position: sticky; top: var(--rally-safe-top); z-index: 30; background: var(--tm-bg-page); }
+html.rally-pull-refresh-page, html.rally-pull-refresh-page body { overscroll-behavior-y: none; }
+.rally-discovery-card { display: grid; grid-template-columns: minmax(0, 1fr) clamp(88px, 26vw, 128px); overflow: hidden; }
+.rally-discovery-card .rally-card-photo { border-radius: 0; height: 100%; min-height: 120px; }
+
+.rally-discovery-card .rally-card-footer { grid-column: 1 / -1; border-top: 1px solid var(--tm-border-subtle); }

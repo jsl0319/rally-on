@@ -1,6 +1,8 @@
 "use client";
 
-import { PageHeader } from "@/components/ui/page-header";
+import { PullToRefresh } from "@/components/feedback/pull-to-refresh";
+import { StickyPageHeader } from "@/components/navigation/sticky-page-header";
+
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -84,9 +86,10 @@ export function MNotifications() {
     }
   };
 
-  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-10 pt-4 text-[var(--tm-text-primary)]">
-    <div className="mx-auto max-w-[560px]">
-      <PageHeader backHref="/my" title="알림" actions={data && data.unreadCount > 0 ? <button className="rally-text-action" onClick={() => void markAllRead()} type="button">모두 읽음</button> : null} />
+  return <PullToRefresh onRefresh={load}><main className="min-h-app bg-[var(--tm-bg-page)] pb-10 text-[var(--tm-text-primary)]">
+    <StickyPageHeader backHref="/my" title="알림" actions={data && data.unreadCount > 0 ? <button className="rally-text-action" onClick={() => void markAllRead()} type="button">모두 읽음</button> : null} />
+    <div className="mx-auto max-w-[560px] px-5">
+      {data !== null && error ? <p className="mt-4 text-sm text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}
 
       {data === null ? error ? <section className="mt-8 rally-card p-5"><p className="text-sm leading-6">{error}</p><Button className="mt-4" onClick={() => void load()} size="medium">다시 불러오기</Button></section> : <CourtRallyLoader className="mt-8" label="알림을 불러오고 있어요." /> : data.items.length === 0 ? <section className="mt-10 rounded-[20px] border border-dashed border-[var(--tm-border-strong)] bg-white px-5 py-10 text-center"><Bell aria-hidden="true" className="mx-auto size-8 text-[var(--tm-text-muted)]" /><h2 className="mt-4 font-bold">아직 알림이 없어요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">신청·수락·취소 소식이 오면 여기서 확인할 수 있어요.</p></section> : <ul className="mt-4 space-y-3">
         {data.items.map((item) => <li key={item.id}>
@@ -105,5 +108,5 @@ export function MNotifications() {
         </li>)}
       </ul>}
     </div>
-  </main>;
+  </main></PullToRefresh>;
 }

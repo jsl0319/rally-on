@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { PullToRefresh } from "@/components/feedback/pull-to-refresh";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { M2OnboardingFlow } from "@/features/profile/m2-onboarding-flow";
 
 import { DEFAULT_MATCH_FILTERS, MatchDiscoveryFilters, MatchDiscoveryHeader, type MatchFilters } from "./match-discovery-filters";
 
+import { MatchCreateButton } from "./match-create-button";
 import { MatchCard, type MatchCardData } from "./m3-match-card";
 
 type MatchListResponse = { items: MatchCardData[] };
@@ -57,7 +59,7 @@ export function RallyOnHome({ initialScreen, returnTo = "/" }: { initialScreen: 
 
   const loadMatches = useCallback(async (signal?: AbortSignal) => {
     const requestId = ++latestListRequest.current;
-    setListStatus("loading");
+    setListError("");
     try {
       const params = new URLSearchParams({ limit: "30", sort });
       if (gameType) params.set("gameType", gameType);
@@ -81,7 +83,7 @@ export function RallyOnHome({ initialScreen, returnTo = "/" }: { initialScreen: 
   useEffect(() => {
     if (screen !== "home") return;
     const controller = new AbortController();
-    const timer = window.setTimeout(() => { void loadMatches(controller.signal); }, 0);
+    const timer = window.setTimeout(() => { setListStatus("loading"); void loadMatches(controller.signal); }, 0);
     return () => { controller.abort(); window.clearTimeout(timer); };
   }, [screen, loadMatches]);
 
@@ -94,7 +96,7 @@ export function RallyOnHome({ initialScreen, returnTo = "/" }: { initialScreen: 
   const hasFilter = gameType !== null || date !== null;
 
   return (
-    <main className="min-h-app bg-[var(--tm-bg-page)] pb-[calc(160px+env(safe-area-inset-bottom))] text-[var(--tm-text-primary)]">
+    <PullToRefresh onRefresh={() => loadMatches()}><main className="min-h-app bg-[var(--tm-bg-page)] pb-[calc(160px+env(safe-area-inset-bottom))] text-[var(--tm-text-primary)]">
       <MatchDiscoveryHeader />
       <section className="mx-auto max-w-[560px] px-5 pt-3">
         <Link className="flex min-h-12 items-center justify-between gap-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm text-[var(--tm-action-primary)]" href="/partner-sessions"><span>코트 예약이 어렵다면 <strong>코트 매칭</strong></span><span aria-hidden>↗</span></Link>
@@ -105,7 +107,7 @@ export function RallyOnHome({ initialScreen, returnTo = "/" }: { initialScreen: 
         ) : listStatus === "error" ? (
           <div className="mt-4 rounded-[20px] bg-[var(--tm-bg-subtle)] p-6"><p className="font-bold">매칭을 불러오지 못했어요.</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{listError}</p><Button className="mt-4" onClick={() => void loadMatches()} variant="neutral">다시 시도</Button></div>
         ) : matches.length > 0 ? (
-          <div className="mt-4 grid gap-4">{matches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
+          <div className="mt-4 grid gap-3">{matches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
         ) : hasFilter ? (
           <EmptyFilteredState onReset={() => setFilters(current => ({ ...current, gameType: null, date: null }))} />
         ) : (
@@ -113,13 +115,10 @@ export function RallyOnHome({ initialScreen, returnTo = "/" }: { initialScreen: 
         )}
       </section>
 
-      <Link aria-label="매칭 만들기" className="fixed bottom-[calc(88px+env(safe-area-inset-bottom))] right-[max(20px,calc((100vw-520px)/2))] z-30 inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[var(--tm-action-primary)] px-5 text-sm font-semibold text-white shadow-[0_6px_20px_#174c3c26] transition-transform active:scale-95" href="/matches/new">
-        <span aria-hidden="true" className="text-lg leading-none text-[var(--tm-tennis-ball)]">+</span>
-        매칭 만들기
-      </Link>
+      <MatchCreateButton />
       <BottomNavigation />
 
-    </main>
+    </main></PullToRefresh>
   );
 }
 

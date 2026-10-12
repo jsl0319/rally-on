@@ -1,6 +1,8 @@
 "use client";
 
-import { PageHeader } from "@/components/ui/page-header";
+import { PullToRefresh } from "@/components/feedback/pull-to-refresh";
+import { StickyPageHeader } from "@/components/navigation/sticky-page-header";
+
 
 import { ActionArea, ActionAreaButton, Modal, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalHeading, ModalSummary } from "@wanteddev/wds";
 import Link from "next/link";
@@ -122,9 +124,9 @@ export function M5SentApplications() {
     } catch (caught) { setError(caught instanceof Error ? caught.message : "신청을 철회하지 못했어요."); } finally { setWithdrawingId(null); }
   };
 
-  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-28 pt-4 text-[var(--tm-text-primary)]">
-    <div className="mx-auto max-w-[560px]">
-      <PageHeader backHref="/my" title="내가 보낸 신청" />
+  return <PullToRefresh onRefresh={load} disabled={withdrawingId !== null || withdrawConfirmId !== null}><main className="min-h-app bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
+    <StickyPageHeader backHref="/my" title="내가 보낸 신청" />
+    <div className="mx-auto max-w-[560px] px-5">
       <ActivityTabs current="sent" />
       <p className="mt-4 text-sm leading-6 text-[var(--tm-text-secondary)]">신청 결과와 다음 행동을 한눈에 확인해요.</p>
       {error && items !== null ? <div aria-live="polite" className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]">{error}</div> : null}
@@ -132,7 +134,7 @@ export function M5SentApplications() {
       {withdrawConfirmId ? <WithdrawalConfirm busy={withdrawingId === withdrawConfirmId} mode={items?.find((item) => item.id === withdrawConfirmId)?.status === "ACCEPTED" ? "ACCEPTED" : "PENDING"} onCancel={() => setWithdrawConfirmId(null)} onConfirm={() => { const applicationId = withdrawConfirmId; setWithdrawConfirmId(null); void withdraw(applicationId); }} /> : null}
     </div>
     <BottomNavigation />
-  </main>;
+  </main></PullToRefresh>;
 }
 
 function LoadError({ error, onRetry }: { error: string; onRetry: () => Promise<void> }) {

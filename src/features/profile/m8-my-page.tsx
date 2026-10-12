@@ -8,6 +8,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Bell, CaretRight, ClipboardText, FileText, Headset, Megaphone, PaperPlaneTilt, ShieldCheck, UserCircle } from "@phosphor-icons/react";
 
+import { StickyPageHeader } from "@/components/navigation/sticky-page-header";
+import { PullToRefresh } from "@/components/feedback/pull-to-refresh";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
@@ -116,13 +118,11 @@ export function M8MyPage() {
   };
 
 
-  return <main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] px-5 pb-28 pt-4 text-[var(--tm-text-primary)]">
-    <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col">
-      <header className="flex min-h-11 items-center justify-between gap-3">
-        <h1 className="rally-page-title text-2xl font-bold">마이</h1>
-        <NotificationBell unreadCount={unreadNotificationCount} />
-      </header>
+  return <PullToRefresh onRefresh={load} disabled={savingNotificationPref || withdrawalOpen}><main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
+    <StickyPageHeader title="마이" actions={<NotificationBell unreadCount={unreadNotificationCount} />} />
+    <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-5">
 
+      {me !== null && error ? <LoadError error={error} onRetry={load} /> : null}
       {me === null ? error ? <LoadError error={error} onRetry={load} /> : <div className="grid flex-1 place-items-center"><CourtRallyLoader label="내 정보를 준비하고 있어요." /></div> : <>
         <ProfileCard me={me} />
 
@@ -172,7 +172,7 @@ export function M8MyPage() {
 
     <BottomNavigation />
     {withdrawalOpen ? <WithdrawalModal onCancel={() => setWithdrawalOpen(false)} /> : null}
-  </main>;
+  </main></PullToRefresh>;
 }
 
 function NotificationBell({ unreadCount }: { unreadCount: number }) {

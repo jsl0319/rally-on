@@ -83,3 +83,9 @@ export function firstAvailableMatchTime(date: string | undefined, afterTime?: st
   }
   return null;
 }
+
+/** Compact list format; details retain the longer Korean schedule. */
+export function matchCardSchedule(startsAt: string, endsAt: string) {
+  const day = new Intl.DateTimeFormat("ko-KR", { timeZone: KST, month: "numeric", day: "numeric", weekday: "short" }).format(new Date(startsAt));
+  return `${day.replace(/\. /g, ".").replace(".(", " (")} ${matchTimeFormat.format(new Date(startsAt))}–${matchTimeFormat.format(new Date(endsAt))}`;
+}

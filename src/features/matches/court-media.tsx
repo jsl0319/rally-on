@@ -14,14 +14,15 @@ type CourtMediaProps = {
   previewLabel?: string;
   previewUrl?: string | null;
   priority?: boolean;
+  sizes?: string;
 };
 
-export function CourtMedia({ alt, className = "", fallbackLabel, image, previewLabel, previewUrl, priority = false }: CourtMediaProps) {
+export function CourtMedia({ alt, className = "", fallbackLabel, image, previewLabel, previewUrl, priority = false, sizes = "(max-width: 560px) 100vw, 560px" }: CourtMediaProps) {
   const source = previewUrl ?? image?.url;
   const label = previewLabel ?? (source ? image?.sourceLabel ?? "선택한 코트 사진" : fallbackLabel);
 
   return <div className={`relative overflow-hidden rounded-2xl bg-[var(--tm-action-primary)] ${className}`}>
-    {source ? <Image alt={alt} className="object-cover" fill priority={priority} sizes="(max-width: 560px) 100vw, 560px" src={source} unoptimized={!source.startsWith("/images/court-samples/")} /> : <CourtIllustration label={label} />}
+    {source ? <Image alt={alt} className="object-cover" fill priority={priority} sizes={sizes} src={source} unoptimized={!source.startsWith("/images/court-samples/")} /> : <CourtIllustration label={label} />}
     {source ? <span className="absolute bottom-2 right-2 max-w-[calc(100%-16px)] rounded-md bg-black/55 px-1.5 py-1 text-[10px] font-medium leading-4 text-white backdrop-blur-sm">{label}</span> : null}
   </div>;
 }

@@ -1,6 +1,8 @@
 "use client";
 
-import { PageHeader } from "@/components/ui/page-header";
+import { PullToRefresh } from "@/components/feedback/pull-to-refresh";
+import { StickyPageHeader } from "@/components/navigation/sticky-page-header";
+
 
 import { ActionArea, ActionAreaButton, Modal, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalHeading, ModalSummary } from "@wanteddev/wds";
 import Link from "next/link";
@@ -99,8 +101,8 @@ function useJsonLoader<T>(url: string) {
   return { data, error, load };
 }
 
-function PageShell({ children, withNavigation = false }: { children: React.ReactNode; withNavigation?: boolean }) {
-  return <main className={`min-h-app bg-[var(--tm-bg-page)] px-5 pt-4 text-[var(--tm-text-primary)] ${withNavigation ? "pb-28" : "pb-10"}`}><div className="mx-auto max-w-[560px]">{children}</div>{withNavigation ? <BottomNavigation /> : null}</main>;
+function PageShell({ children, withNavigation = false, header }: { children: React.ReactNode; withNavigation?: boolean; header?: React.ReactNode }) {
+  return <main className={`min-h-app bg-[var(--tm-bg-page)] text-[var(--tm-text-primary)] ${header ? "" : "px-5 pt-4"} ${withNavigation ? "pb-28" : "pb-10"}`}>{header}<div className={`mx-auto max-w-[560px] ${header ? "px-5" : ""}`}>{children}</div>{withNavigation ? <BottomNavigation /> : null}</main>;
 }
 
 function LoadingOrError({ error, label, load }: { error: string; label: string; load: () => Promise<void> }) {
@@ -109,12 +111,12 @@ function LoadingOrError({ error, label, load }: { error: string; label: string; 
 
 export function M6ReceivedApplications() {
   const { data, error, load } = useJsonLoader<{ items: HostedMatch[] }>("/api/v1/me/hosted-matches");
-  return <PageShell withNavigation>
-    <PageHeader backHref="/my" title="내가 만든 매칭" />
+  return <PullToRefresh onRefresh={load}><PageShell withNavigation header={<StickyPageHeader backHref="/my" title="내가 만든 매칭" />}>
     <ActivityTabs current="received" />
     <p className="mt-4 text-sm leading-6 text-[var(--tm-text-secondary)]">만든 매칭의 상태와 들어온 신청을 한곳에서 확인해요.</p>
+    {data !== null && error ? <LoadingOrError error={error} label="" load={load} /> : null}
     {data === null ? <LoadingOrError error={error} label="신청 정보를 준비하고 있어요." load={load} /> : data.items.length === 0 ? <EmptyHostedMatches /> : <div className="mt-6 space-y-4">{data.items.map((match) => <HostedMatchCard key={match.id} match={match} onChanged={load} />)}</div>}
-  </PageShell>;
+  </PageShell></PullToRefresh>;
 }
 
 function EmptyHostedMatches() {

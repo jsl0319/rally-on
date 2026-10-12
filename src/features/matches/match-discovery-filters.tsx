@@ -5,7 +5,7 @@ import { DateCalendar, Modal, ModalClose, ModalContainer, ModalNavigation } from
 import { useRef, useState, type MouseEventHandler, type ReactNode } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
+import { StickyPageHeader } from "@/components/navigation/sticky-page-header";
 import { activeGameTypes, gameTypeLabels, type ActiveGameType } from "@/matches/game-type";
 
 export type MatchFilters = {
@@ -45,9 +45,7 @@ function dateLabel(value: string | null): string {
 }
 
 export function MatchDiscoveryHeader() {
-  return <header className="mx-auto w-full max-w-[560px] px-5 pb-2 pt-4">
-    <PageHeader title="매칭" actions={<Link className="rally-text-action rounded-full bg-[var(--tm-bg-subtle)] px-4" href="/activity/received">내 매칭</Link>} />
-  </header>;
+  return <StickyPageHeader title="매칭" actions={<Link className="rally-text-action rounded-full bg-[var(--tm-bg-subtle)] px-4" href="/activity/received">내 매칭</Link>} />;
 }
 
 export function MatchDiscoveryFilters({ value, onChange }: { value: MatchFilters; onChange: (value: MatchFilters) => void }) {
