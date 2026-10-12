@@ -69,3 +69,24 @@ describe("합의 반환 총액", () => {
     for (const patch of [{ agreementConfirmed: false }, { amountKrw: 0 }, { amountKrw: -1 }, { amountKrw: 1.5 }, { note: "짧음" }, { incidentAt: "invalid" }]) expect(courtRefundAgreementInputSchema.safeParse({ ...input, ...patch }).success).toBe(false);
   });
 });
+
+describe("공 준비 참가비", () => {
+  const discounted = { ...base, status: "CONFIRMED", confirmedAt: new Date(), courtFeeKrw: 7000, bringsBalls: true, receivedAmountKrw: 7000 };
+  it("할인 참가자의 초과 입금과 하루 전 취소는 할인 금액 기준이다", () => {
+    expect(courtMoneySummary({ ...discounted, receivedAmountKrw: 12000 }, 12000)).toMatchObject({ excessKrw: 5000, outstandingKrw: 5000 });
+    expect(courtMoneySummary({ ...discounted, status: "CANCELLED", refundAmountKrw: 3500, receivedAmountKrw: 12000 }, 12000)).toMatchObject({ refundTotalKrw: 8500 });
+    expect(courtMoneySummary({ ...discounted, status: "CANCELLED" }, 12000).refundTotalKrw).toBe(7000);
+  });
+  it("미지참 추가 입금을 초과 입금 반환으로 잘못 분류하지 않는다", () => {
+    const a = { ...discounted, ballsMissingAt: new Date() };
+    expect(courtMoneySummary(a, 12000)).toMatchObject({ additionalDueKrw: 5000, excessKrw: 0 });
+    expect(courtMoneySummary({ ...a, receivedAmountKrw: 12000 }, 12000)).toMatchObject({ additionalDueKrw: 0, refundTotalKrw: 0 });
+    expect(courtMoneySummary({ ...a, receivedAmountKrw: 15000 }, 12000)).toMatchObject({ excessKrw: 3000, refundTotalKrw: 3000 });
+    expect(courtMoneySummary({ ...a, receivedAmountKrw: 12000, status: "CANCELLED" }, 12000)).toMatchObject({ additionalDueKrw: 0, refundTotalKrw: 12000 });
+  });
+  it("부분 반환은 할인 참가비를 상한으로 하며 과거 거래는 기존 금액을 유지한다", () => {
+    expect(courtMoneySummary({ ...discounted, agreedRefundAmountKrw: 7000 }, 12000)).toMatchObject({ refundTotalKrw: 7000, needsReview: false });
+    expect(courtMoneySummary({ ...discounted, agreedRefundAmountKrw: 8000 }, 12000)).toMatchObject({ refundTotalKrw: 7000, needsReview: true });
+    expect(courtMoneySummary({ ...base, status: "CANCELLED", confirmedAt: new Date() }, 12000).refundTotalKrw).toBe(12000);
+  });
+});

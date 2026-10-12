@@ -29,7 +29,7 @@ export const courtSlotCreateInputSchema = z.object({
   startsAt: isoDateTimeSchema,
   endsAt: isoDateTimeSchema,
   // 게스트 한 명이 내는 고정 참가비다. 코트 한 면의 총액이 아니라서 인원으로 나누지 않는다.
-  priceKrw: z.number().int().min(0, "게스트 참가비는 0원 이상이어야 해요.").max(1_000_000, "게스트 참가비는 100만원 이하로 입력해 주세요."),
+  priceKrw: z.number().int().min(5001, "일반 참가비는 공 준비 할인 5,000원보다 커야 해요.").max(1_000_000, "게스트 참가비는 100만원 이하로 입력해 주세요."),
   // 운영자는 플레이어가 아니므로 정원에 자신을 포함하지 않는다.
   maxParticipantCount: z.number().int().min(2, "모집 정원은 2명 이상이어야 해요.").max(20, "모집 정원은 20명 이하로 입력해 주세요."),
   // 이 인원을 못 채우면 시작 3시간 전에 자동 취소한다.

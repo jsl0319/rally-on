@@ -27,7 +27,7 @@ export function courtMoneyActions(application: MoneyApplication & {
   const unreviewedClaim = application.depositClaimedAt !== null
     && (!lastReconciledAt || lastReconciledAt < application.depositClaimedAt);
   if (application.status === "ACCEPTED" && (application.depositClaimedAt || money.receivedKrw > 0)) actions.depositToConfirm = 1;
-  else if (unreviewedClaim) actions.depositToReview = 1;
+  else if (unreviewedClaim || money.additionalDueKrw > 0) actions.depositToReview = 1;
 
   if (money.needsReview) actions.refundToReview = 1;
   else if (money.reservedKrw > 0) actions.refundProcessing = 1;

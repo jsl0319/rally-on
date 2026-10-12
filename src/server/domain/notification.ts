@@ -11,6 +11,7 @@ export type NotificationType =
   | "COURT_MATCH_CANCELLED"
   | "COURT_MATCH_PARTICIPANT_CANCELLED"
   | "COURT_MATCH_REFUND_COMPLETED"
+  | "COURT_BALLS_MISSING_RECORDED"
   | "COURT_REFUND_AGREEMENT_RECORDED"
   | "MATCH_CANCELLED"
   | "MATCH_CLOSED"
@@ -36,6 +37,7 @@ const alwaysDelivered = new Set<NotificationType>([
   "COURT_MATCH_CANCELLED",
   "COURT_MATCH_PARTICIPANT_CANCELLED",
   "COURT_MATCH_REFUND_COMPLETED",
+  "COURT_BALLS_MISSING_RECORDED",
   "COURT_REFUND_AGREEMENT_RECORDED",
   "MATCH_CANCELLED",
 ]);
@@ -69,6 +71,8 @@ export function buildNotificationContent(type: NotificationType, matchTitle: str
       return { title: "코트 매칭이 취소됐어요", body: `${matchTitle}에 인원이 모이지 않아 취소됐어요.` };
     case "COURT_MATCH_PARTICIPANT_CANCELLED":
       return { title: "참가자가 취소했어요", body: `${matchTitle} 참가자 한 명이 참가를 취소했어요. 환불 대상인지 확인해 주세요.` };
+    case "COURT_BALLS_MISSING_RECORDED":
+      return { title: "공 미지참 추가 납부 안내", body: `${matchTitle} 운영자가 공 미지참을 기록했어요. 추가 납부 5,000원과 사유를 확인해 주세요.` };
     case "COURT_REFUND_AGREEMENT_RECORDED":
       return { title: "합의한 반환 금액이 기록됐어요", body: `${matchTitle}의 반환 금액과 사유를 확인해 주세요. 실제 송금 완료 안내는 별도로 확인해 주세요.` };
     case "COURT_MATCH_REFUND_COMPLETED":

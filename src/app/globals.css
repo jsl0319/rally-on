@@ -205,6 +205,8 @@ body:has(.rally-welcome-surface)::before { background: #e0ebd0; }
 .rally-sticky-header { position: sticky; top: var(--rally-safe-top); z-index: 30; background: var(--tm-bg-page); }
 html.rally-pull-refresh-page, html.rally-pull-refresh-page body { overscroll-behavior-y: none; }
 .rally-discovery-card { display: grid; grid-template-columns: minmax(0, 1fr) clamp(88px, 26vw, 128px); overflow: hidden; }
-.rally-discovery-card .rally-card-photo { border-radius: 0; height: 100%; min-height: 120px; }
+.rally-discovery-card .rally-card-photo { border-radius: 0; height: 100%; min-height: 0; }
 
 .rally-discovery-card .rally-card-footer { grid-column: 1 / -1; border-top: 1px solid var(--tm-border-subtle); }
+
+.rally-discovery-card .rally-card-badges > span { padding: 2px 6px; border-radius: 6px; }

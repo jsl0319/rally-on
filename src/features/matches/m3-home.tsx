@@ -54,7 +54,7 @@ export function RallyOnHome({ initialScreen, returnTo = "/" }: { initialScreen: 
   const [listStatus, setListStatus] = useState<ListStatus>("loading");
   const [listError, setListError] = useState("");
   const [filters, setFilters] = useState<MatchFilters>(DEFAULT_MATCH_FILTERS);
-  const { gameType, date, sort } = filters;
+  const { gameType, date, sort, availableOnly } = filters;
   const latestListRequest = useRef(0);
 
   const loadMatches = useCallback(async (signal?: AbortSignal) => {
@@ -64,6 +64,7 @@ export function RallyOnHome({ initialScreen, returnTo = "/" }: { initialScreen: 
       const params = new URLSearchParams({ limit: "30", sort });
       if (gameType) params.set("gameType", gameType);
       if (date) params.set("date", date);
+      if (availableOnly) params.set("availableOnly", "true");
       const response = await requestJson<MatchListResponse>(`/api/v1/matches?${params.toString()}`, signal);
       if (signal?.aborted || requestId !== latestListRequest.current) return;
       setMatches(response.items);
@@ -78,7 +79,7 @@ export function RallyOnHome({ initialScreen, returnTo = "/" }: { initialScreen: 
       setListError(caught instanceof Error ? caught.message : "매칭을 불러오지 못했어요.");
       setListStatus("error");
     }
-  }, [gameType, sort, date, router]);
+  }, [gameType, sort, date, availableOnly, router]);
 
   useEffect(() => {
     if (screen !== "home") return;
@@ -93,23 +94,23 @@ export function RallyOnHome({ initialScreen, returnTo = "/" }: { initialScreen: 
   // 돌아갈 곳이 홈일 때는 이 화면이 직접 상태를 홈으로 바꾼다.
   if (screen === "onboarding") return <M2OnboardingFlow onCompleted={safeReturnTo === "/" ? () => setScreen("home") : undefined} returnTo={safeReturnTo} />;
 
-  const hasFilter = gameType !== null || date !== null;
+  const hasFilter = gameType !== null || date !== null || availableOnly;
 
   return (
     <PullToRefresh onRefresh={() => loadMatches()}><main className="min-h-app bg-[var(--tm-bg-page)] pb-[calc(160px+env(safe-area-inset-bottom))] text-[var(--tm-text-primary)]">
       <MatchDiscoveryHeader />
-      <section className="mx-auto max-w-[560px] px-5 pt-3">
-        <Link className="flex min-h-12 items-center justify-between gap-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm text-[var(--tm-action-primary)]" href="/partner-sessions"><span>코트 예약이 어렵다면 <strong>코트 매칭</strong></span><span aria-hidden>↗</span></Link>
-        <div className="mt-4"><MatchDiscoveryFilters value={filters} onChange={setFilters} /></div>
+      <section className="mx-auto max-w-[560px] px-5 pt-1">
+        <Link className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-[var(--tm-bg-subtle)] px-3 py-2 text-[13px] text-[var(--tm-action-primary)]" href="/partner-sessions"><span>코트 예약이 어렵다면 <strong>코트 매칭</strong></span><span aria-hidden>↗</span></Link>
+        <div className="mt-1"><MatchDiscoveryFilters value={filters} onChange={setFilters} /></div>
 
         {listStatus === "loading" ? (
           <CourtRallyLoader className="mt-4" label="매칭을 불러오고 있어요." />
         ) : listStatus === "error" ? (
           <div className="mt-4 rounded-[20px] bg-[var(--tm-bg-subtle)] p-6"><p className="font-bold">매칭을 불러오지 못했어요.</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{listError}</p><Button className="mt-4" onClick={() => void loadMatches()} variant="neutral">다시 시도</Button></div>
         ) : matches.length > 0 ? (
-          <div className="mt-4 grid gap-3">{matches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
+          <div className="mt-1 grid gap-2">{matches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
         ) : hasFilter ? (
-          <EmptyFilteredState onReset={() => setFilters(current => ({ ...current, gameType: null, date: null }))} />
+          <EmptyFilteredState onReset={() => setFilters(current => ({ ...current, gameType: null, date: null, availableOnly: false }))} />
         ) : (
           <EmptyMatchState />
         )}

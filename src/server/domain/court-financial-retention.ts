@@ -4,6 +4,7 @@ export const financialRetentionReasons = {
   SERVICE_ACTIVE: "참가·경기 이용이 아직 끝나지 않음",
   APPLICATION_STATE_UNRECONCILED: "종료된 경기의 신청 상태 정리 필요",
   DEPOSIT_CHECK_REQUIRED: "입금 알림 이후 수령 기록 확인 필요",
+  ADDITIONAL_PAYMENT_OUTSTANDING: "공 미지참 추가 입금 확인 필요",
   REFUND_OUTSTANDING: "아직 반환할 금액이 남음",
   REFUND_IN_PROGRESS: "송금 처리 또는 결과 재확인 중",
   MONEY_REVIEW_REQUIRED: "과다 반환 또는 금전 기록 재확인 필요",
@@ -65,6 +66,7 @@ export function assessCourtFinancialRetention(
     block("INVALID_MONEY_STATE");
   } else {
     const money = courtMoneySummary(application, match.fee!);
+    if (money.additionalDueKrw > 0) block("ADDITIONAL_PAYMENT_OUTSTANDING");
     if (money.outstandingKrw > 0) block("REFUND_OUTSTANDING");
     if (application.refundAttempts.some((attempt) => ["PROCESSING", "REVIEW"].includes(attempt.status))) block("REFUND_IN_PROGRESS");
     if (money.needsReview) block("MONEY_REVIEW_REQUIRED");

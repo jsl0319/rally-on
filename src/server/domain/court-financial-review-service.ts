@@ -1,3 +1,4 @@
+import { courtFeeSelect } from "@/matches/court-fee";
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import { lockAccountTransactions, assertActiveTransactionUser } from "./account-transaction-lock";
 import { assertHandoffAccess } from "./court-transaction-handoff";
@@ -8,7 +9,7 @@ import { financialDigest, financialStateFingerprint, financialReviewInputSchema,
 
 const select = {
   id: true, applicantUserId: true, status: true, updatedAt: true, confirmedAt: true,
-  depositClaimedAt: true, receiptVersion: true, refundAccountVersion: true, receivedAmountKrw: true,
+  depositClaimedAt: true, receiptVersion: true, refundAccountVersion: true, ...courtFeeSelect, receivedAmountKrw: true,
   refundAmountKrw: true, agreedRefundAmountKrw: true, refundAgreementVersion: true, legacyRefundPaidKrw: true,
   receiptRecords: { select: { version: true, amountKrw: true, createdAt: true }, orderBy: { version: "desc" }, take: 1 },
   refundAttempts: { select: { id: true, version: true, status: true, amountKrw: true, updatedAt: true } },
@@ -48,6 +49,7 @@ async function readState(tx: Tx, actorId: string, applicationId: string, handoff
   if (a.receivedAmountKrw === null || !receipt || receipt.version !== a.receiptVersion || receipt.amountKrw !== a.receivedAmountKrw) blockers.push("누적 수령액을 은행 내역과 대조해 먼저 저장해 주세요. 미입금은 0원으로 기록해 주세요.");
   if (a.depositClaimedAt && (!receipt || receipt.createdAt < a.depositClaimedAt)) blockers.push("최근 입금 알림 이후의 수령 내역을 확인해 주세요.");
   if (a.match.totalCourtFeeKrw === null || [a.receivedAmountKrw, a.legacyRefundPaidKrw, a.refundAmountKrw, a.agreedRefundAmountKrw, ...a.refundAttempts.map((r) => r.amountKrw)].some((v) => v !== null && (!Number.isSafeInteger(v) || v < 0))) blockers.push("금전 기록을 먼저 확인해 주세요.");
+  if (money.additionalDueKrw) blockers.push("공 미지참 추가 입금 확인이 남아 있어요.");
   if (money.outstandingKrw || money.reservedKrw || money.needsReview || a.refundAttempts.some((r) => r.status === "PROCESSING" || r.status === "REVIEW")) blockers.push("반환 또는 송금 확인이 남아 있어요.");
   if (inquiries.some((i) => i.status !== "RESOLVED")) blockers.push("관련 문의를 먼저 해결해 주세요.");
   return { a, stateFingerprint, expectedFingerprint, latest, holds, blockers };

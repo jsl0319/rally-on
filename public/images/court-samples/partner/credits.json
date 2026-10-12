@@ -1,0 +1,32 @@
+[
+  {
+    "file": "green-park.jpg",
+    "author": "Ellie Burgin",
+    "source": "https://www.pexels.com/photo/tennis-court-on-a-cloudy-day-17429850/",
+    "license": "https://www.pexels.com/license/"
+  },
+  {
+    "file": "sunset.jpg",
+    "author": "Tim Chow",
+    "source": "https://unsplash.com/photos/iiWhddT4SB4",
+    "license": "https://unsplash.com/license"
+  },
+  {
+    "file": "clay-aerial.jpg",
+    "author": "Michał Bińkiewicz",
+    "source": "https://unsplash.com/photos/dtpCEfKT1H4",
+    "license": "https://unsplash.com/license"
+  },
+  {
+    "file": "blue-club.jpg",
+    "author": "Vikram TKV",
+    "source": "https://unsplash.com/photos/STuJxXJdFZw",
+    "license": "https://unsplash.com/license"
+  },
+  {
+    "file": "sunlit.jpg",
+    "author": "Tim Chow",
+    "source": "https://unsplash.com/photos/8vhQBaF2wcY",
+    "license": "https://unsplash.com/license"
+  }
+]

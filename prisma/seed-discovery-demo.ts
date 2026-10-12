@@ -1,10 +1,11 @@
 /**
- * Insert-only discovery fixtures. No dotenv: the caller must inject the intended DB.
+ * Discovery fixtures with an optional, guarded replacement of known old test matches. No dotenv: the caller must inject the intended DB.
  * Default: validate and preview. --apply inserts one atomic batch; reruns are no-ops.
  * Requires --date=YYYY-MM-DD and --expected-host=<database hostname>.
  * All accounts, courts, contact/settlement details are explicitly fictional test data.
  */
 import { PrismaClient } from "../src/generated/prisma/client";
+import type { Prisma } from "../src/generated/prisma/client";
 import { createPrismaPg } from "../src/server/db/prisma-adapter";
 import { getDatabaseUrl } from "../src/server/env";
 import { matchCreateInputSchema } from "../src/server/domain/match";
@@ -25,7 +26,7 @@ const testNote = "[화면 테스트용] 가상의 코트·일정입니다. 실�
 const now = new Date();
 const operatorId = id(3);
 const fixtures = [
-  { name: "망원 모닝코트", district: "마포구", city: "SEOUL", day: 1, time: "09:00", end: "11:00", courtTime: "10:00", courtEnd: "12:00", type: "OTHER", male: null, female: null, count: 3, capacity: 4, courtMale: null, courtFemale: null, minimum: 2, fee: 0, courtFee: 0, approval: "AUTO", purposes: ["CASUAL_HIT", "RALLY_PRACTICE"], gender: "FEMALE", experience: "UNDER_3_MONTHS", rally: "STARTING", game: "NONE", welcome: true, intro: "공을 천천히 주고받으며 기본 자세부터 익혀요.", balls: true, equipment: true, facilitator: false },
+  { name: "망원 모닝코트", district: "마포구", city: "SEOUL", day: 1, time: "09:00", end: "11:00", courtTime: "10:00", courtEnd: "12:00", type: "OTHER", male: null, female: null, count: 3, capacity: 4, courtMale: null, courtFemale: null, minimum: 2, fee: 0, courtFee: 10000, approval: "AUTO", purposes: ["CASUAL_HIT", "RALLY_PRACTICE"], gender: "FEMALE", experience: "UNDER_3_MONTHS", rally: "STARTING", game: "NONE", welcome: true, intro: "공을 천천히 주고받으며 기본 자세부터 익혀요.", balls: true, equipment: true, facilitator: false },
   { name: "서울숲 믹스코트", district: "성동구", city: "SEOUL", day: 1, time: "16:30", end: "18:30", courtTime: "17:00", courtEnd: "19:00", type: "MIXED_DOUBLES", male: 1, female: 2, count: 3, capacity: 4, courtMale: 2, courtFemale: 2, minimum: 4, fee: 12000, courtFee: 15000, approval: "OPERATOR", purposes: ["GAME_INTRO", "RALLY_PRACTICE"], gender: "MALE", experience: "MONTHS_6_TO_12", rally: "SHORT_RALLY", game: "KNOWS_RULES", welcome: true, intro: "처음 하는 혼합 복식도 괜찮아요. 점수부터 함께 익혀요.", balls: true, equipment: false, facilitator: true },
   { name: "잠실 나이트코트", district: "송파구", city: "SEOUL", day: 2, time: "20:00", end: "22:00", courtTime: "19:30", courtEnd: "21:30", type: "MENS_DOUBLES", male: 1, female: 0, count: 1, capacity: 4, courtMale: 4, courtFemale: 0, minimum: 4, fee: 20000, courtFee: 22000, approval: "AUTO", purposes: ["GAME"], gender: "MALE", experience: "YEARS_1_TO_2", rally: "STANDARD_RALLY", game: "CAN_PLAY", welcome: false, intro: "퇴근 후 남자 복식 게임을 함께할 한 분을 찾아요.", balls: true, equipment: false, facilitator: false },
   { name: "분당 그린코트", district: "성남시", city: "GYEONGGI", day: 2, time: "10:30", end: "12:00", courtTime: "11:00", courtEnd: "13:00", type: "WOMENS_DOUBLES", male: 0, female: 3, count: 3, capacity: 6, courtMale: 0, courtFemale: 6, minimum: 4, fee: 8000, courtFee: 18000, approval: "OPERATOR", purposes: ["STROKE_PRACTICE", "GAME_INTRO"], gender: "FEMALE", experience: "YEARS_1_TO_2", rally: "COMFORTABLE_RALLY", game: "PLAYED_FEW", welcome: true, intro: "스트로크 연습 후 여자 복식을 번갈아 즐겨요.", balls: false, equipment: false, facilitator: true },
@@ -55,7 +56,7 @@ const entries = fixtures.map((fixture, index) => {
     priceKrw: fixture.courtFee, maxParticipantCount: fixture.capacity, minParticipantCount: fixture.minimum,
     gameType: fixture.type, maleCapacity: fixture.courtMale, femaleCapacity: fixture.courtFemale,
     approvalMode: fixture.approval,
-    serviceScope: { balls: fixture.balls, equipment: fixture.equipment, lesson: false, facilitator: fixture.facilitator },
+    serviceScope: { balls: false, equipment: fixture.equipment, lesson: false, facilitator: fixture.facilitator },
     usageNote: `${testNote}\n${fixture.intro}`,
   });
   if (new Date(slot.startsAt).getTime() - now.getTime() < 4 * 60 * 60_000) throw new Error("Court fixtures must start at least 4 hours later.");
@@ -66,6 +67,38 @@ const entries = fixtures.map((fixture, index) => {
 const settlement = courtSettlementAccountInputSchema.parse({ bank: "테스트용 · 송금 금지", accountNumber: "00000", accountHolder: "실제 송금 금지" });
 const contact = courtContactInputSchema.parse({ phone: "01000000000", hours: "테스트 연락처 · 실제 전화 금지", publicationAgreed: true, expectedVersion: 0 });
 const matchIds = entries.flatMap(({ index }) => [id(1, index), id(8, index)]);
+
+// Only repository-owned fixture identities qualify. A label alone is never enough.
+const oldUiIds = [
+  ...Array.from({ length: 5 }, (_, i) => `8afee608-0908-4000-8000-${String(i + 1).padStart(12, "0")}`),
+  ...Array.from({ length: 10 }, (_, i) => `8afee608-0909-4000-8000-${String(i + 1).padStart(12, "0")}`),
+];
+const oldDemoIds = [1, 8].flatMap((group) => Array.from({ length: 5 }, (_, i) =>
+  `20261010-${String(group).padStart(4, "0")}-4000-8000-${String(i + 1).padStart(12, "0")}`));
+const oldSeedHosts = Array.from({ length: 4 }, (_, i) => `10000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`);
+const knownOldFixtures: Prisma.MatchWhereInput = { OR: [
+  { id: { in: [...oldUiIds, ...oldDemoIds].filter((value) => !matchIds.includes(value)) }, title: { startsWith: "[테스트]" } },
+  { hostUserId: { in: oldSeedHosts }, clientRequestId: { in: Array.from({ length: 5 }, (_, i) => `20000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`) } },
+] };
+const safeToRemove: Prisma.MatchWhereInput = {
+  ...knownOldFixtures,
+  applications: { none: {} }, conversation: { is: null }, supportInquiries: { none: {} },
+  supplyIncidents: { none: {} }, transactionHandoff: { is: null }, compositionCancellation: { is: null },
+};
+async function replaceOldFixtures(tx: Prisma.TransactionClient) {
+  // Row locks also block a concurrent application FK insertion. Recheck after locks.
+  const candidates = await tx.match.findMany({ where: knownOldFixtures, select: { id: true } });
+  for (const { id: oldId } of candidates.sort((a, b) => a.id.localeCompare(b.id))) {
+    await tx.$queryRaw`SELECT id FROM matches WHERE id = ${oldId}::uuid FOR UPDATE`;
+  }
+  const removable = await tx.match.findMany({ where: safeToRemove, select: { id: true, courtSlotId: true } });
+  const deleted = await tx.match.deleteMany({ where: { ...safeToRemove, id: { in: removable.map((m) => m.id) } } });
+  const deletedSlots = await tx.courtSlot.deleteMany({ where: {
+    id: { in: removable.flatMap((m) => m.courtSlotId ? [m.courtSlotId] : []) },
+    match: { is: null }, supplyIncidents: { none: {} },
+  } });
+  return { matches: deleted.count, slots: deletedSlots.count, retainedHistory: candidates.length - deleted.count };
+}
 
 async function main() {
   const prisma = new PrismaClient({ adapter: createPrismaPg(databaseUrl) });
@@ -82,12 +115,13 @@ async function main() {
     if (existing.some((m) => m.hostUserId !== (m.id.includes("-0008-") ? operatorId : id(2, Number(m.id.slice(-12)))))) throw new Error("Fixture ID collision.");
     const summary = entries.map(({ index, name, general, slot }) => ({ name, general: { id: id(1, index), startsAt: general.courtSource === "EXTERNAL_RESERVED" ? general.startsAt : null, gameType: general.gameType, fee: fixtures[index - 1].fee, recruits: general.recruitCount }, court: { slotId: id(7, index), startsAt: slot.startsAt, gameType: slot.gameType, fee: slot.priceKrw, capacity: slot.maxParticipantCount, minimum: slot.minParticipantCount, approval: slot.approvalMode } }));
     if (!process.argv.includes("--apply") || existing.length === 10) {
-      console.log(JSON.stringify({ action: existing.length ? "already-exists" : "dry-run", entries: summary }, null, 2));
+      console.log(JSON.stringify({ action: existing.length ? "already-exists" : "dry-run", replace: process.argv.includes("--replace-existing") ? { known: await prisma.match.count({ where: knownOldFixtures }), removable: await prisma.match.count({ where: safeToRemove }) } : null, entries: summary }, null, 2));
       return;
     }
-    await prisma.$transaction(async (tx) => {
+    const removed = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`discovery-demo-${batch}`}))`;
       if (await tx.match.count({ where: { id: { in: matchIds } } })) throw new Error("Batch was created concurrently; rerun to verify.");
+      const removed = process.argv.includes("--replace-existing") ? await replaceOldFixtures(tx) : null;
       await tx.user.create({ data: { id: operatorId, nickname: `[테스트] 운영${batch.slice(-4)}`, nicknameConfirmedAt: now, onboardingCompletedAt: now, tennisProfile: { create: { gender: "FEMALE", experienceRange: "YEARS_1_TO_2", rallyLevel: "COMFORTABLE_RALLY", gameExperience: "PLAYED_FEW" } } } });
       for (const { fixture: f, index: i, name, address, general, slot } of entries) {
         if (general.courtSource !== "EXTERNAL_RESERVED") throw new Error("Unexpected fixture source.");
@@ -118,7 +152,7 @@ async function main() {
         await tx.courtUnit.create({ data: { id: id(6, i), courtId: id(5, i), name: slot.courtUnitName } });
         await tx.courtSlot.create({ data: {
           id: id(7, i), courtUnitId: id(6, i), startsAt: new Date(slot.startsAt), endsAt: new Date(slot.endsAt),
-          priceKrw: slot.priceKrw, maxParticipantCount: slot.maxParticipantCount, minParticipantCount: slot.minParticipantCount,
+          ballDiscountEnabled: true, priceKrw: slot.priceKrw, maxParticipantCount: slot.maxParticipantCount, minParticipantCount: slot.minParticipantCount,
           gameType: slot.gameType, maleCapacity: slot.maleCapacity, femaleCapacity: slot.femaleCapacity, approvalMode: slot.approvalMode,
           serviceScope: slot.serviceScope, usageNote: slot.usageNote, visibility: "PUBLIC", status: "AVAILABLE", publishedAt: now, statusChangedAt: now,
           statusHistory: { create: { fromStatus: "DRAFT", toStatus: "AVAILABLE", actor: "OPERATOR", actorUserId: operatorId, reasonCode: "TEST_FIXTURE_PUBLISHED" } },
@@ -132,8 +166,9 @@ async function main() {
           introduction: `${testNote}\n${f.intro}`, purposes: { create: f.purposes.map((purpose) => ({ purpose })) },
         } });
       }
+      return removed;
     }, { timeout: 120_000, maxWait: 10_000 });
-    console.log(JSON.stringify({ action: "created", count: 10, entries: summary }, null, 2));
+    console.log(JSON.stringify({ action: "created", count: 10, removed, entries: summary }, null, 2));
   } finally { await prisma.$disconnect(); }
 }
 

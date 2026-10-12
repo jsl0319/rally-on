@@ -50,6 +50,7 @@ function ownedSlot(applicationStatus: "DRAFT_ACCESS_GRANTED" | "PUBLISH_APPROVED
     startsAt: futureStartsAt,
     endsAt: futureEndsAt,
     priceKrw: 40_000,
+    ballDiscountEnabled: true,
     maxParticipantCount: 4,
     minParticipantCount: 4,
     gameType: "MIXED_DOUBLES",
@@ -112,7 +113,8 @@ describe("Court Partner time supply authorization and state transitions", () => 
     expect(result).toMatchObject({ id: "slot-id", visibility: "PRIVATE", status: "DRAFT", availableAction: "READ_ONLY" });
     expect(transaction.courtSlot.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        serviceScope: slotInput.serviceScope,
+        serviceScope: { ...slotInput.serviceScope, balls: false },
+        ballDiscountEnabled: true,
         statusHistory: expect.objectContaining({ create: expect.objectContaining({ actor: "OPERATOR", toStatus: "DRAFT", reasonCode: "SLOT_DRAFT_CREATED" }) }),
       }),
     }));

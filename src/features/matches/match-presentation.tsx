@@ -13,6 +13,15 @@ export function displayCourtImage(court: { source?: string; name: string | null;
   return { url: `/images/court-samples/${courtSamples[hash % courtSamples.length]}.jpg`, sourceLabel: "견본 이미지", fallback: "TENNIS_COURT_ILLUSTRATION" };
 }
 
+/** A separate sample pool for courts without an uploaded photo; stable per venue. */
+export function displayPartnerCourtImage(court: { name: string; address: string; image: CourtImageView }): CourtImageView {
+  if (court.image?.url) return court.image;
+  const samples = ["green-park", "sunset", "clay-aerial", "blue-club", "sunlit"];
+  let hash = 0;
+  for (const char of `${court.name}|${court.address}`) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return { url: `/images/court-samples/partner/${samples[hash % samples.length]}.jpg`, sourceLabel: "견본 이미지", fallback: "TENNIS_COURT_ILLUSTRATION" };
+}
+
 export function matchSchedule(startsAt: string, endsAt: string) {
   return matchScheduleParts(startsAt, endsAt);
 }

@@ -1385,3 +1385,10 @@ Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_
 `Match.courtCompositionSnapshot.lateReview`에 `{expectedVersion, clientRequestId, outcome, note, actorUserId, reviewedAt}`를 보존한다. 기존 판정 근거 JSON을 덮어버리지 않고 이 속성만 추가한다. 실제 제공 완료는 `COMPLETED/completedAt`, 미제공은 `CANCELLED/cancelledAt`로 처리한다. 수동 확인으로 `courtCompositionPassedAt`을 소급 생성하지 않는다. 이미 기록한 수동 결과는 다른 요청으로 덮어쓰지 않는다.
 
 `REVIEW_REQUIRED`는 새 DB enum이 아니라 활성 Match의 `startsAt <= now && courtCompositionPassedAt == null`에서 파생하는 API/UI 상태다. 과거 정책 버전의 경기에도 앞으로 정상 판정을 통과하면 통과 시각을 저장해 미판정 상태와 구분한다. 개인정보가 포함될 수 있는 확인 메모는 공개 참가자 응답에 원문으로 노출하지 않는다.
+
+## 2026-10-12 공 준비 참가비
+
+정책 정본: [03-30](03-30-court-ball-contribution.md).
+`CourtSlot.ballDiscountEnabled`는 기존 행 `false`, 새 초안 저장은 `true`다. 활성화 시 `priceKrw > 5000` DB 제약을 적용한다.
+`MatchApplication.courtFeeKrw`는 신청 시 고정한 실제 참가비이며 과거 `null`은 Match 금액으로 읽는다. `bringsBalls`는 역할 이력이다. 활성 신청(PENDING/ACCEPTED/CONFIRMED)에 대해 Match당 공 준비 1명만 허용하는 부분 유일 인덱스를 사용한다.
+`ballsMissingAt/By/RequestId/Note`는 운영자가 한 번 기록한 현장 미지참 감사 정보다. 원 참가비·동의 스냅샷을 바꾸지 않으며 추가 5,000원은 별도 납부 의무로 계산한다. 기존 수령 이력과 환불 이력은 그대로 재사용한다.

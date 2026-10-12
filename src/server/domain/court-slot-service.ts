@@ -1,3 +1,4 @@
+import { courtFeeSelect, ballDiscountKrw } from "@/matches/court-fee";
 import { lockAccountTransactions, assertActiveTransactionUser } from "./account-transaction-lock";
 import { Prisma } from "@/generated/prisma/client";
 import type { CourtSlotStatus, MatchStatus, PrismaClient } from "@/generated/prisma/client";
@@ -172,6 +173,7 @@ export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) 
     startsAt: slot.startsAt.toISOString(),
     endsAt: slot.endsAt.toISOString(),
     guestFeeKrw: slot.priceKrw,
+    ballDiscountEnabled: slot.ballDiscountEnabled,
     maxParticipantCount: slot.maxParticipantCount,
     minParticipantCount: slot.minParticipantCount,
     gameType: slot.gameType ? { code: slot.gameType, label: gameTypeLabels[slot.gameType] } : null,
@@ -381,7 +383,8 @@ export async function createCourt(prisma: PrismaClient, viewer: { id: string }, 
 
 export async function createCourtSlot(prisma: PrismaClient, viewer: { id: string }, courtId: string, input: CourtSlotCreateInput) {
   await getOwnedCourt(prisma, viewer, courtId);
-  const serviceScope = courtServiceScopeSchema.parse(input.serviceScope);
+  if (!Number.isInteger(input.priceKrw) || input.priceKrw <= ballDiscountKrw) throw new DomainError("INVALID_COURT_FEE", 422, "일반 참가비는 5,000원보다 커야 해요.");
+  const serviceScope = courtServiceScopeSchema.parse({ ...input.serviceScope, balls: false });
   const startsAt = new Date(input.startsAt);
   const endsAt = new Date(input.endsAt);
 
@@ -410,6 +413,7 @@ export async function createCourtSlot(prisma: PrismaClient, viewer: { id: string
           startsAt,
           endsAt,
           priceKrw: input.priceKrw,
+          ballDiscountEnabled: true,
           maxParticipantCount: input.maxParticipantCount,
           minParticipantCount: input.minParticipantCount,
           gameType: input.gameType,
@@ -451,7 +455,7 @@ async function getOperatorActionCounts(prisma: PrismaClient, matchIds: string[])
 
   const applications = await prisma.matchApplication.findMany({
     where: { matchId: { in: matchIds } },
-    select: { matchId: true, applicantGender: true, status: true, depositClaimedAt: true, confirmedAt: true, refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, agreedRefundAmountKrw: true, receivedAmountKrw: true, refundBank: true, refundAccountNumber: true, refundAccountHolder: true, receiptRecords: { take: 1, orderBy: { createdAt: "desc" }, select: { createdAt: true } }, legacyRefundPaidKrw: true, refundAttempts: { select: { status: true, amountKrw: true } }, match: { select: { totalCourtFeeKrw: true, status: true, startsAt: true, gameType: true, courtCompositionPolicyVersion: true, courtCompositionPassedAt: true, courtSlot: { select: { minParticipantCount: true } } } } },
+    select: { matchId: true, applicantGender: true, status: true, depositClaimedAt: true, confirmedAt: true, refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, agreedRefundAmountKrw: true, ...courtFeeSelect, receivedAmountKrw: true, refundBank: true, refundAccountNumber: true, refundAccountHolder: true, receiptRecords: { take: 1, orderBy: { createdAt: "desc" }, select: { createdAt: true } }, legacyRefundPaidKrw: true, refundAttempts: { select: { status: true, amountKrw: true } }, match: { select: { totalCourtFeeKrw: true, status: true, startsAt: true, gameType: true, courtCompositionPolicyVersion: true, courtCompositionPassedAt: true, courtSlot: { select: { minParticipantCount: true } } } } },
   });
   const compositions = new Map<string, typeof applications>();
   for (const application of applications) {
@@ -520,7 +524,8 @@ export async function updateCourtSlot(
     throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "다른 변경사항이 있어 시간대를 다시 확인해 주세요.");
   }
 
-  const serviceScope = courtServiceScopeSchema.parse(input.serviceScope);
+  if (!Number.isInteger(input.priceKrw) || input.priceKrw <= ballDiscountKrw) throw new DomainError("INVALID_COURT_FEE", 422, "일반 참가비는 5,000원보다 커야 해요.");
+  const serviceScope = courtServiceScopeSchema.parse({ ...input.serviceScope, balls: false });
 
   const startsAt = new Date(input.startsAt);
   const endsAt = new Date(input.endsAt);
@@ -552,6 +557,7 @@ export async function updateCourtSlot(
           startsAt,
           endsAt,
           priceKrw: input.priceKrw,
+          ballDiscountEnabled: true,
           maxParticipantCount: input.maxParticipantCount,
           minParticipantCount: input.minParticipantCount,
           gameType: input.gameType,
@@ -588,6 +594,7 @@ async function transitionSlot(
     if (slot.status !== "DRAFT" || slot.visibility !== "PRIVATE") {
       throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "비공개 초안 시간대만 공개할 수 있어요.");
     }
+    if (!slot.ballDiscountEnabled || slot.priceKrw <= ballDiscountKrw) throw new DomainError("COURT_BALL_POLICY_REQUIRED", 409, "초안에서 공 준비 할인과 일반 참가비를 확인하고 저장한 뒤 공개해 주세요.");
     const compositionIssue = courtCompositionIssues(slot)[0];
     if (compositionIssue) throw new DomainError("COURT_COMPOSITION_INVALID", 409, compositionIssue.message);
     if (!readCourtServiceScope(slot.serviceScope)) {

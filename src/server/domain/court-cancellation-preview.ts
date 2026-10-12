@@ -1,3 +1,4 @@
+import { applicationCourtFee } from "@/matches/court-fee";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getRefundAmountKrw, getRefundPercent, refundAccountInputSchema } from "./court-match";
@@ -16,7 +17,7 @@ const seoulOffsetMs = 9 * 3600000;
 
 /** 조회와 실행에서 같은 조건을 비교한다. 발급 시각은 해시에 넣지 않는다. */
 export function buildCourtCancellationPreview(application: CancellationApplication, match: CancellationMatch, now: Date) {
-  const fee = match.totalCourtFeeKrw ?? 0;
+  const fee = applicationCourtFee(application, match.totalCourtFeeKrw ?? 0);
   const confirmed = application.status === "CONFIRMED";
   const refundPercent = confirmed ? getRefundPercent(now, match.startsAt) : 0;
   const refundAmountKrw = confirmed ? getRefundAmountKrw(fee, now, match.startsAt) : null;

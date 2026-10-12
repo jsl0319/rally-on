@@ -1,3 +1,4 @@
+import { applicationCourtFee, payableCourtFee, courtFeeSelect, ballDiscountKrw, ballHoldingStatuses } from "@/matches/court-fee";
 import { buildCourtApplicationNotice, readCourtApplicationNotice } from "./court-application-notice";
 import { describeCourtComposition } from "./court-match-composition";
 import { assertHandoffAccess } from "./court-transaction-handoff";
@@ -11,13 +12,14 @@ import { buildCourtCancellationPreview } from "./court-cancellation-preview";
 import { canReadCourtContact, currentCourtContact } from "./court-contact";
 
 const applicationSelect = {
+  ballsMissingNote: true,
   courtNoticeVersion: true, courtNoticeSnapshot: true, courtNoticeAcceptedAt: true,
   id: true, applicantUserId: true, applicantGender: true, status: true, createdAt: true,
   message: true, profileSnapshot: true, paymentDueAt: true, depositCode: true,
   depositorName: true, depositClaimedAt: true, confirmedAt: true,
   refundBank: true, refundAccountNumber: true, refundAccountHolder: true,
   refundRequestedAt: true, refundCompletedAt: true, refundAmountKrw: true, agreedRefundAmountKrw: true, participantCancelledAt: true,
-  confirmationDueAt: true, receivedAmountKrw: true, lastReceivedAt: true, feeReceivedAt: true, receiptVersion: true,
+  confirmationDueAt: true, ...courtFeeSelect, receivedAmountKrw: true, lastReceivedAt: true, feeReceivedAt: true, receiptVersion: true,
   refundAccountVersion: true, legacyRefundPaidKrw: true, refundAgreementVersion: true,
   refundAgreements: { orderBy: { version: "desc" } },
   receiptRecords: { orderBy: { version: "desc" } },
@@ -63,6 +65,11 @@ function toApplication(application: Application, fee: number, operator = false) 
   const money = courtMoneySummary(application, fee);
   const activeRefund = application.refundAttempts.find((r) => r.status === "PROCESSING" || r.status === "REVIEW");
   return {
+    feeKrw: applicationCourtFee(application, fee),
+    payableFeeKrw: payableCourtFee(application, fee),
+    bringsBalls: application.bringsBalls,
+    ballsMissingAt: application.ballsMissingAt?.toISOString() ?? null,
+    ballsMissingNote: application.ballsMissingNote,
     applicationNotice: readCourtApplicationNotice(application.courtNoticeSnapshot),
     noticeAcceptedAt: application.courtNoticeAcceptedAt?.toISOString() ?? null,
     agreedRefundAmountKrw: application.agreedRefundAmountKrw,
@@ -104,6 +111,12 @@ function summary(match: Match) {
   return {
     id: match.id, slotId: match.courtSlotId, status: match.status, version: match.version,
     applicationNotice: buildCourtApplicationNotice(match),
+    ballContribution: match.courtSlot?.ballDiscountEnabled ? {
+      available: !match.applications.some((a) => a.bringsBalls && ballHoldingStatuses.some((s) => s === a.status)),
+      discountKrw: ballDiscountKrw,
+      feeKrw: (match.totalCourtFeeKrw ?? 0) - ballDiscountKrw,
+      notice: buildCourtApplicationNotice(match, true),
+    } : null,
     composition: describeCourtComposition(match, new Date()),
     lateConfirmationDeadline: getLateConfirmationDeadline(match.startsAt).toISOString(),
     title: match.courtSlot?.courtUnit.court.name ?? match.title,
@@ -182,10 +195,11 @@ export async function getOperatorCourtMatch(prisma: PrismaClient, viewer: { id: 
     canCancelForComposition: !handoff && match.host.status === "ACTIVE" && ["OPEN", "CLOSED"].includes(match.status) && describeCourtComposition(match, new Date()).phase === "ACTION_REQUIRED",
     applications: match.applications.map((application) => ({
       ...toApplication(application, match.totalCourtFeeKrw ?? 0, true),
-      refundAgreementWindow: { startsAt: match.startsAt.toISOString(), endsAt: match.endsAt.toISOString(), maxAmountKrw: Math.min(match.totalCourtFeeKrw ?? 0, application.receivedAmountKrw ?? 0) },
+      canRecordMissingBalls: !handoff && application.bringsBalls && !application.ballsMissingAt && application.status === "CONFIRMED" && match.status !== "CANCELLED" && match.startsAt <= new Date() && !application.agreedRefundAmountKrw && !application.legacyRefundPaidKrw && !application.refundAttempts.some((r) => ["PAID", "PROCESSING", "REVIEW"].includes(r.status)),
+      refundAgreementWindow: { startsAt: match.startsAt.toISOString(), endsAt: match.endsAt.toISOString(), maxAmountKrw: Math.min(payableCourtFee(application, match.totalCourtFeeKrw ?? 0), application.receivedAmountKrw ?? 0) },
       canRecordRefundAgreement: Boolean(application.confirmedAt && match.startsAt <= new Date()
         && !application.participantCancelledAt && match.status !== "CANCELLED"
-        && application.receivedAmountKrw !== null && application.agreedRefundAmountKrw < Math.min(match.totalCourtFeeKrw ?? 0, application.receivedAmountKrw)),
+        && application.receivedAmountKrw !== null && application.agreedRefundAmountKrw < Math.min(payableCourtFee(application, match.totalCourtFeeKrw ?? 0), application.receivedAmountKrw)),
       ...(showProfile ? { profileSnapshot: application.profileSnapshot, message: application.message } : {}),
     })),
   };

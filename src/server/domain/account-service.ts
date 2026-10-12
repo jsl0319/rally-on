@@ -1,3 +1,4 @@
+import { applicationCourtFee } from "@/matches/court-fee";
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient, User } from "@/generated/prisma/client";
 import { deleteStoredProfileImage } from "./profile-image-service";
@@ -18,7 +19,7 @@ async function withdrawalState(tx: Prisma.TransactionClient, userId: string) {
   const applications = await tx.matchApplication.findMany({ where: { applicantUserId: userId, match: { courtSource: "PARTNER_COURT" } }, include: { refundAttempts: true, match: true }, orderBy: { id: "asc" } });
   const items = applications.map((a) => {
     const cancel = a.match.startsAt > now && a.match.status !== "CANCELLED" && ["PENDING", "ACCEPTED", "CONFIRMED"].includes(a.status);
-    const refundAmountKrw = cancel && a.status === "CONFIRMED" ? getRefundAmountKrw(a.match.totalCourtFeeKrw ?? 0, now, a.match.startsAt) : a.refundAmountKrw;
+    const refundAmountKrw = cancel && a.status === "CONFIRMED" ? getRefundAmountKrw(applicationCourtFee(a, a.match.totalCourtFeeKrw ?? 0), now, a.match.startsAt) : a.refundAmountKrw;
     const money = courtMoneySummary({ ...a, ...(cancel ? { status: "CANCELLED", refundAmountKrw } : {}) }, a.match.totalCourtFeeKrw ?? 0);
     return { id: a.id, title: a.match.title, startsAt: a.match.startsAt.toISOString(), status: a.status, cancel, refundAmountKrw, money, awaitingReceipt: a.receivedAmountKrw === null, refundAccountMissing: !a.refundBank, receiptVersion: a.receiptVersion, refundAccountVersion: a.refundAccountVersion };
   });

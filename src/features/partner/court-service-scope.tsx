@@ -18,7 +18,8 @@ export function CourtServiceScopeContent({ scope }: { scope: CourtServiceScope |
   </div>;
 }
 
-export function CourtServiceScopeFields({ value, disabled, onChange }: {
+export function CourtServiceScopeFields({ value, disabled, onChange, participantBalls = false }: {
+  participantBalls?: boolean;
   value: Partial<CourtServiceScope>;
   disabled: boolean;
   onChange: (next: Partial<CourtServiceScope>) => void;
@@ -26,7 +27,7 @@ export function CourtServiceScopeFields({ value, disabled, onChange }: {
   return <section aria-label="참가비 포함 항목" className="space-y-4 rounded-2xl bg-[var(--tm-bg-subtle-muted)] p-4">
     <h2 className="font-semibold">참가비 포함 항목</h2>
     <p className="text-sm leading-6 text-[var(--tm-text-muted)]">코트 이용·매칭 참가는 기본 포함이에요. 추가 항목도 각각 선택해 주세요.</p>
-    {courtServiceScopeFields.map(({ key, label }) => <fieldset disabled={disabled} key={key}>
+    {courtServiceScopeFields.filter(({ key }) => !participantBalls || key !== "balls").map(({ key, label }) => <fieldset disabled={disabled} key={key}>
       <legend className="mb-2 text-sm font-semibold">{label} <span className="text-xs text-[var(--tm-action-primary)]">필수</span></legend>
       <div className="grid grid-cols-2 gap-2">
         {[true, false].map((included) => <label key={String(included)} className={`flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm ${value[key] === included ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white text-[var(--tm-text-muted)]"} ${disabled ? "opacity-50" : ""}`}>

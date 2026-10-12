@@ -87,6 +87,7 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
           <MatchBadge tone="green">{match.approvalMode === "AUTO" ? "선착순 자동 승인" : "직접 승인"}</MatchBadge>
         </div>
       </header>
+      {match.ballContribution ? <p className="px-5 pb-4 text-sm leading-6 text-[var(--tm-text-secondary)]">{match.ballContribution.available ? "공 준비 참가자가 아직 없어요. 모집 마감까지 정해지지 않으면 참가자와 준비 방법을 확인해 주세요." : "공 준비 참가자가 신청했어요. 아래 참가자별 역할을 확인해 주세요."}</p> : null}
       <CourtFreshness checkedAt={checkedAt} error={error} reload={reload} />
 
       <section className="border-t border-[var(--tm-border-default)] px-5 py-6">
@@ -126,7 +127,7 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
       {awaitingDeposit.length ? <Group title={`입금 대기 ${awaitingDeposit.length}명`} description="통장 내역의 입금자명을 식별코드와 대조한 뒤 확정해 주세요.">
         {awaitingDeposit.map((application) => <Card application={application} busy={busyId === application.id} key={application.id} match={match} refresh={load}>
           <dl className="mt-3 space-y-2 rounded-2xl bg-[var(--tm-bg-subtle-muted)] p-4 text-sm">
-            <Row label="입금 예정">{match.guestFeeKrw.toLocaleString("ko-KR")}원</Row>
+            <Row label="입금 예정">{application.feeKrw.toLocaleString("ko-KR")}원</Row>
             <Row label="식별코드"><span className="text-base font-bold tabular-nums">{application.depositCode ?? "-"}</span></Row>
             <Row label="입금자명">{application.depositorName ?? <span className="font-normal text-[var(--tm-text-secondary)]">아직 알리지 않음</span>}</Row>
             {application.paymentDueAt ? <Row label="이체 기한">{formatStatusChangedAt(application.paymentDueAt)}</Row> : null}

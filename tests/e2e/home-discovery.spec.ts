@@ -177,7 +177,7 @@ test("작은 모바일 카드의 사진·제목·하단 버튼과 스크롤 중 
     expect(Math.abs(footer!.width - card!.width)).toBeLessThanOrEqual(2);
     expect(photo!.height).toBeLessThan(card!.height);
     expect(Math.abs(photo!.x + photo!.width - card!.x - card!.width)).toBeLessThanOrEqual(1);
-    expect(card!.height).toBeLessThan(240);
+    expect(card!.height).toBeLessThan(180);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     const nav = await page.getByRole("navigation", { name: "주요 메뉴" }).boundingBox();
     const fab = await page.getByRole("link", { name: "매칭 만들기", exact: true }).boundingBox();
@@ -232,4 +232,65 @@ test("열린 필터 패널의 당기기는 목록 새로고침으로 이어지�
   await pull(page);
   expect(calls).toBe(before);
   await expect(page.getByRole("dialog")).toBeVisible();
+});
+
+
+test("코트 카드도 촘촘히 정렬하고 사진 없는 코트만 전용 견본을 보여 준다", async ({ page, context }) => {
+  await signIn(context);
+  const items = Array.from({ length: 6 }, (_, index) => ({
+    id: `sample-${index}`, startsAt: "2026-10-20T01:00:00Z", endsAt: "2026-10-20T03:00:00Z",
+    statusLabel: "모집 중", availableAction: "APPLY", guestFeeKrw: 15000, approvalMode: "OPERATOR",
+    gameType: { code: "MIXED_DOUBLES", label: "혼복" }, session: { statusLabel: "모집 중", remainingSpots: 2 },
+    court: { name: `예시 테니스장 ${[0, 2, 5, 7, 16, 20][index]}`, address: "서울 성동구", courtNumber: "1번 코트", region: { name: "서울 성동구" },
+      image: { url: index === 5 ? "/images/court-samples/indoor.jpg" : null, sourceLabel: index === 5 ? "코트 사진" : null, fallback: "TENNIS_COURT_ILLUSTRATION" } },
+  }));
+  await page.route("**/api/v1/partner-session-slots", route => route.fulfill({ json: { items } }));
+  for (const width of [375, 320]) {
+    await page.setViewportSize({ width, height: 812 });
+    await page.goto("/partner-sessions");
+    await expect(page.locator(".rally-discovery-card")).toHaveCount(6);
+    await expect(page.getByText("견본 이미지", { exact: true })).toHaveCount(5);
+    const sources = await page.locator(".rally-card-photo img").evaluateAll(images => images.map(image => (image as HTMLImageElement).getAttribute("src")!));
+    expect(new Set(sources.slice(0, 5)).size).toBe(5);
+    expect(sources.slice(0, 5).every(src => decodeURIComponent(src).includes("/court-samples/partner/"))).toBe(true);
+    expect(decodeURIComponent(sources[5])).toContain("/court-samples/indoor.jpg");
+    const card = page.locator(".rally-discovery-card").first();
+    const box = (await card.boundingBox())!;
+    const photo = (await card.locator(".rally-card-photo").boundingBox())!;
+    const footer = (await card.locator(".rally-card-footer").boundingBox())!;
+    expect(box.height).toBeLessThan(175);
+    expect(Math.abs(photo.y + photo.height - footer.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(footer.width - box.width)).toBeLessThanOrEqual(2);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect.poll(() => page.locator(".rally-card-photo img").first().evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+    await page.screenshot({ path: `/private/tmp/rally-court-density-${width}.png` });
+  }
+});
+
+test("참여가능 스위치는 서버 성별 정원을 적용하고 정렬 변경에도 유지된다", async ({ page, context }) => {
+  await signIn(context);
+  await prisma.match.create({ data: {
+    hostUserId: e2eUsers.host.id, clientRequestId: crypto.randomUUID(), title: "남자 자리만 남은 경기",
+    courtSource: "EXTERNAL_RESERVED", externalCourtName: "남자 자리만 남은 경기", externalCourtAddress: "서울 검증",
+    startsAt: new Date(Date.now() + 7 * 86400000), endsAt: new Date(Date.now() + 7 * 86400000 + 7200000), recruitCount: 1,
+    maleRecruitCount: 1, femaleRecruitCount: 0, gameType: "MIXED_DOUBLES", partnerPreference: "COMPLETE_BEGINNER_WELCOME", totalCourtFeeKrw: 10000,
+  } });
+  await page.goto("/");
+  const unavailable = page.locator(".rally-discovery-card").filter({ hasText: "남자 자리만 남은 경기" });
+  await expect(unavailable).toBeVisible();
+  await expect(unavailable).toContainText("남 1명 · 여 0명 남음");
+  await expect(unavailable).not.toContainText("참가비");
+  const toggle = page.getByRole("switch", { name: "참여가능 매칭" });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(unavailable).toHaveCount(0);
+  await expect(page.getByText(courtName, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "추천순", exact: true }).click();
+  await page.getByRole("button", { name: /매칭 임박순/ }).click();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(unavailable).toHaveCount(0);
+  await page.screenshot({ path: "/private/tmp/rally-available-filter-375.png" });
+  await toggle.click();
+  await expect(unavailable).toBeVisible();
+  expect((await page.request.get("/api/v1/matches?availableOnly=invalid")).status()).toBe(400);
 });

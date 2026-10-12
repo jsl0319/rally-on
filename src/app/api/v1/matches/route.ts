@@ -57,7 +57,11 @@ function parseSearchParams(request: Request) {
   const gameType = gameTypeValue === null ? null : z.enum(activeGameTypes).safeParse(gameTypeValue);
   if (gameType && !gameType.success) throw new DomainError("INVALID_REQUEST", 400, "게임 유형을 다시 선택해 주세요.");
 
+  const availableOnly = z.enum(["true", "false"]).safeParse(params.get("availableOnly") ?? "false");
+  if (!availableOnly.success) throw new DomainError("INVALID_REQUEST", 400, "참여가능 필터를 다시 선택해 주세요.");
+
   return {
+    availableOnly: availableOnly.data === "true",
     gameType: gameType?.data,
     playPurpose: playPurpose?.data,
     startsFrom,

@@ -591,3 +591,29 @@ describe("game type discovery filters", () => {
     expect(result.items[0].gameType).toEqual({ code: "RALLY", label: "랠리" });
   });
 });
+
+
+describe("신청 가능한 일반 매칭 필터", () => {
+  it.each(["recommended", "soonest", "newest"] as const)("%s에서 현재 신청 가능한 성별 자리만 남기며 실력은 제한하지 않는다", async (sort) => {
+    const maleViewer = { ...viewer, profile: { ...viewer.profile, gender: "MALE" as const } };
+    const shared = { hostUserId: "other-user", recruitCount: 3, maleRecruitCount: 1, femaleRecruitCount: 2 };
+    const matches = [
+      makeMatch({ ...shared, id: "available", partnerPreference: "SIMILAR_LEVEL" }),
+      makeMatch({ ...shared, id: "female-only", applications: [{ status: "ACCEPTED", applicantUserId: "another", applicantGender: "MALE" }] }),
+      makeMatch({ ...shared, id: "mine", hostUserId: viewer.id }),
+      makeMatch({ ...shared, id: "applied", applications: [{ status: "REJECTED", applicantUserId: viewer.id, applicantGender: "MALE" }] }),
+      makeMatch({ ...shared, id: "closed", status: "CLOSED" }),
+      makeMatch({ ...shared, id: "past", startsAt: new Date("2020-01-01") }),
+      makeMatch({ ...shared, id: "any-gender", maleRecruitCount: null, femaleRecruitCount: null }),
+    ];
+    const prisma = { match: { findMany: vi.fn().mockResolvedValue(matches) } } as unknown as Parameters<typeof getMatches>[0];
+    const result = await getMatches(prisma, maleViewer, { availableOnly: true, startsFrom: new Date(), limit: 20, sort });
+    expect(result.items.map(item => item.id).sort()).toEqual(["any-gender", "available"]);
+    expect(result.items.every(item => item.canApply)).toBe(true);
+    const ordinary = await getMatches(prisma, maleViewer, { startsFrom: new Date(), limit: 20, sort });
+    expect(ordinary.items.find(item => item.id === "female-only")?.canApply).toBe(false);
+    expect(ordinary.items.some(item => item.id === "female-only")).toBe(true);
+    const missingGender = await getMatches(prisma, viewer, { availableOnly: true, startsFrom: new Date(), limit: 20, sort });
+    expect(missingGender.items.map(item => item.id)).toEqual(["any-gender"]);
+  });
+});

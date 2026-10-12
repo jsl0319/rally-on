@@ -59,7 +59,7 @@ describe("코트 매칭 신청 전 안내", () => {
 
   it("포함·미포함을 기록하고 과거 정보 미등록을 미포함으로 바꾸지 않는다", () => {
     const notice = buildCourtApplicationNotice(match);
-    const section = notice.terms.sections.find((s) => s.title === "참가비 포함 항목");
+    const section = notice.terms.sections.find((s) => s.title === "이용 안내");
     expect(section?.body).toBe("코트 이용·매칭 참가 · 테니스공 · 현장 경기 진행 포함. 장비 대여 · 레슨 미포함.");
     const unknown = buildCourtApplicationNotice({ ...match, courtSlot: { ...match.courtSlot, serviceScope: null } });
     expect(unknown.terms.serviceScope).toBeNull();

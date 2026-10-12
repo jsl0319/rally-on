@@ -9,11 +9,12 @@ import { StickyPageHeader } from "@/components/navigation/sticky-page-header";
 import { activeGameTypes, gameTypeLabels, type ActiveGameType } from "@/matches/game-type";
 
 export type MatchFilters = {
+  availableOnly: boolean;
   date: string | null;
   gameType: ActiveGameType | null;
   sort: "recommended" | "soonest" | "newest";
 };
-export const DEFAULT_MATCH_FILTERS: MatchFilters = { date: null, gameType: null, sort: "recommended" };
+export const DEFAULT_MATCH_FILTERS: MatchFilters = { availableOnly: false, date: null, gameType: null, sort: "recommended" };
 type FilterSection = "date" | "gameType";
 type FilterCriteria = Pick<MatchFilters, FilterSection>;
 const panelHeight = "min(640px, calc(100dvh - var(--rally-safe-top) - 12px))";
@@ -58,6 +59,10 @@ export function MatchDiscoveryFilters({ value, onChange }: { value: MatchFilters
       <div className="rally-filter-scroll flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
         <FilterChip active={value.date !== null} expanded={openSection === "date"} icon={<CalendarBlank size={14} aria-hidden />} label={dateLabel(value.date)} onClick={event => open("date", event.currentTarget)} />
         <FilterChip active={value.gameType !== null} expanded={openSection === "gameType"} icon={<Users size={14} aria-hidden />} label={value.gameType ? gameTypeLabels[value.gameType] : "게임 유형"} onClick={event => open("gameType", event.currentTarget)} />
+        <button type="button" role="switch" aria-label="참여가능 매칭" aria-checked={value.availableOnly} onClick={() => onChange({ ...value, availableOnly: !value.availableOnly })} className="inline-flex min-h-11 shrink-0 items-center gap-1.5 px-1 text-xs font-medium">
+          <span aria-hidden className={`relative h-4 w-7 rounded-full transition-colors ${value.availableOnly ? "bg-[var(--tm-action-primary)]" : "bg-[var(--tm-border-strong)]"}`}><span className={`absolute left-0 top-0.5 size-3 rounded-full bg-white transition-transform ${value.availableOnly ? "translate-x-3.5" : "translate-x-0.5"}`} /></span>
+          참여가능
+        </button>
       </div>
       <button type="button" aria-haspopup="dialog" aria-expanded={openSection === "sort"} onClick={event => open("sort", event.currentTarget)} className="inline-flex min-h-11 shrink-0 items-center gap-1 pl-2 text-xs font-semibold text-[var(--tm-text-secondary)]">
         {sortOptions.find(option => option.value === value.sort)?.label}<CaretDown size={12} aria-hidden />

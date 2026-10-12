@@ -1,3 +1,4 @@
+import { applicationCourtFee, courtFeeSelect, ballDiscountKrw, ballHoldingStatuses } from "@/matches/court-fee";
 import { buildCourtApplicationNotice } from "./court-application-notice";
 import { checkCourtComposition, countCourtComposition, courtCompositionPolicyVersion } from "@/matches/court-composition";
 import { Prisma } from "@/generated/prisma/client";
@@ -48,7 +49,7 @@ const applicantSelect = {
   depositCode: true,
   paymentDueAt: true,
   confirmationDueAt: true,
-  receivedAmountKrw: true,
+  ...courtFeeSelect, receivedAmountKrw: true,
   lastReceivedAt: true,
   feeReceivedAt: true,
   depositorName: true,
@@ -80,7 +81,7 @@ export const courtMatchSelect = {
   recruitCount: true,
   maleRecruitCount: true,
   femaleRecruitCount: true,
-  courtSlot: { select: { id: true, status: true, approvalMode: true, minParticipantCount: true, usageNote: true, serviceScope: true, courtUnit: { select: { name: true, court: { select: { name: true, address: true, status: true, operatorApplication: { select: { applicantUserId: true, status: true } } } } } } } },
+  courtSlot: { select: { id: true, status: true, approvalMode: true, minParticipantCount: true, usageNote: true, serviceScope: true, ballDiscountEnabled: true, courtUnit: { select: { name: true, court: { select: { name: true, address: true, status: true, operatorApplication: { select: { applicantUserId: true, status: true } } } } } } } },
 } satisfies Prisma.MatchSelect;
 
 type CourtMatch = Prisma.MatchGetPayload<{ select: typeof courtMatchSelect }>;
@@ -234,7 +235,7 @@ export async function applyToCourtMatch(
   prisma: PrismaClient,
   viewer: { id: string; profile: ProfileWithRelations },
   matchId: string,
-  input: { message?: string; noticeAccepted?: boolean; noticeFingerprint?: string } = {},
+  input: { message?: string; noticeAccepted?: boolean; noticeFingerprint?: string; bringBalls?: boolean } = {},
 ) {
   return withCurrentCourtMatch(prisma, { matchId }, async (transaction, now) => {
     await assertActiveTransactionUser(transaction, viewer.id);
@@ -259,7 +260,13 @@ export async function applyToCourtMatch(
     await assertSeatAvailable(transaction, match, viewer.profile.gender);
 
     if (input.noticeAccepted !== true || !input.noticeFingerprint) throw new DomainError("APPLICATION_NOTICE_REQUIRED", 409, "신청 조건과 환불 안내를 확인해 주세요.");
-    const applicationNotice = buildCourtApplicationNotice(match);
+    const bringBalls = input.bringBalls === true;
+    if (bringBalls && !match.courtSlot?.ballDiscountEnabled) throw new DomainError("BALL_DISCOUNT_UNAVAILABLE", 409, "공 준비 할인을 제공하지 않는 기존 경기예요.");
+    if (match.courtSlot?.ballDiscountEnabled && (match.totalCourtFeeKrw ?? 0) <= ballDiscountKrw) throw new DomainError("INVALID_COURT_FEE", 409, "참가비 설정을 확인해 주세요.");
+    if (bringBalls && await transaction.matchApplication.count({ where: { matchId, bringsBalls: true, status: { in: [...ballHoldingStatuses] } } })) {
+      throw new DomainError("BALL_SLOT_TAKEN", 409, "다른 참가자가 공 준비 자리를 먼저 신청했어요. 신청 상태를 새로 확인해 주세요.");
+    }
+    const applicationNotice = buildCourtApplicationNotice(match, bringBalls);
     if (input.noticeFingerprint !== applicationNotice.fingerprint) throw new DomainError("APPLICATION_NOTICE_CHANGED", 409, "신청 조건이 바뀌었어요. 최신 안내를 확인한 뒤 다시 신청해 주세요.");
     const autoApprove = match.courtSlot?.approvalMode === "AUTO";
     const created = await transaction.matchApplication.create({
@@ -267,6 +274,8 @@ export async function applyToCourtMatch(
         matchId,
         applicantUserId: viewer.id,
         applicantGender: viewer.profile.gender,
+        courtFeeKrw: applicationNotice.terms.feeKrw,
+        bringsBalls: bringBalls,
         courtNoticeVersion: applicationNotice.version,
         courtNoticeSnapshot: applicationNotice,
         courtNoticeAcceptedAt: now,
@@ -406,7 +415,7 @@ export async function confirmCourtMatchDepositLocked(transaction: Transaction, o
     assertAccepting(match, now, true);
     const confirmationDueAt = application.confirmationDueAt ?? application.paymentDueAt;
     if (!confirmationDueAt || now >= confirmationDueAt) throw new DomainError("DEPOSIT_DEADLINE_PASSED", 409, "입금 확인 기한이 지났어요.");
-    if (application.receivedAmountKrw === null || application.receivedAmountKrw < (match.totalCourtFeeKrw ?? 0) || !application.feeReceivedAt) {
+    if (application.receivedAmountKrw === null || application.receivedAmountKrw < applicationCourtFee(application, match.totalCourtFeeKrw ?? 0) || !application.feeReceivedAt) {
       throw new DomainError("RECEIPT_REQUIRED", 409, "통장에서 확인한 수령 금액과 시각을 먼저 기록해 주세요.");
     }
     if (!application.paymentDueAt || application.feeReceivedAt > application.paymentDueAt) throw new DomainError("LATE_DEPOSIT", 409, "이체 기한 후 입금은 참가 확정에 사용할 수 없어요. 종료 후 반환해 주세요.");
@@ -560,7 +569,7 @@ export async function cancelCourtApplicationLocked(transaction: Transaction, vie
 
     if (application.status !== "CONFIRMED") throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "취소할 수 있는 상태가 아니에요.");
 
-    const refundAmountKrw = getRefundAmountKrw(match.totalCourtFeeKrw ?? 0, now, match.startsAt);
+    const refundAmountKrw = getRefundAmountKrw(applicationCourtFee(application, match.totalCourtFeeKrw ?? 0), now, match.startsAt);
     await transaction.matchApplication.update({
       where: { id: applicationId },
       data: { status: "CANCELLED", cancelledAt: now, participantCancelledAt: now, refundAmountKrw },

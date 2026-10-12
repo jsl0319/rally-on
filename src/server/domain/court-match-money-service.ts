@@ -1,16 +1,17 @@
+import { applicationCourtFee, payableCourtFee } from "@/matches/court-fee";
 import { lockAccountTransactions, assertActiveTransactionUser } from "./account-transaction-lock";
 import { assertHandoffAccess } from "./court-transaction-handoff";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { z } from "zod";
 import { courtMatchSelect, confirmCourtMatchDepositLocked, lockApplicationMatch, reconcileCourtMatch, reconcileLockedCourtMatch } from "./court-match-service";
 import { DomainError } from "./profile-service";
-import { courtMoneySummary, courtRefundAgreementInputSchema, type courtReceiptInputSchema, type courtRefundStartInputSchema, type courtRefundResultInputSchema } from "./court-match-money";
+import { courtMoneySummary, courtMissingBallsInputSchema, courtRefundAgreementInputSchema, type courtReceiptInputSchema, type courtRefundStartInputSchema, type courtRefundResultInputSchema } from "./court-match-money";
 import type { RefundAccountInput } from "./court-match";
 import { recordApplicationNotification } from "./notification-service";
 
 const include = {
   refundAttempts: { orderBy: { createdAt: "desc" } },
-  match: { select: { id: true, hostUserId: true, courtSource: true, totalCourtFeeKrw: true, title: true, startsAt: true, endsAt: true, cancelledAt: true,
+  match: { select: { id: true, hostUserId: true, courtSource: true, status: true, totalCourtFeeKrw: true, title: true, startsAt: true, endsAt: true, cancelledAt: true,
     courtSlot: { select: { courtUnit: { select: { court: { select: { operatorApplication: { select: { applicantUserId: true } } } } } } } } } },
 } satisfies Prisma.MatchApplicationInclude;
 
@@ -50,7 +51,7 @@ export async function recordCourtReceipt(prisma: PrismaClient, operator: { id: s
     a = await readLocked(tx, applicationId);
     const receivedAt = input.receivedAt ? new Date(input.receivedAt) : null;
     // 참가비 충족 시각을 별도로 기록해 이후 초과 입금이 정시 입금을 무효화하지 않게 한다.
-    const feeReceivedAt = receivedAt && input.amountKrw >= (a.match.totalCourtFeeKrw ?? 0)
+    const feeReceivedAt = receivedAt && input.amountKrw >= applicationCourtFee(a, a.match.totalCourtFeeKrw ?? 0)
       ? new Date(input.feeReceivedAt ?? input.receivedAt!) : null;
     const existing = await tx.courtReceiptRecord.findUnique({ where: { applicationId_clientRequestId: { applicationId, clientRequestId: input.clientRequestId } } });
     if (existing) {
@@ -66,7 +67,7 @@ export async function recordCourtReceipt(prisma: PrismaClient, operator: { id: s
     if (feeReceivedAt && (!receivedAt || feeReceivedAt > receivedAt)) conflict("참가비 충족 시각은 마지막 수령 시각보다 늦을 수 없어요.");
     const record = await tx.courtReceiptRecord.create({ data: {
       applicationId, actorUserId: operator.id, clientRequestId: input.clientRequestId,
-      version: a.receiptVersion + 1, previousAmountKrw: a.receivedAmountKrw ?? (a.confirmedAt ? a.match.totalCourtFeeKrw ?? 0 : 0),
+      version: a.receiptVersion + 1, previousAmountKrw: a.receivedAmountKrw ?? (a.confirmedAt ? applicationCourtFee(a, a.match.totalCourtFeeKrw ?? 0) : 0),
       amountKrw: input.amountKrw, receivedAt, feeReceivedAt, note: input.note,
     } });
     await tx.matchApplication.update({ where: { id: applicationId }, data: { receivedAmountKrw: input.amountKrw, lastReceivedAt: receivedAt, feeReceivedAt, receiptVersion: { increment: 1 } } });
@@ -156,7 +157,7 @@ export async function recordCourtRefundAgreement(prisma: PrismaClient, operator:
       return { id: existing.id };
     }
     if (a.refundAgreementVersion !== input.expectedVersion || a.receiptVersion !== input.expectedReceiptVersion) conflict();
-    const fee = a.match.totalCourtFeeKrw ?? 0;
+    const fee = payableCourtFee(a, a.match.totalCourtFeeKrw ?? 0);
     const money = courtMoneySummary(a, fee);
     if (money.needsReview) conflict("송금 기록을 먼저 대조해 주세요.");
     if (!a.confirmedAt || a.confirmedAt > incidentAt || incidentAt < a.match.startsAt || incidentAt >= a.match.endsAt || incidentAt > new Date()
@@ -178,5 +179,31 @@ export async function recordCourtRefundAgreement(prisma: PrismaClient, operator:
     } });
     await recordApplicationNotification(tx, { recipientUserId: a.applicantUserId, type: "COURT_REFUND_AGREEMENT_RECORDED", matchTitle: a.match.title, href: "/activity/sent" });
     return { id: record.id };
+  });
+}
+
+/** 현장 확인 뒤 한 번만 추가 납부를 기록한다. 같은 요청 재전송은 같은 결과다. */
+export async function recordCourtMissingBalls(prisma: PrismaClient, operator: { id: string }, applicationId: string, raw: z.infer<typeof courtMissingBallsInputSchema>) {
+  const input = courtMissingBallsInputSchema.parse(raw);
+  return prisma.$transaction(async (tx) => {
+    const a = await readLocked(tx, applicationId);
+    await assertOperator(tx, a, operator.id, false);
+    if (a.ballsMissingRequestId === input.clientRequestId) {
+      if (a.ballsMissingBy !== operator.id || a.ballsMissingNote !== input.note) conflict();
+      return { id: a.id };
+    }
+    assertIdle(a);
+    if (!a.bringsBalls || a.courtFeeKrw === null || a.ballsMissingAt || a.status !== "CONFIRMED"
+      || a.match.status === "CANCELLED" || a.match.startsAt > new Date() || a.receiptVersion !== input.expectedReceiptVersion) {
+      conflict("경기 시작 후 공 준비 확정 참가자의 미지참만 한 번 기록할 수 있어요. 최신 상태를 확인해 주세요.");
+    }
+    if (a.agreedRefundAmountKrw || a.legacyRefundPaidKrw || a.refundAttempts.some((r) => r.status === "PAID")) {
+      conflict("이미 반환 합의·송금이 있어 추가 납부를 기록할 수 없어요. 참가자와 먼저 확인해 주세요.");
+    }
+    await tx.matchApplication.update({ where: { id: a.id }, data: {
+      ballsMissingAt: new Date(), ballsMissingBy: operator.id, ballsMissingRequestId: input.clientRequestId, ballsMissingNote: input.note,
+    } });
+    await recordApplicationNotification(tx, { recipientUserId: a.applicantUserId, type: "COURT_BALLS_MISSING_RECORDED", matchTitle: a.match.title, href: "/activity/sent" });
+    return { id: a.id };
   });
 }

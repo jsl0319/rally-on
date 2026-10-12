@@ -34,7 +34,7 @@ export function canReadCourtContact(input: {
     || application.receiptRecords.some((record) => record.createdAt >= claimedAt)
   );
   const needsDepositCheck = application.depositClaimedAt !== null && !receiptChecked;
-  const unresolved = needsDepositCheck || money.outstandingKrw > 0 || money.reservedKrw > 0 || money.needsReview;
+  const unresolved = money.additionalDueKrw > 0 || needsDepositCheck || money.outstandingKrw > 0 || money.reservedKrw > 0 || money.needsReview;
   if (unresolved) return true;
   if (input.matchStatus === "CANCELLED" || !["PENDING", "ACCEPTED", "CONFIRMED"].includes(application.status)) return false;
   return now.getTime() < input.endsAt.getTime() + 24 * 60 * 60_000;

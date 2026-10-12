@@ -1988,3 +1988,17 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 - 운영자/참가자 상세의 `composition.phase`에 `REVIEW_REQUIRED`를 추가한다. 시작 시각 이후 미판정·미종료 경기이며 자동 진행 확정이나 전체 취소를 뜻하지 않는다. 운영자 상세의 `canResolveLateReview`로 처리 가능 여부를 알린다.
 - `POST /api/v1/operator/court-matches/{matchId}/late-review`: 본인 운영자만 `{expectedVersion, clientRequestId, outcome: "PROVIDED" | "NOT_PROVIDED", note}`를 제출한다. `note`는 10~450자. PROVIDED는 일정 종료 후에만 가능하며 COMPLETED로 기록한다. NOT_PROVIDED는 전혀 제공하지 못했음을 확인한 경우 CANCELLED로 기록한다. 남은 활성 신청만 전체 취소하고 이전 개인 취소·이미 송금한 금액은 보존한다. 응답 `{id, status}`. 같은 요청 재시도는 동일 결과, 다른 결과/버전은 409, 무권한은 403, 입력 오류는 422. 일부 제공은 기존 합의 반환 API로 처리한다.
 - 크론 API는 경기별 실패/시간 예산으로 남은 처리가 있어도 다른 정리 단계를 실행한 후 500을 반환한다. 성공은 기존 집계와 `courtMatches.failed`, `courtMatches.deferred`(둘 다 0)를 반환한다. 응답은 no-store. 원문 오류·은행 내역은 반환/로그에 포함하지 않는다.
+
+### 2026-10-12 일반 매칭 목록의 신청 가능 필터
+
+`GET /api/v1/matches`에 선택 파라미터 `availableOnly=true|false`를 추가한다(생략은 false, 다른 값은 400). true는 현재 시각 기준 신청 가능한 일반 매칭만 반환한다. 본인 매칭·신청 이력이 있는 매칭·성별 자리 마감·전체 마감·시작된 일정을 제외하며 프로필 성별이 없으면 성별 정원 매칭을 제외한다. 실력·구력 추천 점수는 제외 기준이 아니다. 기존 조회 후보 한도와 정렬은 유지한다. 카드 응답에 `canApply`를 제공하며, 실제 신청 성공을 보장하지 않는다.
+
+## 2026-10-12 코트 공 준비 할인
+
+정책: [03-30](03-30-court-ball-contribution.md). 새로운 초안 저장은 일반 참가비 `priceKrw > 5000`, 공 제공은 참가자 준비로 저장한다. 공개된 기존 경기는 변경하지 않는다.
+
+- `POST /api/v1/court-matches/{matchId}/applications`: `bringBalls?: boolean`(기본 false). 가격은 클라이언트 입력을 받지 않는다. 공 준비 선택 시 `ballContribution.notice.fingerprint`와 명시적 동의를 보낸다. 경기 잠금 안에서 남은 성별 자리·공 준비 자리·기한을 재검증하고 역할·가격·안내를 원자적으로 저장한다. `BALL_SLOT_TAKEN`, `BALL_DISCOUNT_UNAVAILABLE`, `APPLICATION_NOTICE_CHANGED`는 409이며 일반 신청으로 자동 전환하지 않는다.
+- 참가 상세의 `ballContribution`: 신규 방식이면 `{ available, discountKrw: 5000, feeKrw, notice }`, 기존 경기는 null. 공개 목록의 `guestFeeKrw`는 일반 참가비이며 `ballDiscountEnabled`로 할인 방식 여부를 구분한다.
+- 신청 조회: `feeKrw`(고정 최초 참가비), `payableFeeKrw`(미지참 추가 납부 포함), `bringsBalls`, `ballsMissingAt/Note`, `money.additionalDueKrw`를 제공한다. 다른 참가자의 금융 정보는 공개하지 않는다.
+- `POST /api/v1/court-match-applications/{applicationId}/balls-missing`: `{ clientRequestId, expectedReceiptVersion, note(10~500자), confirmed: true }`. 활성 해당 운영자만, 시작 후 확정된 공 준비 신청만 가능하다. 중복 요청은 같은 결과를 반환한다. 이미 미지참 기록·반환 합의·완료/처리 중 송금이 있으면 거부한다. 본인 참가자/다른 운영자는 403, 잘못된 입력 422, 상태 충돌 409. 실제 송금 없이 추가 납부와 필수 앱 내 알림을 남긴다.
+- 추가 입금은 기존 `receipt` API의 **누적 수령액**으로 대조한다. 부족분은 별도 표시하며 추가 5,000원을 초과 입금 환불로 잘못 처리하지 않는다. 원 입금 충족 시각/기존 확정 이력은 별도 유지한다.

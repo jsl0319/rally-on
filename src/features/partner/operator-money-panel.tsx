@@ -37,12 +37,15 @@ export function OperatorMoneyPanel({ application: a, refresh, endpoint = "/api/v
     finally { setBusy(false); }
   };
   return <div className="mt-4 border-t border-[var(--tm-border-subtle)] pt-4 text-sm">
+    <p className="mb-3 font-semibold">{a.bringsBalls ? "공 준비 참가" : "일반 참가"} · {won(a.feeKrw)}</p>
     <CourtApplicationNoticeRecord notice={a.applicationNotice} acceptedAt={a.noticeAcceptedAt} />
     <div className="grid grid-cols-2 gap-2 rounded-xl bg-[var(--tm-bg-subtle-muted)] p-3 tabular-nums">
       <p>실제 수령 <strong className="block mt-1">{won(a.money.receivedKrw)}</strong></p>
       <p>남은 반환 <strong className="block mt-1 text-[var(--tm-action-primary)]">{won(a.money.outstandingKrw)}</strong></p>
       {a.money.paidKrw > 0 ? <p className="col-span-2 text-xs text-[var(--tm-text-secondary)]">반환 완료 기록 {won(a.money.paidKrw)}</p> : null}
     </div>
+    {a.ballsMissingAt ? <div className="mt-3 rounded-xl bg-amber-50 p-3"><p className="font-semibold">공 미지참 · 추가 납부 5,000원</p><p className="mt-1">{a.ballsMissingNote}</p><p className="mt-1">{a.money.additionalDueKrw ? `추가 입금 확인 대기 ${won(a.money.additionalDueKrw)}` : "추가 입금 확인 완료"}</p></div> : null}
+    {a.canRecordMissingBalls ? <MissingBallsForm busy={busy} version={a.receiptVersion} mutate={mutate} /> : null}
     {a.money.needsReview ? <p className="mt-2 text-rose-700">반환 의무와 송금 기록을 다시 대조해 주세요.</p> : null}
     <details className="mt-3" open={a.status === "ACCEPTED" || undefined}>
       <summary className="min-h-11 cursor-pointer py-3 font-semibold text-[var(--tm-action-primary)]">{a.status === "ACCEPTED" ? "입금 확인 및 참가 확정" : "입금 대조·정정"}</summary>
@@ -64,7 +67,7 @@ export function OperatorMoneyPanel({ application: a, refresh, endpoint = "/api/v
       {a.refundAccount ? <><p>{a.refundAccount.bank} · {a.refundAccount.accountHolder}</p><p className="my-2 break-all font-semibold">{a.refundAccount.accountNumber}</p><Button fullWidth size="medium" disabled={busy || a.money.needsReview} onClick={() => void mutate("refund/start", { amountKrw: a.money.availableKrw, accountVersion: a.refundAccountVersion })}>환불 처리 시작 · {won(a.money.availableKrw)}</Button><p className="mt-2 text-xs leading-5">시작 후 표시되는 고정 계좌로 송금해 주세요. 시작 버튼은 돈을 보내지 않아요.</p></> : <p>참가자의 환불 계좌 입력을 기다리고 있어요.</p>}
     </div> : null}
     {a.refundAttempts.map((r) => <RefundResult key={r.id} attempt={r} busy={busy} mutate={mutate} />)}
-    <CourtFinancialReviewPanel key={JSON.stringify([a.receiptVersion, a.refundAgreementVersion, a.refundAccountVersion, a.status, a.refundAttempts.map((r) => [r.id, r.version])])} applicationId={a.id} endpoint={endpoint} />
+    <CourtFinancialReviewPanel key={JSON.stringify([a.receiptVersion, a.refundAgreementVersion, a.refundAccountVersion, a.ballsMissingAt, a.status, a.refundAttempts.map((r) => [r.id, r.version])])} applicationId={a.id} endpoint={endpoint} />
     {error ? <p className="mt-3 text-rose-700" role="alert">{error}</p> : null}
   </div>;
 }
@@ -106,5 +109,20 @@ function RefundAgreementForm({ application: a, busy, mutate }: { application: Ap
       <label className="flex min-h-11 items-start gap-2 py-2"><input type="checkbox" required checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-1" /><span>참가자와 위 금액·사유를 직접 합의했어요.</span></label>
       <Button type="submit" size="medium" fullWidth disabled={!agreed}>합의 금액 기록{amount ? ` · ${won(Number(amount))}` : ""}</Button>
     </fieldset></form>
+  </details>;
+}
+
+function MissingBallsForm({ busy, version, mutate }: { busy: boolean; version: number; mutate: (action: string, body: Record<string, unknown>) => Promise<boolean> }) {
+  const [note, setNote] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  return <details className="mt-3"><summary className="min-h-11 cursor-pointer py-3 font-semibold">공 미지참 기록</summary>
+    <form onSubmit={(e) => { e.preventDefault(); void mutate("balls-missing", { expectedReceiptVersion: version, note, confirmed }); }}>
+      <fieldset disabled={busy} className="space-y-3">
+        <p className="text-xs leading-5">미지참 사실을 확인한 경우에만 기록해 주세요. 참가자에게 5,000원 추가 납부가 안내되며, 입금은 아래 누적 수령 금액에서 대조해요. 이미 보낸 반환액이나 합의액은 변경하지 않아요.</p>
+        <label className="block">확인 사유<textarea className={`rally-input ${field}`} required minLength={10} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} /></label>
+        <label className="flex min-h-11 items-center gap-2"><input type="checkbox" required checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />참가자의 공 미지참을 직접 확인했어요.</label>
+        <Button type="submit" fullWidth disabled={!confirmed}>미지참 기록 · 추가 납부 5,000원</Button>
+      </fieldset>
+    </form>
   </details>;
 }

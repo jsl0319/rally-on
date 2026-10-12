@@ -1,3 +1,4 @@
+import { applicationCourtFee } from "@/matches/court-fee";
 import { genderApplicationBlock, hasGenderQuota, remainingGenderSpots } from "@/matches/recruitment";
 import { gameTypeLabels, type ActiveGameType } from "@/matches/game-type";
 import { Prisma } from "@/generated/prisma/client";
@@ -239,6 +240,17 @@ export async function reconcileStartedMatches(prisma: PrismaClient, now = new Da
   return summary;
 }
 
+function matchApplicationBlock(match: MatchWithRelations, viewer: Viewer, now: Date) {
+  if (match.hostUserId === viewer.id) return "OWN_MATCH";
+  if (match.applications.some(item => item.applicantUserId === viewer.id)) return "ALREADY_APPLIED";
+  const genderBlock = genderApplicationBlock(match, match.applications, viewer.profile.gender);
+  if (genderBlock) return genderBlock;
+  if (match.status !== "OPEN") return "MATCH_NOT_OPEN";
+  if (match.startsAt <= now) return "MATCH_STARTED";
+  if (!hasRemainingSpots(match.recruitCount, match.applications)) return "NO_REMAINING_SPOTS";
+  return null;
+}
+
 function toMatchCardView(match: MatchWithRelations, viewer: Viewer) {
   const acceptedCount = getAcceptedCount(match.applications);
   const recommendation = getRecommendationForMatch(match, viewer);
@@ -277,6 +289,7 @@ function toMatchCardView(match: MatchWithRelations, viewer: Viewer) {
     estimatedFeePerPersonKrw: getEstimatedFeePerPerson(match.totalCourtFeeKrw),
     recommendationReasons: recommendation.reasons,
     isHost: match.hostUserId === viewer.id,
+    canApply: matchApplicationBlock(match, viewer, new Date()) === null,
   };
 }
 
@@ -379,9 +392,12 @@ function getKstDateFilterRange(date: string): { gte: Date; lt: Date } | null {
 export async function getMatches(
   prisma: PrismaClient,
   viewer: Viewer,
-  input: { gameType?: ActiveGameType; playPurpose?: PlayPurpose; startsFrom: Date; cursor?: { startsAt: string; id: string }; limit: number; sort?: MatchSort; date?: string },
+  input: { availableOnly?: boolean; gameType?: ActiveGameType; playPurpose?: PlayPurpose; startsFrom: Date; cursor?: { startsAt: string; id: string }; limit: number; sort?: MatchSort; date?: string },
 ) {
   const sort = input.sort ?? "recommended";
+  const now = new Date();
+  const filterAvailable = (matches: MatchWithRelations[]) => filterDiscoverable(matches, now)
+    .filter(match => !input.availableOnly || matchApplicationBlock(match, viewer, now) === null);
   const dateRange = input.date ? getKstDateFilterRange(input.date) : null;
   const baseWhere = {
     status: "OPEN",
@@ -390,6 +406,7 @@ export async function getMatches(
     NOT: [
       { applications: { some: { applicantUserId: viewer.id } } },
     ],
+    ...(input.availableOnly ? { hostUserId: { not: viewer.id } } : {}),
     ...(input.gameType ? { gameType: input.gameType } : {}),
     ...(input.playPurpose ? { purposes: { some: { purpose: input.playPurpose } } } : {}),
   } satisfies Prisma.MatchWhereInput;
@@ -411,7 +428,7 @@ export async function getMatches(
       // 매칭 전부를 읽고 있었다. 커서가 시작점을 잡아 주므로 창만 끊으면 된다.
       take: DISCOVERY_CANDIDATE_LIMIT,
     });
-    const items = filterDiscoverable(matches, new Date()).slice(0, input.limit + 1);
+    const items = filterAvailable(matches).slice(0, input.limit + 1);
     const hasNext = items.length > input.limit;
     const visibleItems = hasNext ? items.slice(0, input.limit) : items;
 
@@ -433,7 +450,7 @@ export async function getMatches(
     include: matchInclude,
     take: 200,
   });
-  const discoverable = filterDiscoverable(candidates, new Date());
+  const discoverable = filterAvailable(candidates);
   const ordered = sort === "recommended"
     ? [...discoverable].sort((left, right) => (
         getRecommendationForMatch(right, viewer).score - getRecommendationForMatch(left, viewer).score
@@ -462,21 +479,8 @@ export async function getMatchDetail(prisma: PrismaClient, viewer: Viewer, match
 
   const now = new Date();
   const acceptedCount = getAcceptedCount(match.applications);
-  const genderBlock = genderApplicationBlock(match, match.applications, viewer.profile.gender);
-  const canApply = !genderBlock && relation === "NONE" && match.status === "OPEN" && match.startsAt > now && hasRemainingSpots(match.recruitCount, match.applications);
-  const applyBlockedReason = canApply
-    ? null
-    : relation === "HOST"
-      ? "OWN_MATCH"
-      : relation === "APPLICANT"
-        ? "ALREADY_APPLIED"
-        : genderBlock
-          ? genderBlock
-          : match.status !== "OPEN"
-          ? "MATCH_NOT_OPEN"
-          : match.startsAt <= now
-            ? "MATCH_STARTED"
-            : "NO_REMAINING_SPOTS";
+  const applyBlockedReason = matchApplicationBlock(match, viewer, now);
+  const canApply = applyBlockedReason === null;
   const card = toMatchCardView(match, viewer);
   const recommendationReasons = relation === "HOST" ? [] : card.recommendationReasons;
   const canSeeContact = relation === "HOST" || application?.status === "ACCEPTED";
@@ -655,7 +659,7 @@ function toApplicationView(application: ApplicationWithRelations, supplyNotice: 
       courtName: application.match.courtSource === "PARTNER_COURT"
         ? application.match.courtSlot?.courtUnit.court.name ?? null
         : application.match.externalCourtName,
-      estimatedFeePerPersonKrw: getEstimatedFeePerPerson(application.match.totalCourtFeeKrw),
+      estimatedFeePerPersonKrw: application.match.courtSource === "PARTNER_COURT" ? applicationCourtFee(application, application.match.totalCourtFeeKrw ?? 0) : getEstimatedFeePerPerson(application.match.totalCourtFeeKrw),
       // 코트 매칭은 상세가 전용 주소에 있다. 활동 화면이 곧장 그쪽으로 보낼 수 있게 한다.
       courtSlotId: application.match.courtSlotId,
     },
