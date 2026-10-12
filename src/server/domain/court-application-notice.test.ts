@@ -78,3 +78,16 @@ describe("코트 매칭 신청 전 안내", () => {
     expect(courtMatchApplicationInputSchema.safeParse({ noticeAccepted: true, noticeFingerprint }).success).toBe(true);
   });
 });
+
+it("2구 조건은 새 안내에 고정하고 과거 3구 동의 원문을 보존한다", () => {
+  const updated = buildCourtApplicationNotice({ ...match, courtSlot: { ...match.courtSlot, ballDiscountEnabled: true } }, true);
+  expect(updated.terms.ballMinimumCount).toBe(2);
+  expect(updated.terms.sections.find(s => s.title === "테니스공 준비")?.body).toContain("최소 2구");
+  const previous = structuredClone(updated);
+  previous.version = "court-application-2026-10-12-v4";
+  delete previous.terms.ballMinimumCount;
+  previous.terms.sections = previous.terms.sections.map(s => ({ ...s, body: s.body.replace("최소 2구", "최소 3구") }));
+  expect(readCourtApplicationNotice(previous)).toEqual(previous);
+  expect(readCourtApplicationNotice(previous)?.terms.ballMinimumCount ?? 3).toBe(3);
+  expect(updated.terms.sections.find(s => s.title === "입금과 확정")?.summary).toContain("확인하면 참가 확정");
+});

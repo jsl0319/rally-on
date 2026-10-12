@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { courtSlotCreateInputSchema, courtSlotUpdateInputSchema, courtSupplyIncidentInputSchema } from "./court-slot";
+import { courtDiscoveryQuerySchema, courtSlotCreateInputSchema, courtSlotUpdateInputSchema, courtSupplyIncidentInputSchema } from "./court-slot";
 import { blockCourtSlot, createCourt, createCourtSlot, getMyCourtSlots, getPublicCourtSlot, getPublicCourtSlots, publicCourtSlotListLimit, publishCourtSlot, reportCourtSupplyIncident, updateCourtSlot } from "./court-slot-service";
 
 const viewer = { id: "operator-user-id" };
@@ -605,4 +605,20 @@ describe("Court Partner time supply authorization and state transitions", () => 
       data: expect.objectContaining({ operatorApplicationId: "application-id", source: "AUTOMATED" }),
     }));
   });
+});
+
+describe("코트 목록 필터·정렬", () => {
+  it("한국 날짜와 게임 유형을 조회 제한 전에 적용하고 가격 동률도 안정 정렬한다", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const prisma = { courtSlot: { findMany } } as unknown as Parameters<typeof getPublicCourtSlots>[0];
+    await getPublicCourtSlots(prisma, false, 50, { date: "2030-01-02", gameType: "WOMENS_DOUBLES", sort: "priceLow" });
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ gameType: "WOMENS_DOUBLES", AND: [{ startsAt: { gte: new Date("2030-01-01T15:00:00Z"), lt: new Date("2030-01-02T15:00:00Z") } }] }),
+      orderBy: [{ priceKrw: "asc" }, { startsAt: "asc" }, { id: "asc" }], take: 50,
+    }));
+  });
+});
+
+it.each([{ date: "2030-02-30" }, { date: "bad" }, { gameType: "SINGLES" }, { sort: "recommended" }])("코트 목록의 잘못된 검색 조건을 거절한다: %j", (query) => {
+  expect(courtDiscoveryQuerySchema.safeParse(query).success).toBe(false);
 });

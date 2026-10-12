@@ -1,12 +1,12 @@
 "use client";
 
 import { PullToRefresh } from "@/components/feedback/pull-to-refresh";
-import { StickyPageHeader } from "@/components/navigation/sticky-page-header";
+import { AccountPageHeader } from "@/components/navigation/account-page-header";
 
 
 import { ActionArea, ActionAreaButton, Modal, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalHeading, ModalSummary } from "@wanteddev/wds";
 import Link from "next/link";
-import { TennisBall } from "@phosphor-icons/react";
+import { CalendarBlank, TennisBall } from "@phosphor-icons/react";
 import { use, useCallback, useEffect, useState } from "react";
 
 import { ActivityTabs } from "@/components/navigation/activity-tabs";
@@ -111,11 +111,10 @@ function LoadingOrError({ error, label, load }: { error: string; label: string; 
 
 export function M6ReceivedApplications() {
   const { data, error, load } = useJsonLoader<{ items: HostedMatch[] }>("/api/v1/me/hosted-matches");
-  return <PullToRefresh onRefresh={load}><PageShell withNavigation header={<StickyPageHeader backHref="/my" title="내가 만든 매칭" />}>
+  return <PullToRefresh onRefresh={load}><PageShell withNavigation header={<AccountPageHeader backHref="/my" title="내가 만든 매칭" />}>
     <ActivityTabs current="received" />
-    <p className="mt-4 text-sm leading-6 text-[var(--tm-text-secondary)]">만든 매칭의 상태와 들어온 신청을 한곳에서 확인해요.</p>
     {data !== null && error ? <LoadingOrError error={error} label="" load={load} /> : null}
-    {data === null ? <LoadingOrError error={error} label="신청 정보를 준비하고 있어요." load={load} /> : data.items.length === 0 ? <EmptyHostedMatches /> : <div className="mt-6 space-y-4">{data.items.map((match) => <HostedMatchCard key={match.id} match={match} onChanged={load} />)}</div>}
+    {data === null ? <LoadingOrError error={error} label="신청 정보를 준비하고 있어요." load={load} /> : data.items.length === 0 ? <EmptyHostedMatches /> : <div className="mt-4 space-y-3">{data.items.map((match) => <HostedMatchCard key={match.id} match={match} onChanged={load} />)}</div>}
   </PageShell></PullToRefresh>;
 }
 
@@ -156,32 +155,27 @@ function HostedMatchCard({ match, onChanged }: { match: HostedMatch; onChanged: 
     } catch (caught) { setError(caught instanceof Error ? caught.message : "매칭 상태를 변경하지 못했어요."); } finally { setAction(null); }
   };
   return <>
-    <section className="rally-card p-5">
-      <div className="flex items-center justify-between gap-3">
-        <span className="inline-flex min-h-7 items-center whitespace-nowrap rounded-full bg-[var(--tm-bg-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--tm-action-primary)]">{match.statusLabel}</span>
-        {match.pendingApplicationCount > 0 ? <span className="inline-flex min-h-7 items-center whitespace-nowrap rounded-full bg-[var(--tm-bg-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--tm-action-primary)]">검토할 신청 {match.pendingApplicationCount}건</span> : null}
+    <section className="rounded-2xl border border-[var(--tm-border-default)] bg-white p-4">
+      <div className="flex items-center justify-between gap-2"><span className="rounded-md bg-[var(--tm-bg-subtle)] px-2 py-1 text-[11px] font-semibold text-[var(--tm-action-primary)]">{match.statusLabel}</span>{match.pendingApplicationCount > 0 ? <span className="text-xs font-bold text-[var(--tm-action-primary)]">검토할 신청 {match.pendingApplicationCount}건</span> : null}</div>
+      <Link className="mt-3 block" href={`/matches/${match.id}?returnTo=${encodeURIComponent("/activity/received")}`}><h2 className="text-[17px] font-bold leading-6">{match.court.name ?? match.title}</h2><p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-[var(--tm-text-secondary)]"><CalendarBlank size={15} aria-hidden className="mt-0.5 shrink-0" />{matchScheduleText(match.startsAt, match.endsAt)}</p></Link>
+      {isFinishedSchedule(match.endsAt) ? <p className="mt-2 text-[11px] text-[var(--tm-text-secondary)]">지난 매칭</p> : null}
+      <p className="mt-3 border-t border-[var(--tm-border-subtle)] pt-3 text-[13px] font-semibold">수락 {match.acceptedCount}명 / 모집 {match.recruitCount}명 <span className="font-normal text-[var(--tm-text-secondary)]">· 남은 자리 {match.remainingSpots}명</span></p>
+      {match.pendingApplicationCount > 0 ? <Button as={Link} className="mt-3" fullWidth href={`/activity/received/${match.id}`} size="medium">신청자 보기</Button> : <p className="mt-2 text-xs leading-5 text-[var(--tm-text-secondary)]">{waitingMessage(match)}</p>}
+      {match.canComplete ? <Button className="mt-3" disabled={action !== null} fullWidth onClick={() => setConfirmAction("complete")} size="medium">플레이 완료하기</Button> : null}
+      {match.acceptedCount > 0 && match.status !== "COMPLETED" ? <><HostedContactButton contact={match.contact} /><p className="mt-2 text-[11px] leading-5 text-[var(--tm-text-secondary)]">{hostCoordinationMessage(match.court.source)}</p></> : null}
+      <div className="mt-2 flex flex-wrap gap-2">
+        {match.canClose ? <button className="min-h-11 flex-1 rounded-lg bg-[var(--tm-bg-page)] px-3 text-xs font-semibold disabled:opacity-50" disabled={action !== null} onClick={() => setConfirmAction("close")} type="button">모집 마감</button> : null}
+        {match.canReopen ? <Button className="flex-1" disabled={action !== null} onClick={() => setConfirmAction("reopen")} size="small" variant="secondary">다시 모집하기</Button> : null}
+        {match.canCancel ? <button className="min-h-11 flex-1 rounded-lg px-3 text-xs font-medium text-[var(--tm-text-secondary)] disabled:opacity-50" disabled={action !== null} onClick={() => setConfirmAction("cancel")} type="button">매칭 취소</button> : null}
       </div>
-      <h2 className="mt-4 text-lg font-bold">{match.title}</h2>
-      <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--tm-text-muted)]">{isFinishedSchedule(match.endsAt) ? <span className="rounded-full bg-[var(--tm-bg-subtle-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--tm-text-secondary)]">지난 매칭</span> : null}<span>🗓 {schedule(match.startsAt)}</span></p>
-      <p className="mt-1 text-sm text-[var(--tm-text-muted)]">📍 {match.court.name ?? "코트와 비용을 함께 정해요"}</p>
-      <p className="mt-4 border-t border-[var(--tm-border-subtle)] pt-3 text-sm font-semibold">수락 {match.acceptedCount}명 / 모집 {match.recruitCount}명 <span className="font-normal text-[var(--tm-text-secondary)]">· 남은 자리 {match.remainingSpots}명</span></p>
-      {match.acceptedCount > 0 && match.status !== "COMPLETED" ? <>
-        <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">{hostCoordinationMessage(match.court.source)}</p>
-        <HostedContactButton contact={match.contact} />
-      </> : null}
-      {match.pendingApplicationCount > 0 ? <Button as={Link} className="mt-4" fullWidth href={`/activity/received/${match.id}`} size="large">신청자 보기</Button> : <p className="mt-4 text-sm text-[var(--tm-text-secondary)]">{waitingMessage(match)}</p>}
-      {match.canComplete ? <Button className="mt-3" disabled={action !== null} fullWidth onClick={() => setConfirmAction("complete")} size="large">플레이 완료하기</Button> : null}
-      {match.canClose ? <Button className="mt-3" disabled={action !== null} fullWidth onClick={() => setConfirmAction("close")} size="medium" variant="neutral">모집 마감</Button> : null}
-      {match.canReopen ? <Button className="mt-3" disabled={action !== null} fullWidth onClick={() => setConfirmAction("reopen")} size="medium" variant="neutral">다시 모집하기</Button> : null}
-      {match.canCancel ? <button className="mt-3 min-h-11 w-full rounded-2xl px-4 text-sm font-semibold text-[var(--tm-text-secondary)] disabled:opacity-50" disabled={action !== null} onClick={() => setConfirmAction("cancel")} type="button">매칭 취소</button> : null}
-      {error ? <p className="mt-3 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]">{error}</p> : null}
+      {error ? <p role="alert" className="mt-3 rounded-xl bg-[var(--tm-status-error-bg)] px-3 py-2 text-sm text-[var(--tm-status-error-text)]">{error}</p> : null}
     </section>
     {confirmAction ? <LifecycleConfirm action={confirmAction} busy={action !== null} onCancel={() => setConfirmAction(null)} onConfirm={() => { setConfirmAction(null); void runAction(confirmAction); }} /> : null}
   </>;
 }
 
 function HostedContactButton({ contact }: { contact: HostedMatch["contact"] }) {
-  return contact.href ? <Button as={Link} className="mt-3" fullWidth href={contact.href} size="large" variant="secondary">{contact.label}</Button> : <p className="mt-3 text-center text-sm text-[var(--tm-text-secondary)]">채팅방을 준비하고 있어요.</p>;
+  return contact.href ? <Button as={Link} className="mt-3" fullWidth href={contact.href} size="medium" variant="secondary">{contact.label}</Button> : <p className="mt-3 text-center text-sm text-[var(--tm-text-secondary)]">채팅방을 준비하고 있어요.</p>;
 }
 
 function LifecycleConfirm({ action, busy, onCancel, onConfirm }: { action: HostedAction; busy: boolean; onCancel: () => void; onConfirm: () => void }) {

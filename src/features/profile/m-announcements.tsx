@@ -1,9 +1,9 @@
 "use client";
 
-import { PageHeader } from "@/components/ui/page-header";
+import { AccountPageHeader } from "@/components/navigation/account-page-header";
 
 import { useCallback, useEffect, useState } from "react";
-import { Megaphone } from "@phosphor-icons/react";
+import { CaretDown, Megaphone } from "@phosphor-icons/react";
 
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
@@ -40,16 +40,13 @@ export function MAnnouncements() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-10 pt-4 text-[var(--tm-text-primary)]">
-    <div className="mx-auto max-w-[560px]">
-      <PageHeader backHref="/my" title="공지사항" />
-
-      {items === null ? error ? <section className="mt-8 rally-card p-5"><p className="text-sm leading-6">{error}</p><Button className="mt-4" onClick={() => void load()} size="medium">다시 불러오기</Button></section> : <CourtRallyLoader className="mt-8" label="공지사항을 불러오고 있어요." /> : items.length === 0 ? <section className="mt-10 rounded-[20px] border border-dashed border-[var(--tm-border-strong)] bg-white px-5 py-10 text-center"><Megaphone aria-hidden="true" className="mx-auto size-8 text-[var(--tm-text-muted)]" /><h2 className="mt-4 font-bold">아직 공지사항이 없어요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">새로운 소식이 있으면 이곳에 올려드릴게요.</p></section> : <ul className="mt-4 space-y-3">
-        {items.map((item) => <li className="rally-card p-5" key={item.id}>
-          <p className="text-xs text-[var(--tm-text-muted)]">{formatDate(item.publishedAt)}</p>
-          <h2 className="mt-1 font-bold">{item.title}</h2>
-          <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[var(--tm-text-secondary)]">{item.body}</p>
-        </li>)}
+  return <main className="min-h-app bg-[var(--tm-bg-page)] pb-10 text-[var(--tm-text-primary)]">
+    <AccountPageHeader title="공지사항" />
+    <div className="mx-auto max-w-[560px] px-5">
+      <p className="pb-5 pt-6 text-sm text-[var(--tm-text-secondary)]">Rally On의 새로운 소식과 이용 안내</p>
+      {error ? <section role="alert" className="rounded-xl bg-white p-4"><p className="text-sm">{error}</p><Button className="mt-3" onClick={() => void load()} size="small">다시 불러오기</Button></section> : null}
+      {items === null ? !error ? <CourtRallyLoader className="mt-8" label="공지사항을 불러오고 있어요." /> : null : items.length === 0 ? <section className="py-16 text-center"><Megaphone aria-hidden="true" className="mx-auto size-8 text-[var(--tm-text-muted)]" /><h2 className="mt-4 font-bold">아직 공지사항이 없어요</h2><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">새로운 소식이 생기면 알려 드릴게요.</p></section> : <ul className="border-t border-[var(--tm-border-default)]">
+        {items.map(item => <li className="border-b border-[var(--tm-border-default)]" key={item.id}><details className="rally-disclosure" name="announcement"><summary className="flex items-center gap-4 py-5"><span className="min-w-0 flex-1"><time className="text-[11px] text-[var(--tm-text-secondary)]">{formatDate(item.publishedAt)}</time><span className="mt-1.5 block text-[15px] font-semibold leading-6">{item.title}</span></span><CaretDown className="rally-disclosure-chevron shrink-0 text-[var(--tm-text-secondary)]" size={16} aria-hidden /></summary><div className="mb-5 rounded-xl bg-white p-4"><h2 className="sr-only">{item.title}</h2><p className="whitespace-pre-line break-words text-sm leading-7 text-[var(--tm-text-secondary)]">{item.body}</p></div></details></li>)}
       </ul>}
     </div>
   </main>;

@@ -27,11 +27,11 @@ test("모바일 공 준비 신청 → 할인 입금 확정 → 미지참 기록 
     await expect(page.getByRole("heading", { name: "참가비 포함 항목", exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "같이 치기", exact: true }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("radio", { name: /일반 참가/ })).toBeChecked();
+    await expect(dialog.getByRole("radio", { name: /기본 참가/ })).toBeChecked();
     await dialog.getByRole("checkbox", { name: "신청 조건과 취소·환불 안내를 확인했어요." }).check();
     await dialog.getByRole("radio", { name: /공 준비 참가/ }).check();
     await expect(dialog.getByRole("checkbox")).not.toBeChecked();
-    await expect(dialog.getByText("1인 31,000원", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("radio", { name: /공 준비 참가.*31,000원/ })).toBeVisible();
     await dialog.getByRole("radio", { name: /공 준비 참가/ }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: "/private/tmp/rally-ball-choice-375.png" });
     await dialog.getByRole("checkbox").check();
@@ -40,6 +40,8 @@ test("모바일 공 준비 신청 → 할인 입금 확정 → 미지참 기록 
     await expect(page.getByText("공 준비 참가 · 31,000원", { exact: true })).toBeVisible();
     const a = await prisma.matchApplication.findUniqueOrThrow({ where: { matchId_applicantUserId: { matchId: f.partnerMatchId, applicantUserId: e2eUsers.applicant.id } } });
     expect(a).toMatchObject({ courtFeeKrw: 31000, bringsBalls: true, status: "ACCEPTED" });
+    const list = await (await member.request.get("/api/v1/partner-session-slots")).json();
+    expect(list.items.find((slot: { id: string }) => slot.id === f.partnerSlotId).ballContribution.available).toBe(false);
     const base = `/api/v1/court-match-applications/${a.id}`;
     const input = { clientRequestId: randomUUID(), expectedReceiptVersion: 1, note: "현장 확인 결과 새 테니스공을 준비하지 않음", confirmed: true };
     expect((await request.post(`${base}/balls-missing`, { data: input })).status()).toBe(401);

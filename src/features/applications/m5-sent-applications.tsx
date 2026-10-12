@@ -1,12 +1,12 @@
 "use client";
 
 import { PullToRefresh } from "@/components/feedback/pull-to-refresh";
-import { StickyPageHeader } from "@/components/navigation/sticky-page-header";
+import { AccountPageHeader } from "@/components/navigation/account-page-header";
 
 
 import { ActionArea, ActionAreaButton, Modal, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalHeading, ModalSummary } from "@wanteddev/wds";
 import Link from "next/link";
-import { CalendarBlank, MapPin, TennisBall } from "@phosphor-icons/react";
+import { CalendarBlank, CaretDown, TennisBall } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 
 import { ActivityTabs } from "@/components/navigation/activity-tabs";
@@ -36,8 +36,8 @@ type SentApplication = {
   createdAt: string;
 };
 
-function schedule(startsAt: string) {
-  return matchScheduleText(startsAt);
+function schedule(startsAt: string, endsAt: string) {
+  return matchScheduleText(startsAt, endsAt);
 }
 
 function appliedDate(createdAt: string) {
@@ -125,12 +125,11 @@ export function M5SentApplications() {
   };
 
   return <PullToRefresh onRefresh={load} disabled={withdrawingId !== null || withdrawConfirmId !== null}><main className="min-h-app bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
-    <StickyPageHeader backHref="/my" title="내가 보낸 신청" />
+    <AccountPageHeader backHref="/my" title="내가 보낸 신청" />
     <div className="mx-auto max-w-[560px] px-5">
       <ActivityTabs current="sent" />
-      <p className="mt-4 text-sm leading-6 text-[var(--tm-text-secondary)]">신청 결과와 다음 행동을 한눈에 확인해요.</p>
       {error && items !== null ? <div aria-live="polite" className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]">{error}</div> : null}
-      {error && items === null ? <LoadError error={error} onRetry={load} /> : items === null ? <CourtRallyLoader className="mt-4" label="신청 내역을 준비하고 있어요." /> : items.length === 0 ? <EmptySentApplications /> : <div className="mt-6 grid gap-4">{items.map((item) => <SentApplicationCard item={item} key={item.id} withdrawing={withdrawingId === item.id} onWithdraw={() => setWithdrawConfirmId(item.id)} />)}</div>}
+      {error && items === null ? <LoadError error={error} onRetry={load} /> : items === null ? <CourtRallyLoader className="mt-4" label="신청 내역을 준비하고 있어요." /> : items.length === 0 ? <EmptySentApplications /> : <div className="mt-4 grid gap-3">{items.map((item) => <SentApplicationCard item={item} key={item.id} withdrawing={withdrawingId === item.id} onWithdraw={() => setWithdrawConfirmId(item.id)} />)}</div>}
       {withdrawConfirmId ? <WithdrawalConfirm busy={withdrawingId === withdrawConfirmId} mode={items?.find((item) => item.id === withdrawConfirmId)?.status === "ACCEPTED" ? "ACCEPTED" : "PENDING"} onCancel={() => setWithdrawConfirmId(null)} onConfirm={() => { const applicationId = withdrawConfirmId; setWithdrawConfirmId(null); void withdraw(applicationId); }} /> : null}
     </div>
     <BottomNavigation />
@@ -152,21 +151,20 @@ function PastBadge() {
 
 function SentApplicationCard({ item, withdrawing, onWithdraw }: { item: SentApplication; withdrawing: boolean; onWithdraw: () => void }) {
   const active = item.status === "PENDING" || item.status === "ACCEPTED" || item.status === "CONFIRMED";
-  return <article className="rally-card p-5">
-    <Link className="block transition-colors hover:text-[var(--tm-action-primary)]" href={item.match.courtSlotId ? `/partner-sessions/${item.match.courtSlotId}` : `/matches/${item.match.id}?returnTo=${encodeURIComponent("/activity/sent")}`}>
-      <div className="flex items-start justify-between gap-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${active ? "bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "bg-[var(--tm-bg-subtle-muted)] text-[var(--tm-text-secondary)]"}`}>{item.statusLabel}</span><span className="text-xs text-[var(--tm-text-secondary)]">{appliedDate(item.createdAt)}</span></div>
-      <h2 className="mt-4 text-lg font-bold">{item.match.title}</h2>
-      <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--tm-text-muted)]">{isFinishedSchedule(item.match.endsAt) ? <PastBadge /> : null}<span className="inline-flex items-center gap-1.5"><CalendarBlank size={16} aria-hidden className="shrink-0" />{schedule(item.match.startsAt)}</span></p>
-      <p className="mt-1 flex items-start gap-1.5 text-sm text-[var(--tm-text-muted)]"><MapPin size={16} aria-hidden className="mt-0.5 shrink-0" />{item.match.courtName ?? "코트는 함께 정해요"}</p>
-      <p className="mt-3 text-sm font-semibold text-[var(--tm-action-primary)]">{item.match.courtSource === "COURT_TBD" ? "코트와 비용을 함께 정해요" : item.match.estimatedFeePerPersonKrw === null ? "참가비를 확인해 주세요" : `게스트 참가비 ${item.match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p>
-      {item.supplyNotice ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm font-semibold leading-6 text-[var(--tm-status-error-text)]">{item.supplyNotice.message}</p> : <p className="mt-4 border-t border-[var(--tm-border-subtle)] pt-3 text-sm font-medium leading-6 text-[var(--tm-text-muted)]">{courtMatchNextStep(item) ?? nextStepMessage(item.status, item.match.status, item.decidedAt !== null)}</p>}
-      {item.message ? <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">“{item.message}”</p> : null}
+  const href = item.match.courtSlotId ? `/partner-sessions/${item.match.courtSlotId}` : `/matches/${item.match.id}?returnTo=${encodeURIComponent("/activity/sent")}`;
+  return <article className="rounded-2xl border border-[var(--tm-border-default)] bg-white p-4">
+    <Link className="block" href={href}>
+      <div className="flex items-center justify-between gap-2"><span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${active ? "bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "bg-[var(--tm-bg-subtle-muted)] text-[var(--tm-text-secondary)]"}`}>{item.statusLabel}</span><span className="text-[11px] text-[var(--tm-text-secondary)]">{appliedDate(item.createdAt)}</span></div>
+      <h2 className="mt-3 text-[17px] font-bold leading-6">{item.match.courtName ?? item.match.title}</h2>
+      <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-[var(--tm-text-secondary)]"><CalendarBlank size={15} aria-hidden className="mt-0.5 shrink-0" />{schedule(item.match.startsAt, item.match.endsAt)}</p>
+      {isFinishedSchedule(item.match.endsAt) ? <div className="mt-2"><PastBadge /></div> : null}
+      <p className="mt-2 text-xs text-[var(--tm-text-secondary)]">{item.match.courtSource === "COURT_TBD" ? "코트와 비용을 함께 정해요" : item.match.estimatedFeePerPersonKrw === null ? "참가비를 확인해 주세요" : `1인 ${item.match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p>
     </Link>
-    {item.contact ? <><p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">{acceptedCoordinationMessage(item.match.courtSource)}</p><ContactButton contact={item.contact} /></> : null}
-    {item.courtMatch && item.match.courtSlotId && (item.status === "ACCEPTED" || item.courtMatch.awaitingRefund) && !item.courtMatch.refundCompletedAt
-      ? <Button as={Link} className="mt-3" fullWidth href={`/partner-sessions/${item.match.courtSlotId}`} size="medium">{item.courtMatch.awaitingRefund ? "환불 계좌 입력하기" : item.courtMatch.depositClaimedAt ? "입금 안내 다시 보기" : "입금 안내 보기"}</Button>
-      : null}
-    {canLeave(item) ? <Button className="mt-3" disabled={withdrawing} fullWidth onClick={onWithdraw} size="medium" variant="neutral">{item.status === "PENDING" ? "신청 철회" : "참가 취소"}</Button> : null}
+    {item.supplyNotice ? <p className="mt-3 rounded-lg bg-[var(--tm-status-error-bg)] p-3 text-xs font-semibold leading-5 text-[var(--tm-status-error-text)]">{item.supplyNotice.message}</p> : <p className="mt-3 border-t border-[var(--tm-border-subtle)] pt-3 text-[13px] font-medium leading-6">{courtMatchNextStep(item) ?? nextStepMessage(item.status, item.match.status, item.decidedAt !== null)}</p>}
+    {item.courtMatch && item.match.courtSlotId && (item.status === "ACCEPTED" || item.courtMatch.awaitingRefund) && !item.courtMatch.refundCompletedAt ? <Button as={Link} className="mt-3" fullWidth href={href} size="medium">{item.courtMatch.awaitingRefund ? item.courtMatch.refundRequested ? "환불 진행 확인" : "환불 계좌 입력하기" : item.courtMatch.depositClaimedAt ? "입금 안내 다시 보기" : "입금 안내 보기"}</Button> : null}
+    {item.contact ? <><ContactButton contact={item.contact} /><p className="mt-2 text-[11px] leading-5 text-[var(--tm-text-secondary)]">{acceptedCoordinationMessage(item.match.courtSource)}</p></> : null}
+    {item.message ? <details className="rally-disclosure mt-2"><summary className="flex min-h-11 items-center justify-between text-xs text-[var(--tm-text-secondary)]">보낸 자기소개<CaretDown aria-hidden className="rally-disclosure-chevron" size={14} /></summary><p className="whitespace-pre-wrap break-words rounded-lg bg-[var(--tm-bg-page)] p-3 text-xs leading-6">{item.message}</p></details> : null}
+    {canLeave(item) ? <button className="mt-2 min-h-11 w-full border-t border-[var(--tm-border-subtle)] pt-2 text-xs font-medium text-[var(--tm-text-secondary)] disabled:opacity-50" disabled={withdrawing} onClick={onWithdraw} type="button">{item.status === "PENDING" ? "신청 철회" : "참가 취소"}</button> : null}
   </article>;
 }
 
@@ -183,7 +181,7 @@ function canLeave(item: SentApplication) {
 }
 
 function ContactButton({ contact }: { contact: NonNullable<SentApplication["contact"]> }) {
-  return contact.href ? <Button as={Link} className="mt-3" fullWidth href={contact.href}>{contact.label}</Button> : <p className="mt-3 text-center text-sm text-[var(--tm-text-secondary)]">채팅방을 준비하고 있어요.</p>;
+  return contact.href ? <Button as={Link} className="mt-3" fullWidth href={contact.href} size="medium" variant="secondary">{contact.label}</Button> : <p className="mt-3 text-center text-sm text-[var(--tm-text-secondary)]">채팅방을 준비하고 있어요.</p>;
 }
 
 function WithdrawalConfirm({ busy, mode, onCancel, onConfirm }: { busy: boolean; mode: "PENDING" | "ACCEPTED"; onCancel: () => void; onConfirm: () => void }) {

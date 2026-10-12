@@ -1,3 +1,4 @@
+import { RallyWordmark } from "@/components/ui/rally-wordmark";
 import Link from "next/link";
 import { AppleLogo, ChatCircle } from "@phosphor-icons/react/dist/ssr";
 
@@ -12,18 +13,9 @@ export function WelcomeScreen({ loading, onSignIn, onOperator, error }: {
     </svg>
     <section className="rally-welcome">
       <div className="rally-welcome-identity">
-        <h1 className="rally-welcome-wordmark" aria-label="Rally On">
-          <span aria-hidden="true">Rally</span>
-          <span className="rally-welcome-on" aria-hidden="true">
-            <svg className="rally-welcome-ball" viewBox="0 0 80 80" fill="none" focusable="false">
-              <circle cx="40" cy="40" r="37" fill="currentColor" />
-              <path d="M16 12C45 25 45 55 16 68M64 12C35 25 35 55 64 68" stroke="#fffef2" strokeWidth="4" strokeLinecap="round" />
-            </svg>
-            <span>n</span>
-          </span>
-        </h1>
-        <p className="rally-welcome-slogan">부담 없이, 함께 테니스.</p>
-        <p className="rally-welcome-purpose">나와 비슷한 메이트를 만나요.</p>
+        <h1><RallyWordmark /></h1>
+        <p className="rally-welcome-slogan">부담 없이, 함께 테니스</p>
+        <p className="rally-welcome-purpose">나와 비슷한 메이트를 만나요</p>
       </div>
       <div className="rally-welcome-actions">
         {error ? <p className="mb-3 rounded-xl bg-[var(--tm-status-error-bg)] p-3 text-sm text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}

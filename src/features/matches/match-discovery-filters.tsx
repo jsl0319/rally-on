@@ -49,7 +49,16 @@ export function MatchDiscoveryHeader() {
   return <StickyPageHeader title="매칭" actions={<Link className="rally-text-action rounded-full bg-[var(--tm-bg-subtle)] px-4" href="/activity/received">내 매칭</Link>} />;
 }
 
-export function MatchDiscoveryFilters({ value, onChange }: { value: MatchFilters; onChange: (value: MatchFilters) => void }) {
+type DiscoveryValues = FilterCriteria & { sort: string; availableOnly?: boolean };
+type SortOption<S extends string> = { value: S; label: string; description: string };
+export function MatchDiscoveryFilters(props: { value: MatchFilters; onChange: (value: MatchFilters) => void }) {
+  return <DiscoveryFilters {...props} sortOptions={sortOptions} showAvailability />;
+}
+
+/** Date/game filters share their sheet; sorting remains a separate action. */
+export function DiscoveryFilters<V extends DiscoveryValues>({ value, onChange, sortOptions, showAvailability = false }: {
+  value: V; onChange: (value: V) => void; sortOptions: SortOption<V["sort"]>[]; showAvailability?: boolean;
+}) {
   const [openSection, setOpenSection] = useState<FilterSection | "sort" | null>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const open = (section: FilterSection | "sort", button: HTMLButtonElement) => { trigger.current = button; setOpenSection(section); };
@@ -59,16 +68,16 @@ export function MatchDiscoveryFilters({ value, onChange }: { value: MatchFilters
       <div className="rally-filter-scroll flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
         <FilterChip active={value.date !== null} expanded={openSection === "date"} icon={<CalendarBlank size={14} aria-hidden />} label={dateLabel(value.date)} onClick={event => open("date", event.currentTarget)} />
         <FilterChip active={value.gameType !== null} expanded={openSection === "gameType"} icon={<Users size={14} aria-hidden />} label={value.gameType ? gameTypeLabels[value.gameType] : "게임 유형"} onClick={event => open("gameType", event.currentTarget)} />
-        <button type="button" role="switch" aria-label="참여가능 매칭" aria-checked={value.availableOnly} onClick={() => onChange({ ...value, availableOnly: !value.availableOnly })} className="inline-flex min-h-11 shrink-0 items-center gap-1.5 px-1 text-xs font-medium">
+        {showAvailability ? <button type="button" role="switch" aria-label="참여가능 매칭" aria-checked={value.availableOnly} onClick={() => onChange({ ...value, availableOnly: !value.availableOnly })} className="inline-flex min-h-11 shrink-0 items-center gap-1.5 px-1 text-xs font-medium">
           <span aria-hidden className={`relative h-4 w-7 rounded-full transition-colors ${value.availableOnly ? "bg-[var(--tm-action-primary)]" : "bg-[var(--tm-border-strong)]"}`}><span className={`absolute left-0 top-0.5 size-3 rounded-full bg-white transition-transform ${value.availableOnly ? "translate-x-3.5" : "translate-x-0.5"}`} /></span>
           참여가능
-        </button>
+        </button> : null}
       </div>
       <button type="button" aria-haspopup="dialog" aria-expanded={openSection === "sort"} onClick={event => open("sort", event.currentTarget)} className="inline-flex min-h-11 shrink-0 items-center gap-1 pl-2 text-xs font-semibold text-[var(--tm-text-secondary)]">
         {sortOptions.find(option => option.value === value.sort)?.label}<CaretDown size={12} aria-hidden />
       </button>
     </div>
-    {openSection === "sort" ? <SortPanel value={value.sort} onClose={close} onSelect={sort => { onChange({ ...value, sort }); close(); }} />
+    {openSection === "sort" ? <SortPanel options={sortOptions} value={value.sort} onClose={close} onSelect={sort => { onChange({ ...value, sort }); close(); }} />
       : openSection ? <FilterPanel initialSection={openSection} value={value} onClose={close} onApply={criteria => { onChange({ ...value, ...criteria }); close(); }} /> : null}
   </>;
 }
@@ -125,12 +134,12 @@ function FilterPanel({ initialSection, value, onApply, onClose }: { initialSecti
   </Modal>;
 }
 
-function SortPanel({ value, onSelect, onClose }: { value: MatchFilters["sort"]; onSelect: (value: MatchFilters["sort"]) => void; onClose: () => void }) {
+function SortPanel<S extends string>({ value, options, onSelect, onClose }: { value: S; options: SortOption<S>[]; onSelect: (value: S) => void; onClose: () => void }) {
   return <Modal open onOpenChange={open => { if (!open) onClose(); }}>
     <ModalContainer variant="bottom" size="large" sx={{ width: "100%", maxWidth: 560, maxHeight: "calc(100dvh - var(--rally-safe-top) - 12px)", padding: 0, borderRadius: "24px 24px 0 0", overflow: "hidden" }}>
       <ModalNavigation sx={{ flexShrink: 0 }} trailingContent={<ModalClose aria-label="정렬 닫기" />}>정렬</ModalNavigation>
       <div className="min-h-0 overflow-y-auto overscroll-contain px-5 pt-1 pb-[max(16px,env(safe-area-inset-bottom))]" role="group" aria-label="정렬 선택">
-        {sortOptions.map(option => <button type="button" key={option.value} aria-pressed={value === option.value} onClick={() => onSelect(option.value)} className={`flex min-h-16 w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left ${value === option.value ? "bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "text-[var(--tm-text-primary)]"}`}>
+        {options.map(option => <button type="button" key={option.value} aria-pressed={value === option.value} onClick={() => onSelect(option.value)} className={`flex min-h-16 w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left ${value === option.value ? "bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "text-[var(--tm-text-primary)]"}`}>
           <span><span className="block text-sm font-semibold">{option.label}</span><span className="mt-0.5 block text-xs leading-5 text-[var(--tm-text-secondary)]">{option.description}</span></span>
           {value === option.value ? <Check size={18} weight="bold" className="shrink-0" aria-hidden /> : null}
         </button>)}

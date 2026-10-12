@@ -2,20 +2,20 @@ import type { CourtApplicationNotice } from "@/server/domain/court-application-n
 import { matchSchedule } from "@/features/matches/match-presentation";
 import { formatStatusChangedAt } from "./partner-session";
 
-export function CourtApplicationNoticeContent({ notice }: { notice: CourtApplicationNotice }) {
+export function CourtApplicationNoticeContent({ notice, compact = false, hideProgress = false, hideUsageNote = false }: { notice: CourtApplicationNotice; compact?: boolean; hideProgress?: boolean; hideUsageNote?: boolean }) {
   const { terms } = notice;
-  return <div className="space-y-4 text-sm leading-6 text-[var(--tm-text-muted)]">
-    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-2xl bg-[var(--tm-bg-subtle-muted)] p-4">
+  return <div className={`space-y-4 text-[var(--tm-text-muted)] ${compact ? "text-[13px] leading-[22px]" : "text-sm leading-6"}`}>
+    {!compact ? <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-2xl bg-[var(--tm-bg-subtle-muted)] p-4">
       <dt>게임 유형</dt><dd className="text-right font-semibold text-[var(--tm-text-primary)]">{terms.gameType}</dd>
       <dt>모집 정원</dt><dd className="text-right font-semibold text-[var(--tm-text-primary)]">최대 {terms.maximum}명{terms.maleCapacity !== null && terms.femaleCapacity !== null ? <span className="block text-xs font-normal text-[var(--tm-text-secondary)]">남 {terms.maleCapacity}명 · 여 {terms.femaleCapacity}명</span> : null}</dd>
       <dt>참가비</dt><dd className="text-right font-semibold text-[var(--tm-text-primary)]">1인 {terms.feeKrw.toLocaleString("ko-KR")}원</dd>
-    </dl>
-    {terms.sections.filter((s) => s.summary).map((s) => <div key={s.title}><p className="font-semibold text-[var(--tm-text-primary)]">{s.title}</p><p className="mt-1 break-words">{s.summary}</p></div>)}
-    <details className="rounded-xl border border-[var(--tm-border-default)] px-3">
-      <summary className="min-h-11 cursor-pointer py-2.5 font-semibold text-[var(--tm-text-primary)]">전체 신청·입금·환불 안내</summary>
+    </dl> : null}
+    {terms.sections.filter((s) => s.summary && !(hideProgress && s.title === "진행 조건")).map((s) => <div key={s.title}><p className="font-semibold text-[var(--tm-text-primary)]">{s.title}</p><p className="mt-1 break-words">{s.summary}</p></div>)}
+    <details className={compact ? "border-t border-[var(--tm-border-subtle)]" : "rounded-xl border border-[var(--tm-border-default)] px-3"}>
+      <summary className="min-h-11 cursor-pointer py-2.5 font-medium text-[var(--tm-text-primary)]">전체 신청·입금·환불 안내</summary>
       {terms.sections.map((s) => <div className="mb-3" key={s.title}><p className="font-semibold">{s.title}</p><p className="mt-1 break-words">{s.body}</p></div>)}
     </details>
-    {terms.usageNote ? <div><p className="font-semibold text-[var(--tm-text-primary)]">코트 이용 안내</p><p className="mt-1 whitespace-pre-wrap break-words">{terms.usageNote}</p></div> : null}
+    {terms.usageNote && !hideUsageNote ? <div><p className="font-semibold text-[var(--tm-text-primary)]">코트 이용 안내</p><p className="mt-1 whitespace-pre-wrap break-words">{terms.usageNote}</p></div> : null}
   </div>;
 }
 

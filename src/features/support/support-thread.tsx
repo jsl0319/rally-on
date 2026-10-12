@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { SupportAudience, SupportInquiryView } from "@/server/domain/support-service";
 import { apiMessage, formatStatusChangedAt } from "@/features/partner/partner-session";
 
-export function SupportThread({ inquiry: i, audience, refresh, endpointOverride }: { endpointOverride?: string; inquiry: SupportInquiryView; audience: SupportAudience; refresh: () => Promise<void> }) {
+export function SupportThread({ inquiry: i, audience, refresh, endpointOverride, embedded = false }: { embedded?: boolean; endpointOverride?: string; inquiry: SupportInquiryView; audience: SupportAudience; refresh: () => Promise<void> }) {
   const [body, setBody] = useState("");
   const [action, setAction] = useState(audience === "operator" ? "OPERATOR_REPLY" : "REPLY");
   const [busy, setBusy] = useState(false);
@@ -26,8 +26,8 @@ export function SupportThread({ inquiry: i, audience, refresh, endpointOverride 
     finally { setBusy(false); }
   };
   const canReply = audience === "member" || (audience === "reviewer" && i.assignedToMe) || (audience === "operator" && i.status === "WAITING_OPERATOR");
-  return <article className="rounded-2xl border border-[var(--tm-border-default)] bg-white p-4 text-sm">
-    <div className="flex flex-wrap justify-between gap-2"><span className="rounded-full bg-[var(--tm-bg-subtle)] px-3 py-1 font-semibold text-[var(--tm-action-primary)]">{i.statusLabel}</span><time className="text-xs text-[var(--tm-text-secondary)]">{formatStatusChangedAt(i.createdAt)}</time></div>
+  return <article className={embedded ? "border-t border-[var(--tm-border-subtle)] p-4 text-sm" : "rounded-2xl border border-[var(--tm-border-default)] bg-white p-4 text-sm"}>
+    {!embedded ? <div className="flex flex-wrap justify-between gap-2"><span className="rounded-full bg-[var(--tm-bg-subtle)] px-3 py-1 font-semibold text-[var(--tm-action-primary)]">{i.statusLabel}</span><time className="text-xs text-[var(--tm-text-secondary)]">{formatStatusChangedAt(i.createdAt)}</time></div> : null}
     {i.match ? <p className="mt-3 font-semibold">{i.match.title} · {formatStatusChangedAt(i.match.startsAt)}</p> : null}
     {i.applicationId && i.match && audience !== "member" ? <p className="mt-2 text-xs text-[var(--tm-text-secondary)]"><span className="break-words">{i.applicantLabel}</span>{audience === "operator" ? <Link className="mt-2 block text-[var(--tm-action-primary)] underline" href={`/partner/court-matches/${i.match.id}#application-${i.applicationId}`}>해당 매칭 입금·환불 대조 →</Link> : null}</p> : null}
     {i.message ? <p className="mt-4 whitespace-pre-wrap break-words leading-6">{i.message}</p> : null}

@@ -1,6 +1,7 @@
 "use client";
 
-import { PageHeader } from "@/components/ui/page-header";
+import { AccountPageHeader } from "@/components/navigation/account-page-header";
+import { CaretDown, ChatCircleText } from "@phosphor-icons/react";
 
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -25,6 +26,7 @@ export function MSupportInquiry() {
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [view, setView] = useState<"compose" | "history">("compose");
 
   const load = useCallback(async () => {
     try {
@@ -44,6 +46,7 @@ export function MSupportInquiry() {
   }, [load]);
 
   const submit = async () => {
+    if (submitting || message.trim().length < 10) return;
     setSubmitting(true);
     setSubmitError("");
     setSubmitted(false);
@@ -53,6 +56,7 @@ export function MSupportInquiry() {
       if (!response.ok) throw new Error(apiMessage(body, "문의를 보내지 못했어요."));
       setMessage("");
       setSubmitted(true);
+      setView("history");
       await load();
     } catch (caught) {
       setSubmitError(caught instanceof Error ? caught.message : "문의를 보내지 못했어요.");
@@ -63,31 +67,26 @@ export function MSupportInquiry() {
 
   const valid = message.trim().length >= 10;
 
-  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-10 pt-4 text-[var(--tm-text-primary)]">
-    <div className="mx-auto max-w-[560px]">
-      <PageHeader backHref="/my" title="1:1 문의" description="궁금한 점이나 불편한 점을 남겨주시면 확인 후 도와드릴게요." />
-      {matchId ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-text-secondary)]">방금 보던 매칭에 대한 문의로 접수돼요. 어떤 건인지 따로 적지 않으셔도 돼요.</p> : null}
-
-      <section className="mt-5 rally-card p-5">
-        <label className="block text-sm font-semibold" htmlFor="support-message">문의 내용</label>
-        <textarea
-          className="rally-input mt-2 min-h-[140px] w-full resize-none rounded-2xl border border-[var(--tm-border-default)] p-3 text-sm leading-6"
-          id="support-message"
-          maxLength={1000}
-          onChange={(event) => { setMessage(event.target.value); setSubmitError(""); }}
-          placeholder="예: 매칭 신청 후 상대방과 연락이 닿지 않아요."
-          value={message}
-        />
-        <p className="mt-1 text-right text-xs text-[var(--tm-text-muted)]">{message.trim().length}/1000</p>
-        {submitError ? <p className="mt-1 text-sm text-[var(--tm-status-error-text)]" role="alert">{submitError}</p> : null}
-        {submitted ? <p className="mt-1 text-sm text-[var(--tm-action-primary)]">문의가 접수됐어요. 확인 후 답변드릴게요.</p> : null}
-        <Button className="mt-4" disabled={!valid || submitting} fullWidth loading={submitting} onClick={() => void submit()}>문의 보내기</Button>
-      </section>
-
-      <h2 className="mt-8 font-bold">내 문의 내역</h2>
-      {items === null ? error ? <section className="mt-4 rally-card p-5"><p className="text-sm leading-6">{error}</p><Button className="mt-4" onClick={() => void load()} size="medium">다시 불러오기</Button></section> : <CourtRallyLoader className="mt-4" label="문의 내역을 불러오고 있어요." /> : items.length === 0 ? <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">아직 보낸 문의가 없어요.</p> : <ul className="mt-3 space-y-3">
-        {items.map((item) => <li key={item.id}><SupportThread inquiry={item} audience="member" refresh={load} /></li>)}
-      </ul>}
+  return <main className="min-h-app bg-[var(--tm-bg-page)] pb-10 text-[var(--tm-text-primary)]">
+    <AccountPageHeader title="1:1 문의" />
+    <div className="mx-auto max-w-[560px] px-5">
+      <div className="mb-6 mt-4 grid grid-cols-2 rounded-xl bg-[var(--tm-bg-subtle)] p-1" aria-label="문의 화면 선택">{([["compose", "문의하기"], ["history", "내 문의 내역"]] as const).map(([key, label]) => <button aria-pressed={view === key} className={`min-h-11 rounded-lg text-sm font-semibold ${view === key ? "bg-white text-[var(--tm-action-primary)] shadow-sm" : "text-[var(--tm-text-secondary)]"}`} key={key} onClick={() => setView(key)} type="button">{label}</button>)}</div>
+      {view === "compose" ? <>
+        <h2 className="text-[23px] font-bold leading-8 tracking-[-.7px]">어떤 도움이 필요하세요?</h2><p className="mb-6 mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">이용 중 궁금한 점을 남겨 주세요.<br />답변은 내 문의 내역에서 확인할 수 있어요.</p>
+        {matchId ? <p className="mb-5 rounded-xl bg-[var(--tm-bg-subtle)] px-3 py-3 text-xs leading-5 text-[var(--tm-action-primary)]">방금 보던 매칭 정보가 함께 전달돼요.</p> : null}
+        <form onSubmit={event => { event.preventDefault(); void submit(); }}>
+          <label className="text-sm font-semibold" htmlFor="support-message">문의 내용</label>
+          <textarea aria-describedby="support-message-help" className="rally-input mt-3 min-h-[190px] w-full resize-y rounded-2xl border border-[var(--tm-border-default)] bg-white p-4 text-base leading-7" disabled={submitting} id="support-message" required minLength={10} maxLength={1000} onChange={event => { setMessage(event.target.value); setSubmitError(""); }} placeholder="어떤 상황에서 불편하셨는지 알려 주세요." value={message} />
+          <div id="support-message-help" className="mt-2 flex justify-between gap-3 text-[11px] text-[var(--tm-text-secondary)]"><span>10자 이상 · 비밀번호나 계좌번호는 적지 마세요.</span><span className="shrink-0">{message.trim().length}/1000</span></div>
+          {submitError ? <p className="mt-3 text-sm text-[var(--tm-status-error-text)]" role="alert">{submitError}</p> : null}
+          <Button className="mt-6" disabled={!valid || submitting} fullWidth loading={submitting} type="submit">문의 보내기</Button>
+        </form>
+      </> : <>
+        {submitted ? <p className="mb-4 rounded-xl bg-[var(--tm-bg-subtle)] p-3 text-sm leading-6 text-[var(--tm-action-primary)]" role="status">문의가 접수됐어요. 확인 후 답변드릴게요.</p> : null}
+        <h2 className="sr-only">내 문의 내역</h2>
+        {error ? <section role="alert" className="mb-4 rounded-xl bg-white p-4"><p className="text-sm">{error}</p><Button className="mt-3" onClick={() => void load()} size="small">다시 불러오기</Button></section> : null}
+        {items === null ? !error ? <CourtRallyLoader label="문의 내역을 불러오고 있어요." /> : null : items.length === 0 ? <div className="py-14 text-center"><ChatCircleText aria-hidden size={36} className="mx-auto text-[var(--tm-action-primary)]" /><p className="mt-4 font-semibold">아직 보낸 문의가 없어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">필요할 때 편하게 남겨 주세요.</p></div> : <ul className="space-y-3">{items.map((item, index) => <li key={item.id}><details className="rally-disclosure rounded-2xl border border-[var(--tm-border-default)] bg-white" open={submitted && index === 0 ? true : undefined} name="support-inquiry"><summary className="flex items-center gap-3 p-4"><span className="min-w-0 flex-1"><span className="text-[11px] font-semibold text-[var(--tm-action-primary)]">{item.statusLabel}</span><span className="mt-2 block truncate text-sm font-semibold">{item.message || "매칭 관련 문의"}</span><time className="mt-1 block text-[11px] text-[var(--tm-text-secondary)]">{new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Seoul" }).format(new Date(item.createdAt))}</time></span><CaretDown aria-hidden size={16} className="rally-disclosure-chevron shrink-0" /></summary><SupportThread inquiry={item} audience="member" refresh={load} embedded /></details></li>)}</ul>}
+      </>}
     </div>
   </main>;
 }

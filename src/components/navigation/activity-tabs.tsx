@@ -1,4 +1,3 @@
-import { Tab, TabList, TabListItem } from "@wanteddev/wds";
 import Link from "next/link";
 
 type ActivityTab = "received" | "sent";
@@ -11,15 +10,5 @@ const tabs: Array<{ id: ActivityTab; href: string; label: string }> = [
 ];
 
 export function ActivityTabs({ current }: { current: ActivityTab }) {
-  return (
-    <Tab value={current}>
-      <TabList aria-label="신청 활동 구분" className="mt-5">
-        {tabs.map((tab) => (
-          <TabListItem as={Link} href={tab.href} key={tab.id} value={tab.id}>
-            {tab.label}
-          </TabListItem>
-        ))}
-      </TabList>
-    </Tab>
-  );
+  return <nav aria-label="신청 활동 구분" className="mt-4 grid grid-cols-2 rounded-xl bg-[var(--tm-bg-subtle)] p-1">{tabs.map(tab => <Link aria-current={current === tab.id ? "page" : undefined} className={`flex min-h-11 items-center justify-center rounded-lg px-2 text-[13px] font-semibold ${current === tab.id ? "bg-white text-[var(--tm-action-primary)] shadow-sm" : "text-[var(--tm-text-secondary)]"}`} href={tab.href} key={tab.id}>{tab.label}</Link>)}</nav>;
 }

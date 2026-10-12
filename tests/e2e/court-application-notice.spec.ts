@@ -120,13 +120,13 @@ test("운영자가 제공 범위를 선택해 저장·공개하면 상세와 신
     await operator.page.getByLabel("날짜", { exact: true }).fill("2030-01-02");
     await operator.page.getByLabel("시작 시간", { exact: true }).fill("10:00");
     await operator.page.getByLabel("종료 시간", { exact: true }).fill("12:00");
-    await operator.page.getByLabel("게스트 참가비", { exact: true }).fill("12000");
+    await operator.page.getByLabel("1인 참가비", { exact: true }).fill("12000");
     await operator.page.getByRole("button", { name: "혼복", exact: true }).click();
     await operator.page.getByRole("button", { name: "초안 저장하기", exact: true }).click();
     await expect(operator.page.getByRole("alert").filter({ hasText: "포함 여부를 모두 선택" })).toBeVisible();
     const scopeForm = operator.page.getByRole("region", { name: "참가비 포함 항목", exact: true });
     await expect(scopeForm.locator("input:checked")).toHaveCount(0);
-    for (const [label, included] of [["테니스공", true], ["장비 대여", false], ["레슨", false], ["현장 경기 진행", true]] as const) {
+    for (const [label, included] of [["장비 대여", false], ["레슨", false], ["현장 경기 진행", true]] as const) {
       await scopeForm.getByRole("group", { name: `${label} 필수`, exact: true }).getByRole("radio", { name: included ? "포함" : "미포함", exact: true }).check();
     }
     await expect(operator.page.getByRole("alert").filter({ hasText: "포함 여부를 모두 선택" })).toHaveCount(0);
@@ -138,31 +138,32 @@ test("운영자가 제공 범위를 선택해 저장·공개하면 상세와 신
     ]);
     expect(saved.ok(), await saved.text()).toBeTruthy();
     const created = await saved.json();
-    const scope = { balls: true, equipment: false, lesson: false, facilitator: true };
+    const scope = { balls: false, equipment: false, lesson: false, facilitator: true };
     expect(created.serviceScope).toEqual(scope);
     await operator.page.goto(`/partner/slots/${created.id}/edit`);
-    await expect(operator.page.getByRole("group", { name: "테니스공 필수", exact: true }).getByRole("radio", { name: "포함", exact: true })).toBeChecked();
+    await expect(operator.page.getByRole("group", { name: "현장 경기 진행 필수", exact: true }).getByRole("radio", { name: "포함", exact: true })).toBeChecked();
     const contactSaved = await operator.context.request.put(`/api/v1/operator/courts/${existing.courtUnit.courtId}/contact`, { data: { phone: "02-1234-5678", hours: "매일 09~18시", publicationAgreed: true, expectedVersion: 0 } });
     expect(contactSaved.ok(), await contactSaved.text()).toBeTruthy();
     const published = await operator.context.request.post(`/api/v1/operator/slots/${created.id}/publish`);
     expect(published.ok(), await published.text()).toBeTruthy();
     await member.page.goto(`/partner-sessions/${created.id}`);
-    const section = member.page.locator("section").filter({ has: member.page.getByRole("heading", { name: "참가비 포함 항목", exact: true }) });
-    await expect(section.getByText("코트 이용·매칭 참가 포함", { exact: true })).toBeVisible();
-    await expect(section.getByText("포함", { exact: true })).toHaveCount(2);
-    await expect(section.getByText("미포함", { exact: true })).toHaveCount(2);
-    await section.scrollIntoViewIfNeeded();
+    await expect(member.page.getByRole("heading", { name: "참가비 포함 항목", exact: true })).toHaveCount(0);
+    const sentence = "코트 이용·매칭 참가 · 현장 경기 진행 포함. 테니스공 · 장비 대여 · 레슨 미포함.";
+    await member.page.getByText("전체 신청·입금·환불 안내", { exact: true }).click();
+    await expect(member.page.getByText(sentence, { exact: true })).toBeVisible();
     await member.page.screenshot({ path: "/tmp/rally-r06-scope-detail.png" });
     await member.page.getByRole("button", { name: "같이 치기", exact: true }).click();
     const dialog = member.page.getByRole("dialog", { name: "같이 치기", exact: true });
-    const sentence = "코트 이용·매칭 참가 · 테니스공 · 현장 경기 진행 포함. 장비 대여 · 레슨 미포함.";
+    await dialog.getByText("전체 신청·입금·환불 안내", { exact: true }).click();
     await expect(dialog.getByText(sentence, { exact: true }).first()).toBeVisible();
     await dialog.getByRole("checkbox").check();
     await member.page.screenshot({ path: "/tmp/rally-r06-scope-notice.png" });
     await dialog.getByRole("button", { name: "신청 보내기", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await member.page.getByText("신청 당시 확인한 안내", { exact: true }).click();
-    await expect(member.page.getByText(sentence, { exact: true }).first()).toBeVisible();
+    const record = member.page.locator("details").filter({ has: member.page.locator("summary", { hasText: /^신청 당시 확인한 안내$/ }) });
+    await record.getByText("전체 신청·입금·환불 안내", { exact: true }).click();
+    await expect(record.getByText(sentence, { exact: true })).toBeVisible();
     const match = await prisma.match.findFirstOrThrow({ where: { courtSlotId: created.id } });
     const application = await prisma.matchApplication.findFirstOrThrow({ where: { matchId: match.id } });
     expect(application.courtNoticeSnapshot).toMatchObject({ terms: { serviceScope: scope } });

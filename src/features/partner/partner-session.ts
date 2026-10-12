@@ -11,6 +11,7 @@ export type PublicCourtSlot = {
   endsAt: string;
   guestFeeKrw: number;
   ballDiscountEnabled?: boolean;
+  ballContribution?: { available: boolean } | null;
   maxParticipantCount: number;
   minParticipantCount: number;
   gameType: { code: string; label: string } | null;

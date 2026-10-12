@@ -244,7 +244,7 @@ test("코트 카드도 촘촘히 정렬하고 사진 없는 코트만 전용 견
     court: { name: `예시 테니스장 ${[0, 2, 5, 7, 16, 20][index]}`, address: "서울 성동구", courtNumber: "1번 코트", region: { name: "서울 성동구" },
       image: { url: index === 5 ? "/images/court-samples/indoor.jpg" : null, sourceLabel: index === 5 ? "코트 사진" : null, fallback: "TENNIS_COURT_ILLUSTRATION" } },
   }));
-  await page.route("**/api/v1/partner-session-slots", route => route.fulfill({ json: { items } }));
+  await page.route("**/api/v1/partner-session-slots?*", route => route.fulfill({ json: { items } }));
   for (const width of [375, 320]) {
     await page.setViewportSize({ width, height: 812 });
     await page.goto("/partner-sessions");

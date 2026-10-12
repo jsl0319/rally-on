@@ -46,7 +46,7 @@ export function MatchCard({ match, returnTo = "/" }: { match: MatchCardData; ret
         <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${open ? "text-[var(--tm-action-primary)]" : "text-[var(--tm-text-secondary)]"}`}><Users size={13} weight="bold" aria-hidden />{open ? remaining : match.statusLabel}</span>
 
       </div>
-      {match.isHost ? <p className="mt-0.5 flex items-center gap-1 text-[10px] text-[var(--tm-text-secondary)]"><PencilSimple size={11} aria-hidden />내가 개설</p> : match.recommendationReasons[0] ? <p className="mt-0.5 text-[11px] leading-4 text-[var(--tm-text-secondary)]">{match.recommendationReasons[0].label}</p> : null}
+      {match.isHost ? <p className="mt-0.5 flex items-center gap-1 text-[10px] text-[var(--tm-text-secondary)]"><PencilSimple size={11} aria-hidden />내가 개설</p> : null}
     </div>
   </Link>;
 }

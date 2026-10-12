@@ -56,11 +56,10 @@ export function ProfileImageField({ nickname, onChange, url }: { nickname: strin
     }
   };
 
-  return <section className="mt-6 rally-card p-5">
-    <h2 className="text-sm font-semibold text-[var(--tm-action-primary)]">프로필 사진</h2>
-    <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">카카오 계정 사진을 기본으로 사용해요. 다른 사진으로 바꿀 수 있어요.</p>
+  return <section className="border-b border-[var(--tm-border-default)] py-5">
+    <h2 className="sr-only">프로필 사진</h2>
 
-    <div className="mt-4 flex items-center gap-4">
+    <div className="flex items-center justify-center gap-4">
       <button
         aria-label="프로필 사진 변경"
         className="relative grid size-20 shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)] disabled:opacity-60"
@@ -98,6 +97,6 @@ export function ProfileImageField({ nickname, onChange, url }: { nickname: strin
       type="file"
     />
 
-    {error ? <p className="mt-3 text-sm text-[var(--tm-status-error-text)]" role="alert">{error}</p> : <p className="mt-3 text-xs text-[var(--tm-text-secondary)]">JPEG · PNG · WebP, 5 MiB 이하</p>}
+    {error ? <p className="mt-3 text-sm text-[var(--tm-status-error-text)]" role="alert">{error}</p> : <p className="mt-3 text-center text-[11px] text-[var(--tm-text-secondary)]">사진은 바로 반영돼요 · JPEG, PNG, WebP · 5 MiB 이하</p>}
   </section>;
 }

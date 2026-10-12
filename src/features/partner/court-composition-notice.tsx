@@ -6,6 +6,12 @@ export function CourtCompositionNotice({ match, operator = false }: { match: Pic
   if (c.phase === "REVIEW_REQUIRED") return <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-900" role="status"><p className="font-bold">실제 진행 여부 확인 필요</p><p className="mt-2">시작 전 진행 판정이 완료되지 않았어요. 자동으로 취소하거나 진행 확정으로 표시하지 않아요. {operator ? "참가자와 실제 제공 여부를 확인하고 아래에 결과를 기록해 주세요." : "이 화면만으로 이동·참가 여부를 판단하지 말고 운영자에게 확인해 주세요."}</p></div>;
   if (!c.enabled || c.phase === "CANCELLED") return null;
   const needsAction = c.phase === "ACTION_REQUIRED";
+  if (!operator) {
+    if (c.phase === "ACTION_REQUIRED") return <div role="status" className="mb-4 rounded-xl bg-amber-50 p-3 text-sm leading-6 text-amber-900"><p className="font-semibold">경기 진행 여부를 확인 중이에요</p><p>참가 취소로 인원이 부족해졌어요. 진행이 불가능해 취소되면 남은 참가자의 입금액을 전액 반환해요.</p></div>;
+    if (c.phase === "BEFORE_JUDGEMENT") return <div className="mb-4 text-[13px] leading-[22px]"><p className="font-semibold">경기 진행 기준</p><p className="mt-1 text-[var(--tm-text-muted)]">{formatStatusChangedAt(match.judgementAt)}까지 {c.requirementLabel}</p><p className="text-[var(--tm-text-secondary)]">입금 확인이 끝난 인원 기준이에요. 미달 시 취소·전액 반환해요.</p></div>;
+    return <p className="mb-4 text-sm font-semibold text-[var(--tm-action-primary)]">{c.phase === "PASSED" ? "진행 인원이 모였어요" : "경기가 시작됐어요"}</p>;
+  }
+
   return <div className={`mt-4 rounded-2xl p-4 text-sm leading-6 ${needsAction ? "bg-amber-50 text-amber-900" : "bg-[var(--tm-bg-subtle-muted)] text-[var(--tm-text-muted)]"}`} role={needsAction ? "status" : undefined}>
     <p className="font-bold">{needsAction ? "운영자 조치 필요" : c.phase === "PASSED" ? "진행 판정 통과" : "진행 조건"}</p>
     <p className="mt-1">{c.requirementLabel}</p>

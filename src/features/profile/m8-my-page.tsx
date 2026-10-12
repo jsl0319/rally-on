@@ -68,6 +68,7 @@ function needsMyAction(application: SentApplicationSummary) {
 export function M8MyPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState("");
+  const [notificationError, setNotificationError] = useState("");
   const [savingNotificationPref, setSavingNotificationPref] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [pendingSentCount, setPendingSentCount] = useState(0);
@@ -101,7 +102,9 @@ export function M8MyPage() {
   }, [load]);
 
   const toggleMatchNotifications = async (next: boolean) => {
+    if (savingNotificationPref) return;
     setMe((current) => current ? { ...current, matchNotificationsEnabled: next } : current);
+    setNotificationError("");
     setSavingNotificationPref(true);
     try {
       const response = await fetch("/api/v1/me", {
@@ -111,6 +114,7 @@ export function M8MyPage() {
       });
       if (!response.ok) throw new Error("알림 설정을 저장하지 못했어요.");
     } catch {
+      setNotificationError("알림 설정을 저장하지 못했어요. 다시 시도해 주세요.");
       setMe((current) => current ? { ...current, matchNotificationsEnabled: !next } : current);
     } finally {
       setSavingNotificationPref(false);
@@ -144,14 +148,16 @@ export function M8MyPage() {
           />
         </Card>
 
-        <SectionLabel>설정</SectionLabel>
+        <SectionLabel>알림과 고객 지원</SectionLabel>
         <Card>
           <ToggleRow
-            description="새 신청 · 수락 · 거절 소식을 받아요. 참가비와 취소 안내는 이 설정과 상관없이 알려 드려요."
+            description="새 신청 · 수락 · 거절"
             icon={<Bell aria-hidden="true" className="size-5 text-[var(--tm-text-muted)]" />}
             title="매칭 소식 알림"
-            toggle={<Switch checked={me.matchNotificationsEnabled} disabled={savingNotificationPref} onCheckedChange={(next) => void toggleMatchNotifications(next)} size="small" />}
+            toggle={<Switch aria-label="매칭 소식 알림" checked={me.matchNotificationsEnabled} disabled={savingNotificationPref} onCheckedChange={(next) => void toggleMatchNotifications(next)} size="small" />}
           />
+          {notificationError ? <p className="px-3 py-2 text-xs text-[var(--tm-status-error-text)]" role="alert">{notificationError}</p> : null}
+          <p className="px-3 py-3 text-[11px] leading-5 text-[var(--tm-text-secondary)]">참가비·취소 안내는 알림 설정과 관계없이 전달돼요.</p>
           <LinkRow href="/notices" icon={<Megaphone aria-hidden="true" className="size-5 text-[var(--tm-text-muted)]" />} title="공지사항" />
           <LinkRow href="/support/inquiry" icon={<Headset aria-hidden="true" className="size-5 text-[var(--tm-text-muted)]" />} title="1:1 문의" />
         </Card>
@@ -193,41 +199,29 @@ function LoadError({ error, onRetry }: { error: string; onRetry: () => Promise<v
 /** 프로필 카드 전체가 프로필 수정(닉네임 포함)으로 가는 입구다. */
 function ProfileCard({ me }: { me: Me }) {
   const profile = me.tennisProfile;
-  const meta = profile
-    ? [experienceLabels[profile.experienceRange], gameLabels[profile.gameExperience], profile.playPurposes.map((purpose) => purposeLabels[purpose]).filter(Boolean).join(" · ")].filter(Boolean).join(" · ")
-    : "내게 잘 맞는 메이트를 찾기 위한 정보예요.";
-
-  return <Link
-    className="mt-5 flex items-center gap-4 rally-card p-5 transition-colors hover:bg-[var(--tm-bg-subtle-muted)]"
-    href={profile ? "/my/profile" : "/"}
-  >
-    <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]">
-      {me.profileImageUrl
-        ? <Image alt="" className="size-full object-cover" height={56} src={me.profileImageUrl} unoptimized width={56} />
-        : <UserCircle aria-hidden="true" className="size-9" weight="fill" />}
-    </span>
-    <span className="min-w-0 flex-1">
-      <span className="block text-lg font-bold">{me.nickname}</span>
-      <span className="mt-1 block text-sm font-semibold text-[var(--tm-action-primary)]">{profile ? rallyLabels[profile.rallyLevel] : "테니스 프로필을 만들어 볼까요?"}</span>
-      <span className="mt-1 block text-xs leading-5 text-[var(--tm-text-secondary)]">{meta}</span>
-    </span>
-    <CaretRight aria-hidden="true" className="size-5 shrink-0 text-[var(--tm-text-muted)]" />
-  </Link>;
+  return <section className="py-6">
+    <Link className="flex items-center gap-4" href={profile ? "/my/profile" : "/"}>
+      <span className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]">{me.profileImageUrl ? <Image alt="" className="size-full object-cover" height={64} src={me.profileImageUrl} unoptimized width={64} /> : <UserCircle aria-hidden="true" className="size-12" weight="fill" />}</span>
+      <span className="min-w-0 flex-1"><span className="block break-words text-[22px] font-bold tracking-[-.7px]">{me.nickname}</span><span className="mt-1 block text-xs text-[var(--tm-text-secondary)]">{profile ? `테니스 경력 ${experienceLabels[profile.experienceRange]}` : "테니스 프로필을 만들어 주세요"}</span></span>
+      <span className="flex min-h-11 shrink-0 items-center gap-1 text-xs font-semibold text-[var(--tm-action-primary)]">{profile ? "프로필 수정" : "만들기"}<CaretRight size={14} aria-hidden /></span>
+    </Link>
+    {profile ? <div className="mt-5 border-l-2 border-[var(--tm-action-primary)] pl-3"><p className="text-[13px] font-medium">{rallyLabels[profile.rallyLevel]}</p><p className="mt-1 text-xs text-[var(--tm-text-secondary)]">게임 경험 · {gameLabels[profile.gameExperience]}</p><div className="mt-3 flex flex-wrap gap-1.5">{profile.playPurposes.map(purpose => <span key={purpose} className="rounded-md bg-[var(--tm-bg-subtle)] px-2 py-1 text-[11px] text-[var(--tm-action-primary)]">{purposeLabels[purpose]}</span>)}</div></div> : null}
+  </section>;
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <h2 className="mt-7 px-1 text-sm font-semibold text-[var(--tm-text-secondary)]">{children}</h2>;
+  return <h2 className="mt-5 px-1 text-xs font-semibold text-[var(--tm-text-secondary)]">{children}</h2>;
 }
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <section className="mt-2 rally-card px-3 py-1 shadow-[var(--tm-shadow-card)]">
+  return <section className="mt-2 rounded-2xl bg-white px-3 py-1">
     <div className="divide-y divide-[var(--tm-border-subtle)]">{children}</div>
   </section>;
 }
 
 /** 내 활동처럼 자주 누르는 줄에만 쓰는 강조용 아이콘 배경. */
 function IconChip({ children }: { children: React.ReactNode }) {
-  return <span className="grid size-10 place-items-center rounded-full bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]">{children}</span>;
+  return <span className="grid size-9 place-items-center rounded-xl bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]">{children}</span>;
 }
 
 function RowInner({ badge, description, icon, title, trailing }: { badge?: React.ReactNode; description?: string; icon: React.ReactNode; title: string; trailing: React.ReactNode }) {
@@ -242,7 +236,7 @@ function RowInner({ badge, description, icon, title, trailing }: { badge?: React
   </>;
 }
 
-const rowClassName = "flex w-full items-center gap-3 rounded-2xl px-1 py-3.5 text-left";
+const rowClassName = "flex w-full items-center gap-2 rounded-xl px-1 py-3 text-left";
 
 function LinkRow({ badge, description, href, icon, title }: { badge?: React.ReactNode; description?: string; href: string; icon: React.ReactNode; title: string }) {
   return <Link className={`${rowClassName} transition-colors hover:bg-[var(--tm-bg-subtle-muted)]`} href={href}>

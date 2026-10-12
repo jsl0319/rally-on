@@ -1,4 +1,4 @@
-import { courtFeeSelect, ballDiscountKrw } from "@/matches/court-fee";
+import { courtFeeSelect, ballDiscountKrw, ballHoldingStatuses } from "@/matches/court-fee";
 import { lockAccountTransactions, assertActiveTransactionUser } from "./account-transaction-lock";
 import { Prisma } from "@/generated/prisma/client";
 import type { CourtSlotStatus, MatchStatus, PrismaClient } from "@/generated/prisma/client";
@@ -17,6 +17,7 @@ import { courtContactInputSchema, courtContactStopInputSchema, type CourtContact
 
 import type {
   CourtCreateInput,
+  CourtDiscoveryQuery,
   CourtSettlementAccountInput,
   CourtSlotCreateInput,
   CourtSlotListQuery,
@@ -68,6 +69,7 @@ const publicCourtSlotInclude = {
       courtCompositionPassedAt: true,
       partnerPreference: true,
       host: { select: { nickname: true, status: true } },
+      applications: { where: { bringsBalls: true, status: { in: [...ballHoldingStatuses] } }, take: 1, select: { id: true } },
       purposes: { select: { purpose: true } },
       _count: { select: { applications: { where: { status: { in: [...seatHoldingStatuses] } } } } },
     },
@@ -208,6 +210,7 @@ function toPublicCourtSlotView(slot: PublicCourtSlotWithRelations, now = new Dat
     ...base,
     statusLabel: match?.host.status !== "ACTIVE" ? "운영 중단" : publicSlotStatusLabels[slot.status],
     availableAction: match?.host.status !== "ACTIVE" ? "READ_ONLY" as const : base.availableAction,
+    ballContribution: slot.ballDiscountEnabled ? { available: base.availableAction === "APPLY" && match?.host.status === "ACTIVE" && acceptedCount < (match?.recruitCount ?? 0) && (match?.applications?.length ?? 0) === 0 } : null,
     durationMinutes: Math.round((slot.endsAt.getTime() - slot.startsAt.getTime()) / 60_000),
     session: match && base.session
       ? {
@@ -850,17 +853,20 @@ export async function reportCourtSupplyIncident(
  */
 export const publicCourtSlotListLimit = 50;
 
-export async function getPublicCourtSlots(prisma: PrismaClient, availableOnly: boolean, limit = publicCourtSlotListLimit) {
+export async function getPublicCourtSlots(prisma: PrismaClient, availableOnly: boolean, limit = publicCourtSlotListLimit, query: CourtDiscoveryQuery = { sort: "soonest" }) {
   const now = new Date();
+  const dayStart = query.date ? new Date(`${query.date}T00:00:00+09:00`) : null;
   const slots = await prisma.courtSlot.findMany({
     where: {
+      ...(query.gameType ? { gameType: query.gameType } : {}),
+      ...(dayStart ? { AND: [{ startsAt: { gte: dayStart, lt: new Date(dayStart.getTime() + 86_400_000) } }] } : {}),
       visibility: "PUBLIC",
       match: { is: { courtSource: "PARTNER_COURT" } },
       courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED", applicant: { status: "ACTIVE" } } } },
       ...(availableOnly ? { status: "AVAILABLE", startsAt: { gt: now } } : { endsAt: { gt: now } }),
     },
     include: publicCourtSlotInclude,
-    orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+    orderBy: query.sort === "priceLow" ? [{ priceKrw: "asc" }, { startsAt: "asc" }, { id: "asc" }] : [{ startsAt: "asc" }, { id: "asc" }],
     take: limit,
   });
   return { items: slots.map((slot) => toPublicCourtSlotView(slot, now)) };

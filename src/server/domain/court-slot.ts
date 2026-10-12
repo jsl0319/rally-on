@@ -99,3 +99,14 @@ export const courtSupplyIncidentInputSchema = z.object({
 });
 
 export type CourtSupplyIncidentInput = z.infer<typeof courtSupplyIncidentInputSchema>;
+
+/** Discovery filters are applied in SQL before the bounded list limit. Dates use KST. */
+export const courtDiscoveryQuerySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+    const date = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  }, "날짜를 확인해 주세요.").optional(),
+  gameType: z.enum(activeGameTypes).optional(),
+  sort: z.enum(["soonest", "priceLow"]).default("soonest"),
+});
+export type CourtDiscoveryQuery = z.infer<typeof courtDiscoveryQuerySchema>;

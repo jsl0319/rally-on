@@ -1,12 +1,12 @@
 "use client";
 
-import { PageHeader } from "@/components/ui/page-header";
+import { AccountPageHeader } from "@/components/navigation/account-page-header";
+import { CaretDown, Check } from "@phosphor-icons/react";
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { getSafeReturnTo } from "@/navigation/return-to";
-import { ProfileGenderField } from "./profile-gender-field";
 import type { Gender } from "@/matches/recruitment";
 
 import { ProfileImageField } from "./profile-image-field";
@@ -63,7 +63,7 @@ async function requestJson(response: Response, fallback: string) {
 }
 
 function OptionCard({ active, description, onClick, title }: { active: boolean; description: string; onClick: () => void; title: string }) {
-  return <button aria-pressed={active} className={`min-h-[72px] w-full rounded-2xl border p-4 text-left transition-colors ${active ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white text-[var(--tm-text-primary)]"}`} onClick={onClick} type="button"><span className="block text-sm font-semibold">{title}</span><span className={`mt-1 block text-xs leading-5 ${active ? "text-[var(--tm-action-hover)]" : "text-[var(--tm-text-secondary)]"}`}>{description}</span></button>;
+  return <button aria-pressed={active} className={`min-h-16 w-full rounded-xl border p-3 text-left transition-colors ${active ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white text-[var(--tm-text-primary)]"}`} onClick={onClick} type="button"><span className="block text-sm font-semibold">{title}</span><span className={`mt-1 block text-xs leading-5 ${active ? "text-[var(--tm-action-hover)]" : "text-[var(--tm-text-secondary)]"}`}>{description}</span></button>;
 }
 
 export function ProfileEditPage({ returnTo = "/my" }: { returnTo?: string }) {
@@ -146,9 +146,34 @@ export function ProfileEditPage({ returnTo = "/my" }: { returnTo?: string }) {
   if (loading) return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[560px]" label="프로필을 준비하고 있어요." /></main>;
   if (error && !draft.version) return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pt-4 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/my" /><section className="mt-8 rally-card p-5"><h1 className="rally-page-title text-xl font-bold">프로필을 열지 못했어요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{error}</p><Button className="mt-5" onClick={() => void load()} size="medium">다시 불러오기</Button></section></section></main>;
 
-  return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-40 pt-4 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><PageHeader backHref="/my" title="프로필 수정" description="저장하면 이후 추천에 반영돼요." /><ProfileImageField nickname={nickname} onChange={setProfileImageUrl} url={profileImageUrl} /><section className="mt-4 rally-card p-5"><label className="text-sm font-semibold text-[var(--tm-action-primary)]" htmlFor="profile-nickname">닉네임</label><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">매칭 상대에게 보이는 이름이에요.</p><input aria-describedby="profile-nickname-help" className="rally-input mt-4 h-12 w-full rounded-2xl border border-[var(--tm-border-default)] bg-white px-4" id="profile-nickname" maxLength={12} onChange={(event) => { setNickname(event.target.value); setNicknameError(""); }} value={nickname} />{nicknameError ? <p className="mt-2 text-sm text-[var(--tm-status-error-text)]" id="profile-nickname-help" role="alert">{nicknameError}</p> : <p className="mt-2 text-sm text-[var(--tm-text-secondary)]" id="profile-nickname-help">2–12자 · 한글, 영문, 숫자를 사용할 수 있어요.</p>}</section><ProfileGenderField onChange={(gender) => setDraft((current) => ({ ...current, gender }))} value={draft.gender} /><ProfileQuestion description="정확하지 않아도 괜찮아요." onSelect={(value) => setDraft((current) => ({ ...current, experienceRange: value as ExperienceRange }))} options={experienceOptions} selected={draft.experienceRange} title="테니스와 친해진 지" /><ProfileQuestion description="가장 가까운 하나를 골라 주세요." onSelect={(value) => setDraft((current) => ({ ...current, rallyLevel: value as RallyLevel }))} options={rallyOptions} selected={draft.rallyLevel} title="요즘 랠리는" /><ProfileQuestion description="게임 실력을 평가하는 질문이 아니에요." onSelect={(value) => setDraft((current) => ({ ...current, gameExperience: value as GameExperience }))} options={gameOptions} selected={draft.gameExperience} title="게임 경험" /><ProfileQuestion description="지금 원하는 플레이를 최대 2개 골라 주세요." onSelect={(value) => togglePurpose(value as PlayPurpose)} options={purposeOptions} selected={draft.playPurposes} title="원하는 플레이" />{error ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]">{error}</p> : null}</section><footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--tm-border-default)] bg-white/95 px-5 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 backdrop-blur"><div className="mx-auto max-w-[560px]"><p className="text-center text-xs leading-5 text-[var(--tm-text-secondary)]">이미 보낸 신청에는 신청 당시 프로필이 유지돼요.</p><Button className="mt-2" disabled={!valid || saving} fullWidth loading={saving} onClick={() => void save()}>저장하기</Button></div></footer></main>;
+  return <main className="min-h-app bg-[var(--tm-bg-page)] pb-40 text-[var(--tm-text-primary)]">
+    <AccountPageHeader title="프로필 수정" backHref={getSafeReturnTo(returnTo, "/my")} />
+    <section className="mx-auto max-w-[560px] px-5">
+      <ProfileImageField nickname={nickname} onChange={setProfileImageUrl} url={profileImageUrl} />
+      <section className="border-b border-[var(--tm-border-default)] py-5">
+        <label className="text-xs font-semibold text-[var(--tm-text-secondary)]" htmlFor="profile-nickname">닉네임</label>
+        <input aria-describedby="profile-nickname-help" aria-invalid={Boolean(nicknameError)} autoComplete="nickname" className="rally-input mt-2 h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white px-3 text-base" id="profile-nickname" maxLength={12} onChange={(event) => { setNickname(event.target.value); setNicknameError(""); }} value={nickname} />
+        <p className={`mt-2 text-xs ${nicknameError ? "text-[var(--tm-status-error-text)]" : "text-[var(--tm-text-secondary)]"}`} id="profile-nickname-help" role={nicknameError ? "alert" : undefined}>{nicknameError || "2–12자 · 한글, 영문, 숫자"}</p>
+      </section>
+      <fieldset className="py-5"><legend className="sr-only">성별</legend><p className="text-xs font-semibold text-[var(--tm-text-secondary)]">성별</p><div className="mt-2 grid grid-cols-2 gap-2">{([["MALE", "남자"], ["FEMALE", "여자"]] as const).map(([value, label]) => <button type="button" aria-pressed={draft.gender === value} className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border text-sm ${draft.gender === value ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] font-semibold text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white"}`} onClick={() => setDraft(current => ({ ...current, gender: value }))} key={value}>{draft.gender === value ? <Check size={16} aria-hidden /> : null}{label}</button>)}</div><p className="mt-2 text-xs text-[var(--tm-text-secondary)]">남녀별 모집 자리를 확인할 때 사용해요.</p></fieldset>
+      <h2 className="mb-2 mt-3 text-[17px] font-bold">나의 테니스</h2>
+      <div className="overflow-hidden rounded-2xl bg-white px-4">
+        <ProfileQuestion description="정확하지 않아도 괜찮아요." onSelect={(value) => setDraft((current) => ({ ...current, experienceRange: value as ExperienceRange }))} options={experienceOptions} selected={draft.experienceRange} title="테니스 경력" />
+        <ProfileQuestion description="가장 가까운 하나를 골라 주세요." onSelect={(value) => setDraft((current) => ({ ...current, rallyLevel: value as RallyLevel }))} options={rallyOptions} selected={draft.rallyLevel} title="랠리 경험" />
+        <ProfileQuestion description="게임 실력을 평가하는 질문이 아니에요." onSelect={(value) => setDraft((current) => ({ ...current, gameExperience: value as GameExperience }))} options={gameOptions} selected={draft.gameExperience} title="게임 경험" />
+        <ProfileQuestion description="지금 원하는 플레이를 최대 2개 골라 주세요." onSelect={(value) => togglePurpose(value as PlayPurpose)} options={purposeOptions} selected={draft.playPurposes} title="원하는 플레이" />
+      </div>
+      {error ? <p role="alert" className="mt-4 rounded-xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]">{error}</p> : null}
+    </section>
+    <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--tm-border-default)] bg-[var(--tm-bg-page)] px-5 pb-[max(16px,env(safe-area-inset-bottom))] pt-3"><div className="mx-auto max-w-[520px]"><p className="mb-2 text-center text-[11px] leading-5 text-[var(--tm-text-secondary)]">이미 보낸 신청에는 신청 당시 프로필이 유지돼요.</p><Button disabled={!valid || saving} fullWidth loading={saving} onClick={() => void save()}>저장하기</Button></div></footer>
+  </main>;
 }
 
 function ProfileQuestion({ description, onSelect, options, selected, title }: { description: string; onSelect: (value: string) => void; options: ReadonlyArray<readonly [string, string, string]>; selected: string | string[]; title: string }) {
-  return <section className="mt-4 rally-card p-5"><h2 className="text-sm font-semibold text-[var(--tm-action-primary)]">{title}</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{description}</p><div className="mt-4 grid gap-2">{options.map(([value, optionTitle, optionDescription]) => <OptionCard active={Array.isArray(selected) ? selected.includes(value) : selected === value} description={optionDescription} key={value} onClick={() => onSelect(value)} title={optionTitle} />)}</div></section>;
+  const values = Array.isArray(selected) ? selected : [selected];
+  const label = options.filter(([value]) => values.includes(value)).map(([, title]) => title).join(" · ");
+  return <details className="rally-disclosure border-b border-[var(--tm-border-subtle)] last:border-0" name="tennis-profile-question">
+    <summary className="flex min-h-20 items-center gap-3 py-4"><span className="min-w-0 flex-1"><span className="block text-xs text-[var(--tm-text-secondary)]">{title}</span><span className="mt-1 block text-[14px] font-medium">{label || "선택해 주세요"}</span></span><CaretDown aria-hidden className="rally-disclosure-chevron shrink-0 text-[var(--tm-text-secondary)]" size={16} /></summary>
+    <p className="mb-3 text-xs leading-5 text-[var(--tm-text-secondary)]">{description}</p><div className="grid gap-2 pb-4">{options.map(([value, optionTitle, optionDescription]) => <OptionCard active={values.includes(value)} description={optionDescription} key={value} onClick={() => onSelect(value)} title={optionTitle} />)}</div>
+  </details>;
 }

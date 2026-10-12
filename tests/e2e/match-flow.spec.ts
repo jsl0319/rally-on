@@ -470,8 +470,10 @@ test("미확정 입금 문의를 운영자와 대조하고 전액 반환한 뒤 
   await saveAction(reviewer, "답변·처리 저장", "/support-inquiries/", "POST");
   await expect(reviewer.getByText("해결 완료", { exact: true }).last()).toBeVisible();
   await member.goto("/support/inquiry");
+  await member.getByRole("button", { name: "내 문의 내역", exact: true }).click();
+  await member.locator("details").filter({ hasText: "취소 전에 보낸 입금" }).locator("summary").click();
   await expect(member.getByText("확인된 입금 18000원이 전액 반환됐습니다.", { exact: false })).toBeVisible();
-  await expect(member.getByText("해결 완료", { exact: true })).toBeVisible();
+  await expect(member.getByText("해결 완료", { exact: true }).first()).toBeVisible();
   await expect(member.getByText("이 신청의 입금을 통장에서 대조해 주세요.")).toHaveCount(0);
   await member.screenshot({ path: "/tmp/rally-money-support-member.png", fullPage: true });
   await operator.screenshot({ path: "/tmp/rally-money-support-operator.png", fullPage: true });
@@ -499,7 +501,7 @@ test("수락된 참가자가 취소하면 자리가 비고 모집자가 다시 �
   await signInAs(hostContext, e2eUsers.host.id);
   const hostPage = await hostContext.newPage();
 
-  await hostPage.goto("/");
+  await hostPage.goto("/my");
   await hostPage.getByRole("link", { name: /내가 만든 매칭/ }).click();
   await expect(hostPage).toHaveURL(/\/activity\/received$/);
   await expect(hostPage.getByRole("heading", { name: "내가 만든 매칭" })).toBeVisible();

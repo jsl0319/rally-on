@@ -2002,3 +2002,9 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 - 신청 조회: `feeKrw`(고정 최초 참가비), `payableFeeKrw`(미지참 추가 납부 포함), `bringsBalls`, `ballsMissingAt/Note`, `money.additionalDueKrw`를 제공한다. 다른 참가자의 금융 정보는 공개하지 않는다.
 - `POST /api/v1/court-match-applications/{applicationId}/balls-missing`: `{ clientRequestId, expectedReceiptVersion, note(10~500자), confirmed: true }`. 활성 해당 운영자만, 시작 후 확정된 공 준비 신청만 가능하다. 중복 요청은 같은 결과를 반환한다. 이미 미지참 기록·반환 합의·완료/처리 중 송금이 있으면 거부한다. 본인 참가자/다른 운영자는 403, 잘못된 입력 422, 상태 충돌 409. 실제 송금 없이 추가 납부와 필수 앱 내 알림을 남긴다.
 - 추가 입금은 기존 `receipt` API의 **누적 수령액**으로 대조한다. 부족분은 별도 표시하며 추가 5,000원을 초과 입금 환불로 잘못 처리하지 않는다. 원 입금 충족 시각/기존 확정 이력은 별도 유지한다.
+
+### 코트 목록 탐색 추가 (2026-10-12)
+
+`GET /api/v1/partner-session-slots`는 `date=YYYY-MM-DD`(한국 날짜), `gameType`(활성 게임 유형), `sort=soonest|priceLow`를 받는다. 기본값은 시간순이며 가격순은 할인 전 1인 참가비 기준이다. 필터·정렬 후 기존 최대 50건을 반환하고 유효하지 않은 값은 400으로 거절한다. 공개 슬롯의 `ballContribution.available`은 경기 모집·시간 기한·남은 자리와 활성 공 준비 신청 유무를 반영한다. 개인 성별이나 중복 신청까지 보증하는 값은 아니며 최종 신청은 기존 서버 검증을 따른다.
+
+신청 안내 v5는 공 준비 최소 2구를 `terms.ballMinimumCount`로 보존한다. 과거 안내에 필드가 없으면 당시 3구 조건을 유지한다.

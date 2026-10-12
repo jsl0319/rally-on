@@ -168,6 +168,16 @@ body:has(.rally-welcome-surface)::before { background: #e0ebd0; }
 .rally-welcome-ball { display: block; width: .74em; height: .74em; flex-shrink: 0; align-self: center; margin-top: -.025em; color: #a4c747; transform: rotate(-20deg); }
 .rally-welcome-slogan { margin-top: 24px; font-size: 19px; font-weight: 600; letter-spacing: -.5px; line-height: 1.5; }
 .rally-welcome-purpose { margin-top: 8px; font-size: 14px; line-height: 1.6; color: var(--tm-text-secondary); }
+.rally-launch { display: grid; place-items: center; min-height: var(--rally-screen-height); color: var(--tm-text-primary); padding: 40px 24px max(40px, env(safe-area-inset-bottom)); }
+.rally-launch-identity { display: flex; flex-direction: column; align-items: center; padding-bottom: 6vh; animation: rally-brand-arrive 650ms ease-out both; }
+.rally-launch .rally-welcome-ball { animation: rally-brand-ball 1s cubic-bezier(.2,.7,.3,1) both; }
+.rally-launch-recovery { position: absolute; bottom: max(32px, env(safe-area-inset-bottom)); left: 24px; right: 24px; text-align: center; font-size: 13px; color: var(--tm-text-secondary); }
+@keyframes rally-brand-arrive { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes rally-brand-ball { from { transform: translateY(-12px) rotate(-110deg); } to { transform: translateY(0) rotate(-20deg); } }
+.rally-disclosure > summary { list-style: none; cursor: pointer; }
+.rally-disclosure > summary::-webkit-details-marker { display: none; }
+.rally-disclosure[open] > summary .rally-disclosure-chevron { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .rally-launch-identity, .rally-launch .rally-welcome-ball { animation: none; } }
 .rally-welcome-actions { flex-shrink: 0; }
 .rally-welcome-providers { display: grid; gap: 10px; }
 .rally-welcome-provider { display: grid; grid-template-columns: 24px minmax(0, 1fr) 24px; align-items: center; min-height: 54px; width: 100%; padding: 12px 16px; border-radius: 14px; font-size: 15px; line-height: 1.5; font-weight: 600; }

@@ -11,7 +11,7 @@ import { ProfileGenderField } from "./profile-gender-field";
 import type { Gender } from "@/matches/recruitment";
 
 import { getSafeReturnTo, getStartAuthCallbackPath } from "@/navigation/return-to";
-import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+import { BrandLaunch } from "@/components/feedback/brand-launch";
 import { Button } from "@/components/ui/button";
 
 type Screen = "loading" | "login" | "error" | "nickname" | 0 | 1 | 2 | 3 | "result";
@@ -111,7 +111,7 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
   useEffect(() => {
     void (async () => {
       try {
-        const meResponse = await fetch("/api/v1/me", { cache: "no-store" });
+        const meResponse = await fetch("/api/v1/me", { cache: "no-store", signal: AbortSignal.timeout(15000) });
         if (meResponse.status === 401) {
           setScreen("login");
           return;
@@ -192,7 +192,7 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
     });
   };
 
-  if (screen === "loading") return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[560px]" label="Rally On을 준비하고 있어요." /></main>;
+  if (screen === "loading") return <BrandLaunch />;
 
   if (screen === "login") return <WelcomeScreen error={error} loading={loading} onOperator={() => {
     setLoading(true); setError("");
