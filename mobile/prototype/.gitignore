@@ -1,0 +1,6 @@
+node_modules/
+capacitor.config.json
+www/
+/ios/
+/android/
+*.log

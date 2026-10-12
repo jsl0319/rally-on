@@ -1,0 +1,23 @@
+{
+  "name": "rally-on-native-prototype",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "configure": "node scripts/configure.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "test": "node --test tests/*.check.mjs",
+    "prepare:ios": "node scripts/prepare.mjs ios",
+    "prepare:android": "node scripts/prepare.mjs android",
+    "open:ios": "cap open ios",
+    "open:android": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.5.3",
+    "@capacitor/android": "8.5.3",
+    "@capacitor/ios": "8.5.3"
+  },
+  "devDependencies": { "@capacitor/cli": "8.5.3" },
+  "overrides": { "xcode": { "uuid": "11.1.1" } }
+}
