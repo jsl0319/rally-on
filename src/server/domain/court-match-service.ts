@@ -251,8 +251,8 @@ export async function applyToCourtMatch(
     assertAccepting(match, now);
     if (!viewer.profile.gender) throw new DomainError("PROFILE_GENDER_REQUIRED", 409, "프로필에 성별을 입력해 주세요.");
 
-    const existing = await transaction.matchApplication.findUnique({
-      where: { matchId_applicantUserId: { matchId, applicantUserId: viewer.id } },
+    const existing = await transaction.matchApplication.findFirst({
+      where: { matchId, applicantUserId: viewer.id, status: { not: "WITHDRAWN" } },
       select: { id: true },
     });
     if (existing) throw new DomainError("APPLICATION_ALREADY_EXISTS", 409, "이미 신청한 코트 매칭이에요.");

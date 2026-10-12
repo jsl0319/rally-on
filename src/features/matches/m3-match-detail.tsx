@@ -203,7 +203,7 @@ export function MatchDetailArticle({ detail, returnTo }: { detail: Detail; retur
 
 function DetailAction({ detail, onApply }: { detail: Detail; onApply: () => void }) {
   if (detail.viewer.applyBlockedReason === "PROFILE_GENDER_REQUIRED") return <Button as={Link} fullWidth href={`/my/profile?returnTo=${encodeURIComponent(`/matches/${detail.id}`)}`}>프로필 성별 입력하기</Button>;
-  if (detail.viewer.canApply) return <Button fullWidth onClick={onApply}>같이 치기</Button>;
+  if (detail.viewer.canApply) return <Button fullWidth onClick={onApply}>{detail.viewer.applicationStatus === "WITHDRAWN" ? "다시 신청하기" : "같이 치기"}</Button>;
   if ((detail.viewer.relation === "HOST" || detail.viewer.applicationStatus === "ACCEPTED") && detail.contact) return <ContactAction contact={detail.contact} />;
   if (detail.viewer.relation === "APPLICANT") return <Button as={Link} fullWidth href="/activity/sent" variant="secondary">{detail.viewer.applicationStatus === "PENDING" ? "검토 중 · 신청 내역 보기" : "신청 내역 보기"}</Button>;
   return <p className="py-4 text-center text-sm font-medium text-[var(--tm-text-secondary)]">{blockedMessage(detail.viewer.applyBlockedReason)}</p>;

@@ -38,7 +38,7 @@ test("모바일 공 준비 신청 → 할인 입금 확정 → 미지참 기록 
     await dialog.getByRole("button", { name: "신청 보내기" }).click();
     await expect(dialog).toHaveCount(0);
     await expect(page.getByText("공 준비 참가 · 31,000원", { exact: true })).toBeVisible();
-    const a = await prisma.matchApplication.findUniqueOrThrow({ where: { matchId_applicantUserId: { matchId: f.partnerMatchId, applicantUserId: e2eUsers.applicant.id } } });
+    const a = await prisma.matchApplication.findFirstOrThrow({ where: { matchId: f.partnerMatchId, applicantUserId: e2eUsers.applicant.id, status: { not: "WITHDRAWN" } } });
     expect(a).toMatchObject({ courtFeeKrw: 31000, bringsBalls: true, status: "ACCEPTED" });
     const list = await (await member.request.get("/api/v1/partner-session-slots")).json();
     expect(list.items.find((slot: { id: string }) => slot.id === f.partnerSlotId).ballContribution.available).toBe(false);

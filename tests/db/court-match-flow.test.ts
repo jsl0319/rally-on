@@ -27,7 +27,7 @@ import { recordCourtMissingBalls, recordCourtRefundAgreement, recordCourtReceipt
 import { actOnSupportInquiry, listSupportQueue } from "@/server/domain/support-service";
 import { getCourtMatchParticipation, getOperatorCourtMatch } from "@/server/domain/court-match-view";
 import { reportCourtSupplyIncident } from "@/server/domain/court-slot-service";
-import { acceptApplication, cancelMatch } from "@/server/domain/match-service";
+import { acceptApplication, cancelMatch, createApplication, withdrawApplication, getMatchDetail, getMatches, getSentApplications } from "@/server/domain/match-service";
 import { getProfile } from "@/server/domain/profile-service";
 import { createSupportInquiry, listMySupportInquiries } from "@/server/domain/support-service";
 
@@ -171,6 +171,82 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
   }
 
   const errorCode = (caught: unknown) => (caught as { code?: string }).code;
+
+  it("일반 매칭 철회 후 다시 노출되고 동시 재신청은 한 건만 생성한다", async () => {
+    const host = await makeUser("재신청 모집자", "MALE");
+    const member = await makeUser("재신청 참가자", "FEMALE");
+    const match = await prisma.match.create({ data: { hostUserId: host.id, clientRequestId: randomUUID(), title: "재신청 매칭", startsAt: new Date(Date.now() + 48 * HOUR), endsAt: new Date(Date.now() + 50 * HOUR), courtSource: "EXTERNAL_RESERVED", externalCourtName: "재신청 코트", externalCourtAddress: "서울 마포구", totalCourtFeeKrw: 10000, recruitCount: 2, partnerPreference: "SIMILAR_LEVEL" } });
+    const first = await createApplication(prisma, member.viewer, match.id, { message: "첫 신청" });
+    expect((await getMatches(prisma, member.viewer, { startsFrom: new Date(), limit: 20 })).items).toHaveLength(0);
+    await withdrawApplication(prisma, member.viewer, first.id);
+    expect((await getMatches(prisma, member.viewer, { startsFrom: new Date(), limit: 20, availableOnly: true })).items).toHaveLength(1);
+    expect((await getMatchDetail(prisma, member.viewer, match.id)).viewer).toMatchObject({ canApply: true, applicationStatus: "WITHDRAWN" });
+    const results = await Promise.allSettled([createApplication(prisma, member.viewer, match.id, { message: "새 신청" }), createApplication(prisma, member.viewer, match.id, { message: "새 신청" })]);
+    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+    expect(await prisma.matchApplication.count({ where: { matchId: match.id } })).toBe(2);
+    expect(await prisma.matchApplication.findUniqueOrThrow({ where: { id: first.id } })).toMatchObject({ status: "WITHDRAWN", message: "첫 신청" });
+    expect((await getMatchDetail(prisma, member.viewer, match.id)).viewer).toMatchObject({ canApply: false, applicationStatus: "PENDING" });
+    expect((await getSentApplications(prisma, member.viewer)).items.every(a => !a.canReapply)).toBe(true);
+    await expect(withdrawApplication(prisma, member.viewer, first.id)).rejects.toMatchObject({ code: "APPLICATION_STATE_CONFLICT" });
+    expect(await prisma.matchApplication.count({ where: { matchId: match.id, status: "PENDING" } })).toBe(1);
+  });
+
+  it("코트 재신청은 새 입금코드를 받고 이전 입금·환불·문의 이력을 유지한다", async () => {
+    const op = await makeUser("재신청 운영자", "MALE");
+    const member = await makeUser("재신청 회원", "FEMALE");
+    const { matchId } = await makeCourtMatch(op.id, { ballDiscountEnabled: true });
+    const first = await applyToCourtMatch(prisma, member.viewer, matchId, { bringBalls: true });
+    await claimCourtMatchDeposit(prisma, member, first.id, { depositorName: "기존 입금자" });
+    await cancelCourtMatchApplication(prisma, member, first.id);
+    expect((await getCourtMatchParticipation(prisma, member.viewer, matchId)).canApply).toBe(true);
+    const results = await Promise.allSettled([applyToCourtMatch(prisma, member.viewer, matchId), applyToCourtMatch(prisma, member.viewer, matchId)]);
+    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+    const second = (await prisma.matchApplication.findFirstOrThrow({ where: { matchId, status: "ACCEPTED" } }));
+    expect(second.id).not.toBe(first.id);
+    expect(second.depositCode).not.toBe(first.depositCode);
+    expect(second).toMatchObject({ receivedAmountKrw: null, refundCompletedAt: null, depositClaimedAt: null, courtFeeKrw: 36000, bringsBalls: false });
+    // 철회 전 이체를 나중에 대조해도 새 신청이 확정되거나 기존 자리가 복구되지 않는다.
+    await recordCourtReceipt(prisma, op, first.id, { amountKrw: 31000, receivedAt: new Date().toISOString(), expectedVersion: 0, clientRequestId: randomUUID(), note: "철회된 첫 신청 입금 확인" });
+    const detail = await getCourtMatchParticipation(prisma, member.viewer, matchId);
+    expect(detail.application).toMatchObject({ id: second.id, status: "ACCEPTED", money: { receivedKrw: 0 } });
+    expect(detail.previousApplications).toHaveLength(1);
+    expect(detail.previousApplications[0]).toMatchObject({ id: first.id, status: "WITHDRAWN", awaitingRefund: true, money: { outstandingKrw: 31000 } });
+    expect(detail.ballContribution?.available).toBe(true);
+    expect((await getMyCourtTransactions(prisma, member.id)).items).toHaveLength(2);
+    const inquiry = await createSupportInquiry(prisma, member.id, { matchId, applicationId: first.id, message: "이전 신청의 환불을 확인해 주세요." });
+    expect(await prisma.supportInquiry.findUniqueOrThrow({ where: { id: inquiry.id } })).toMatchObject({ applicationId: first.id });
+    await expect(createSupportInquiry(prisma, op.id, { matchId, applicationId: first.id, message: "다른 사람의 신청으로 문의하기" })).rejects.toMatchObject({ code: "APPLICATION_NOT_FOUND" });
+    await submitCourtMatchRefundAccount(prisma, member, first.id, cancellationAccount);
+    const refund = await startCourtRefund(prisma, op, first.id, { amountKrw: 31000, accountVersion: 2, clientRequestId: randomUUID() });
+    await completeCourtMatchRefund(prisma, op, first.id, { attemptId: refund.id, expectedVersion: 1, clientRequestId: randomUUID(), status: "PAID", transferredAt: new Date().toISOString(), note: "이전 신청 금액 전액 반환" });
+    expect((await getCourtMatchParticipation(prisma, member.viewer, matchId)).application).toMatchObject({ id: second.id, status: "ACCEPTED", money: { receivedKrw: 0 } });
+  });
+
+  it("철회 후에도 성별 정원·공 할인 선착순·신청 기한을 다시 검사한다", async () => {
+    const op = await makeUser("정원 운영자", "MALE");
+    const member = await makeUser("정원 회원", "FEMALE");
+    const other = await makeUser("선착순 회원", "FEMALE");
+    const { matchId } = await makeCourtMatch(op.id, { ballDiscountEnabled: true, genderQuota: true });
+    const first = await applyToCourtMatch(prisma, member.viewer, matchId, { bringBalls: true });
+    await cancelCourtMatchApplication(prisma, member, first.id);
+    const filled = await applyToCourtMatch(prisma, other.viewer, matchId, { bringBalls: true });
+    await expect(applyToCourtMatch(prisma, member.viewer, matchId)).rejects.toMatchObject({ code: "GENDER_QUOTA_FULL" });
+    await prisma.match.update({ where: { id: matchId }, data: { maleRecruitCount: null, femaleRecruitCount: null } });
+    await expect(applyToCourtMatch(prisma, member.viewer, matchId, { bringBalls: true })).rejects.toMatchObject({ code: "BALL_SLOT_TAKEN" });
+    await cancelCourtMatchApplication(prisma, other, filled.id);
+    await prisma.match.update({ where: { id: matchId }, data: { startsAt: new Date(Date.now() + HOUR), endsAt: new Date(Date.now() + 3 * HOUR), courtCompositionPassedAt: new Date() } });
+    expect((await getCourtMatchParticipation(prisma, member.viewer, matchId)).canApply).toBe(false);
+    await expect(applyToCourtMatch(prisma, member.viewer, matchId)).rejects.toBeDefined();
+  });
+
+  it.each(["REJECTED", "EXPIRED_UNPAID", "CANCELLED"] as const)("코트 %s 신청은 철회 재신청 규칙에 포함하지 않는다", async status => {
+    const op = await makeUser("정책 운영자", "MALE"), member = await makeUser("정책 회원", "FEMALE");
+    const { matchId } = await makeCourtMatch(op.id);
+    const first = await applyToCourtMatch(prisma, member.viewer, matchId);
+    await prisma.matchApplication.update({ where: { id: first.id }, data: { status } });
+    expect((await getCourtMatchParticipation(prisma, member.viewer, matchId)).canApply).toBe(false);
+    await expect(applyToCourtMatch(prisma, member.viewer, matchId)).rejects.toMatchObject({ code: "APPLICATION_ALREADY_EXISTS" });
+  });
 
   it("무접속 상태의 크론 배치가 겹쳐도 만료·미달 취소·알림을 한 번만 처리한다", async () => {
     const operator = await makeUser("크론 운영자", "MALE");

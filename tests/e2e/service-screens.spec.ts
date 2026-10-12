@@ -28,12 +28,13 @@ test("브랜드 진입은 대기 중에만 보이며 지연·오류·동작 줄�
   await page.goto("/login");
   await expect(page.locator("[data-brand-launch]")).toBeVisible();
   await expect(page.getByRole("img", { name: "Rally On" })).toBeVisible();
-  expect(await page.locator(".rally-launch-identity").evaluate(el => getComputedStyle(el).animationName)).toBe("none");
+  expect(await page.locator("[data-entry-identity]").evaluate(el => getComputedStyle(el).animationName)).toBe("none");
   await shot(page, "launch");
   await expect(page.getByRole("button", { name: "다시 연결" })).toBeVisible({ timeout: 12000 });
   release();
   await expect(page.getByRole("button", { name: "카카오로 시작하기" })).toBeVisible();
   await expect(page.locator("[data-brand-launch]")).toHaveCount(0);
+  expect(await page.locator("[data-entry-actions]").evaluate(el => getComputedStyle(el).animationName)).toBe("none");
   await shot(page, "login");
   await page.unroute("**/api/v1/me");
   await page.route("**/api/v1/me", route => route.fulfill({ status: 503, json: { error: { message: "일시적인 오류" } } }));
@@ -41,6 +42,36 @@ test("브랜드 진입은 대기 중에만 보이며 지연·오류·동작 줄�
   await expect(page.getByRole("button", { name: /다시/ })).toBeVisible();
   await expect(page.locator("[data-brand-launch]")).toHaveCount(0);
 });
+
+for (const width of [320, 375]) {
+  test(`브랜드 진입 ${width}px: 로고 위치를 유지하고 로그인 버튼만 순차 공개한다`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 320 ? 568 : 812 });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    await page.route("**/api/v1/me", async route => { await gate; await route.fulfill({ status: 401, json: {} }); });
+    await page.goto("/login");
+    await expect(page.locator("[data-brand-launch]")).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const identity = page.locator("[data-entry-identity]");
+    const before = await identity.boundingBox();
+    // Reproduce the native cover holding back buttons while it crossfades out.
+    await page.evaluate(() => { document.documentElement.dataset.rallyNativeReveal = "pending"; });
+    release();
+    await expect(page.locator("[data-brand-launch]")).toHaveCount(0);
+    await expect(page.locator("[data-entry-actions]")).toBeHidden();
+    const after = await identity.boundingBox();
+    expect(Math.abs(before!.y - after!.y)).toBeLessThan(1);
+    expect(Math.abs(before!.height - after!.height)).toBeLessThan(1);
+    await page.evaluate(() => { document.documentElement.dataset.rallyNativeReveal = "ready"; });
+    await expect.poll(() => page.locator("[data-entry-actions]").evaluate(el => Number(getComputedStyle(el).opacity))).toBe(1);
+    await expect(page.getByRole("button", { name: "카카오로 시작하기" })).toBeVisible();
+    await fit(page);
+    const final = await identity.boundingBox();
+    expect(Math.abs(before!.y - final!.y)).toBeLessThan(1);
+    await expect(page.getByRole("button", { name: "테니스장을 운영하고 계신가요?" })).toBeVisible();
+  });
+}
 
 test("마이·프로필·공지·문의·약관은 작은 화면에서 실제 저장과 재조회를 유지한다", async ({ page, context }) => {
   test.setTimeout(120000);

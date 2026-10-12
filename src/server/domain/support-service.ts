@@ -9,6 +9,7 @@ import { lockApplicationMatch } from "./court-match-service";
 export const supportInquiryInputSchema = z.object({
   message: z.string().trim().min(10, "문의 내용을 10자 이상 입력해 주세요.").max(1000, "문의 내용은 1000자 이하로 입력해 주세요."),
   matchId: z.uuid().nullable().optional(),
+  applicationId: z.uuid().nullable().optional(),
 });
 export type SupportInquiryInput = z.infer<typeof supportInquiryInputSchema>;
 export type SupportAudience = "member" | "reviewer" | "operator";
@@ -52,7 +53,8 @@ export type SupportInquiryView = ReturnType<typeof toView>;
 export async function createSupportInquiry(prisma: PrismaClient, userId: string, input: SupportInquiryInput, limited = false) {
   const matchId = input.matchId ? (await prisma.match.findFirst({ where: { id: input.matchId, OR: [{ hostUserId: userId }, { applications: { some: { applicantUserId: userId } } }] }, select: { id: true } }))?.id ?? null : null;
   if (limited && (!matchId || !(await prisma.match.count({ where: { id: matchId, courtSource: "PARTNER_COURT" } })))) throw new DomainError("SUPPORT_TRANSACTION_REQUIRED", 403, "본인의 기존 코트 매칭에 대해서만 문의할 수 있어요.");
-  const application = matchId ? await prisma.matchApplication.findUnique({ where: { matchId_applicantUserId: { matchId, applicantUserId: userId } }, select: { id: true } }) : null;
+  const application = matchId ? await prisma.matchApplication.findFirst({ where: { matchId, applicantUserId: userId, ...(input.applicationId ? { id: input.applicationId } : {}) }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true } }) : null;
+  if (input.applicationId && !application) throw new DomainError("APPLICATION_NOT_FOUND", 404, "본인의 신청 내역을 다시 확인해 주세요.");
   const inquiry = await prisma.supportInquiry.create({ data: { userId, matchId, applicationId: application?.id, message: input.message }, include });
   return toView(inquiry, "member", userId);
 }

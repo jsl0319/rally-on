@@ -19,7 +19,9 @@ function apiMessage(body: unknown, fallback: string) {
 
 export function MSupportInquiry() {
   // 코트 매칭 화면에서 넘어오면 어느 건인지 함께 보낸다. 운영자에게 되묻지 않아도 된다.
-  const matchId = useSearchParams().get("matchId");
+  const params = useSearchParams();
+  const matchId = params.get("matchId");
+  const applicationId = params.get("applicationId");
   const [items, setItems] = useState<Inquiry[] | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -51,7 +53,7 @@ export function MSupportInquiry() {
     setSubmitError("");
     setSubmitted(false);
     try {
-      const response = await fetch("/api/v1/support-inquiries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message, matchId }) });
+      const response = await fetch("/api/v1/support-inquiries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message, matchId, applicationId }) });
       const body: unknown = await response.json();
       if (!response.ok) throw new Error(apiMessage(body, "문의를 보내지 못했어요."));
       setMessage("");

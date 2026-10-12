@@ -1,4 +1,4 @@
-import { RallyWordmark } from "@/components/ui/rally-wordmark";
+import { EntryBrand, EntryCourt } from "@/components/ui/entry-brand";
 import Link from "next/link";
 import { AppleLogo, ChatCircle } from "@phosphor-icons/react/dist/ssr";
 
@@ -6,18 +6,10 @@ export function WelcomeScreen({ loading, onSignIn, onOperator, error }: {
   loading: boolean; onSignIn: () => void; onOperator: () => void; error?: string;
 }) {
   return <main className="rally-welcome-surface text-[var(--tm-text-primary)]">
-    <svg className="rally-welcome-court" viewBox="0 0 440 680" fill="none" aria-hidden="true" focusable="false">
-      <g stroke="currentColor" strokeWidth="2">
-        <path d="M20 20H420V660H20Z M70 20V660 M370 20V660 M20 340H420 M70 180H370 M70 500H370 M220 180V500" />
-      </g>
-    </svg>
+    <EntryCourt />
     <section className="rally-welcome">
-      <div className="rally-welcome-identity">
-        <h1><RallyWordmark /></h1>
-        <p className="rally-welcome-slogan">부담 없이, 함께 테니스</p>
-        <p className="rally-welcome-purpose">나와 비슷한 메이트를 만나요</p>
-      </div>
-      <div className="rally-welcome-actions">
+      <EntryBrand />
+      <div className="rally-welcome-actions rally-entry-reveal" data-entry-actions>
         {error ? <p className="mb-3 rounded-xl bg-[var(--tm-status-error-bg)] p-3 text-sm text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}
         <div className="rally-welcome-providers">
           <button className="rally-welcome-provider rally-welcome-kakao" disabled={loading} onClick={onSignIn} type="button">

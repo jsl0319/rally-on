@@ -6,7 +6,7 @@ import { AccountPageHeader } from "@/components/navigation/account-page-header";
 
 import { ActionArea, ActionAreaButton, Modal, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalHeading, ModalSummary } from "@wanteddev/wds";
 import Link from "next/link";
-import { CalendarBlank, CaretDown, TennisBall } from "@phosphor-icons/react";
+import { CalendarBlank, CaretDown, TennisBall, Users } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 
 import { ActivityTabs } from "@/components/navigation/activity-tabs";
@@ -19,6 +19,7 @@ type SentApplication = {
   id: string;
   status: string;
   statusLabel: string;
+  canReapply: boolean;
   decidedAt: string | null;
   message: string | null;
   match: { id: string; title: string; status: string; startsAt: string; endsAt: string; courtSource: "EXTERNAL_RESERVED" | "COURT_TBD" | "PARTNER_COURT"; courtName: string | null; estimatedFeePerPersonKrw: number | null; courtSlotId: string | null };
@@ -41,7 +42,7 @@ function schedule(startsAt: string, endsAt: string) {
 }
 
 function appliedDate(createdAt: string) {
-  return `신청한 ${new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", timeZone: "Asia/Seoul" }).format(new Date(createdAt))}`;
+  return `${new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", timeZone: "Asia/Seoul" }).format(new Date(createdAt))} 신청`;
 }
 
 /** 코트 매칭은 승인만으로 끝나지 않는다. 지금 무엇을 해야 하는지 한 줄로 알려 준다. */
@@ -151,10 +152,16 @@ function PastBadge() {
 
 function SentApplicationCard({ item, withdrawing, onWithdraw }: { item: SentApplication; withdrawing: boolean; onWithdraw: () => void }) {
   const active = item.status === "PENDING" || item.status === "ACCEPTED" || item.status === "CONFIRMED";
-  const href = item.match.courtSlotId ? `/partner-sessions/${item.match.courtSlotId}` : `/matches/${item.match.id}?returnTo=${encodeURIComponent("/activity/sent")}`;
+  const href = item.match.courtSlotId ? `/partner-sessions/${item.match.courtSlotId}#application-${item.id}` : `/matches/${item.match.id}?returnTo=${encodeURIComponent("/activity/sent")}`;
   return <article className="rounded-2xl border border-[var(--tm-border-default)] bg-white p-4">
     <Link className="block" href={href}>
-      <div className="flex items-center justify-between gap-2"><span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${active ? "bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "bg-[var(--tm-bg-subtle-muted)] text-[var(--tm-text-secondary)]"}`}>{item.statusLabel}</span><span className="text-[11px] text-[var(--tm-text-secondary)]">{appliedDate(item.createdAt)}</span></div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-bold ${item.match.courtSource === "PARTNER_COURT" ? "bg-[#edf1fb] text-[#485c91]" : "bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]"}`}>
+          {item.match.courtSource === "PARTNER_COURT" ? <TennisBall size={15} weight="duotone" aria-hidden /> : <Users size={15} weight="duotone" aria-hidden />}
+          {item.match.courtSource === "PARTNER_COURT" ? "코트 매칭" : "매칭"}
+        </span>
+        <span className={`text-xs font-semibold ${active ? "text-[var(--tm-action-primary)]" : "text-[var(--tm-text-secondary)]"}`}>{item.statusLabel}</span>
+      </div>
       <h2 className="mt-3 text-[17px] font-bold leading-6">{item.match.courtName ?? item.match.title}</h2>
       <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-[var(--tm-text-secondary)]"><CalendarBlank size={15} aria-hidden className="mt-0.5 shrink-0" />{schedule(item.match.startsAt, item.match.endsAt)}</p>
       {isFinishedSchedule(item.match.endsAt) ? <div className="mt-2"><PastBadge /></div> : null}
@@ -164,6 +171,8 @@ function SentApplicationCard({ item, withdrawing, onWithdraw }: { item: SentAppl
     {item.courtMatch && item.match.courtSlotId && (item.status === "ACCEPTED" || item.courtMatch.awaitingRefund) && !item.courtMatch.refundCompletedAt ? <Button as={Link} className="mt-3" fullWidth href={href} size="medium">{item.courtMatch.awaitingRefund ? item.courtMatch.refundRequested ? "환불 진행 확인" : "환불 계좌 입력하기" : item.courtMatch.depositClaimedAt ? "입금 안내 다시 보기" : "입금 안내 보기"}</Button> : null}
     {item.contact ? <><ContactButton contact={item.contact} /><p className="mt-2 text-[11px] leading-5 text-[var(--tm-text-secondary)]">{acceptedCoordinationMessage(item.match.courtSource)}</p></> : null}
     {item.message ? <details className="rally-disclosure mt-2"><summary className="flex min-h-11 items-center justify-between text-xs text-[var(--tm-text-secondary)]">보낸 자기소개<CaretDown aria-hidden className="rally-disclosure-chevron" size={14} /></summary><p className="whitespace-pre-wrap break-words rounded-lg bg-[var(--tm-bg-page)] p-3 text-xs leading-6">{item.message}</p></details> : null}
+    {item.canReapply ? <Button as={Link} className="mt-3" fullWidth href={href} size="medium" variant="secondary">다시 신청하기</Button> : null}
+    <p className="mt-3 text-[11px] text-[var(--tm-text-secondary)]">{appliedDate(item.createdAt)}</p>
     {canLeave(item) ? <button className="mt-2 min-h-11 w-full border-t border-[var(--tm-border-subtle)] pt-2 text-xs font-medium text-[var(--tm-text-secondary)] disabled:opacity-50" disabled={withdrawing} onClick={onWithdraw} type="button">{item.status === "PENDING" ? "신청 철회" : "참가 취소"}</button> : null}
   </article>;
 }
@@ -186,8 +195,8 @@ function ContactButton({ contact }: { contact: NonNullable<SentApplication["cont
 
 function WithdrawalConfirm({ busy, mode, onCancel, onConfirm }: { busy: boolean; mode: "PENDING" | "ACCEPTED"; onCancel: () => void; onConfirm: () => void }) {
   const copy = mode === "ACCEPTED"
-    ? { heading: "참가를 취소할까요?", description: "자리는 바로 비워지고 모집자에게 알려요. 취소하면 다시 신청하지 못할 수 있어요.", confirm: "네, 취소할게요" }
-    : { heading: "신청을 철회할까요?", description: "철회하면 다시 신청하지 못할 수 있어요.", confirm: "네, 철회할게요" };
+    ? { heading: "참가를 취소할까요?", description: "자리는 바로 비워지고 모집자에게 알려요. 모집 중이면 다시 신청할 수 있어요.", confirm: "네, 취소할게요" }
+    : { heading: "신청을 철회할까요?", description: "모집 중이고 자리가 남아 있으면 다시 신청할 수 있어요.", confirm: "네, 철회할게요" };
   return <Modal open onOpenChange={(next) => { if (!next) onCancel(); }}>
     <ModalContainer variant="bottom">
       <ModalContent>

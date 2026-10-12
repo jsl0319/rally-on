@@ -9,6 +9,7 @@ import { DomainError } from "@/server/domain/profile-service";
 import { addAcceptedMemberToConversation, makeConversationReadOnly, removeParticipantFromConversation } from "@/server/domain/match-chat-service";
 import { recordApplicationNotification, recordApplicationNotifications } from "@/server/domain/notification-service";
 
+import { canAcceptCourtApplication } from "./court-match";
 import { courtMoneySummary } from "./court-match-money";
 import {
   getAcceptedCount,
@@ -42,7 +43,7 @@ const matchInclude = {
       },
     },
   },
-  applications: { select: { id: true, applicantUserId: true, status: true, applicantGender: true } },
+  applications: { select: { id: true, applicantUserId: true, status: true, applicantGender: true }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
   conversation: { select: { status: true } },
   externalCourtImageUpload: { select: { id: true } },
   courtSlot: {
@@ -242,7 +243,7 @@ export async function reconcileStartedMatches(prisma: PrismaClient, now = new Da
 
 function matchApplicationBlock(match: MatchWithRelations, viewer: Viewer, now: Date) {
   if (match.hostUserId === viewer.id) return "OWN_MATCH";
-  if (match.applications.some(item => item.applicantUserId === viewer.id)) return "ALREADY_APPLIED";
+  if (match.applications.some(item => item.applicantUserId === viewer.id && item.status !== "WITHDRAWN")) return "ALREADY_APPLIED";
   const genderBlock = genderApplicationBlock(match, match.applications, viewer.profile.gender);
   if (genderBlock) return genderBlock;
   if (match.status !== "OPEN") return "MATCH_NOT_OPEN";
@@ -404,7 +405,7 @@ export async function getMatches(
     startsAt: { gt: input.startsFrom, ...dateRange },
     courtSource: "EXTERNAL_RESERVED",
     NOT: [
-      { applications: { some: { applicantUserId: viewer.id } } },
+      { applications: { some: { applicantUserId: viewer.id, status: { not: "WITHDRAWN" } } } },
     ],
     ...(input.availableOnly ? { hostUserId: { not: viewer.id } } : {}),
     ...(input.gameType ? { gameType: input.gameType } : {}),
@@ -471,7 +472,8 @@ export async function getMatchDetail(prisma: PrismaClient, viewer: Viewer, match
   const match = await prisma.match.findUnique({ where: { id: matchId }, include: matchInclude });
   if (!match) throw new DomainError("MATCH_NOT_FOUND", 404, "매칭을 찾을 수 없어요.");
 
-  const application = match.applications.find((item) => item.applicantUserId === viewer.id) ?? null;
+  const application = match.applications.find(item => item.applicantUserId === viewer.id && item.status !== "WITHDRAWN")
+    ?? match.applications.find(item => item.applicantUserId === viewer.id) ?? null;
   const relation = match.hostUserId === viewer.id ? "HOST" : application ? "APPLICANT" : "NONE";
   if ((match.status !== "OPEN" || match.courtSource === "COURT_TBD") && relation === "NONE") {
     throw new DomainError("MATCH_NOT_FOUND", 404, "매칭을 찾을 수 없어요.");
@@ -638,10 +640,14 @@ const applicationInclude = {
 type ApplicationWithRelations = Prisma.MatchApplicationGetPayload<{ include: typeof applicationInclude }>;
 
 function toApplicationView(application: ApplicationWithRelations, supplyNotice: SupplyNotice | null = null) {
+  const isCourt = application.match.courtSource === "PARTNER_COURT";
+  const money = isCourt ? courtMoneySummary(application, application.match.totalCourtFeeKrw ?? 0) : null;
+  const refundPending = Boolean(money && (money.outstandingKrw > 0 || application.refundAttempts.some(r => r.status === "PROCESSING" || r.status === "REVIEW")));
+  const courtStatus = refundPending ? "환불 대기" : ({ PENDING: "승인 대기", ACCEPTED: application.depositClaimedAt ? "입금 확인 중" : "입금 대기", CONFIRMED: "참가 확정", WITHDRAWN: "신청 철회", REJECTED: "신청 거절", CANCELLED: "취소됨", EXPIRED_UNPAID: "입금 기한 만료" } as const)[application.status];
   return {
     id: application.id,
     status: application.status,
-    statusLabel: getApplicationStatusLabel(application.status, application.match.status),
+    statusLabel: isCourt ? courtStatus : getApplicationStatusLabel(application.status, application.match.status),
     message: application.message,
     applicantGender: application.applicantGender ?? null,
     applicant: {
@@ -671,7 +677,7 @@ function toApplicationView(application: ApplicationWithRelations, supplyNotice: 
           paymentDueAt: application.paymentDueAt?.toISOString() ?? null,
           depositClaimedAt: application.depositClaimedAt?.toISOString() ?? null,
           confirmedAt: application.confirmedAt?.toISOString() ?? null,
-          awaitingRefund: courtMoneySummary(application, application.match.totalCourtFeeKrw ?? 0).outstandingKrw > 0,
+          awaitingRefund: refundPending,
           refundRequested: application.refundRequestedAt !== null,
           refundCompletedAt: application.refundCompletedAt?.toISOString() ?? null,
         }
@@ -680,7 +686,9 @@ function toApplicationView(application: ApplicationWithRelations, supplyNotice: 
     decidedAt: application.decidedAt?.toISOString() ?? null,
     withdrawnAt: application.withdrawnAt?.toISOString() ?? null,
     cancelledAt: application.cancelledAt?.toISOString() ?? null,
-    contact: application.status === "ACCEPTED" || application.status === "CONFIRMED"
+    contact: isCourt ? application.status === "CONFIRMED"
+      ? { conversationStatus: application.match.conversation?.status ?? "NOT_CREATED", href: application.match.conversation ? `/chats/${application.match.id}` : null, label: "채팅방 열기" } : null
+      : application.status === "ACCEPTED"
       ? { conversationStatus: application.match.conversation?.status ?? "NOT_CREATED", href: application.match.conversation ? `/chats/${application.match.id}` : null, label: "채팅방 열기" }
       : null,
     supplyNotice,
@@ -714,7 +722,7 @@ export async function createApplication(prisma: PrismaClient, viewer: Viewer, ma
       if (match.status === "CANCELLED") throw new DomainError("MATCH_CANCELLED", 409, "취소된 매칭에는 신청할 수 없어요.");
       if (match.status !== "OPEN") throw new DomainError("MATCH_ALREADY_CLOSED", 409, "모집이 마감된 매칭이에요.");
       if (match.startsAt <= new Date()) throw new DomainError("MATCH_ALREADY_ENDED", 409, "이미 시작된 일정에는 신청할 수 없어요.");
-      if (match.applications.some((item) => item.applicantUserId === viewer.id)) throw new DomainError("APPLICATION_ALREADY_EXISTS", 409, "이미 신청한 매칭이에요.");
+      if (match.applications.some((item) => item.applicantUserId === viewer.id && item.status !== "WITHDRAWN")) throw new DomainError("APPLICATION_ALREADY_EXISTS", 409, "이미 신청한 매칭이에요.");
       if (!hasRemainingSpots(match.recruitCount, match.applications)) throw new DomainError("NO_REMAINING_SPOTS", 409, "남은 자리가 없어요.");
 
       const genderBlock = genderApplicationBlock(match, match.applications, viewer.profile.gender);
@@ -774,7 +782,13 @@ export async function getSentApplications(prisma: PrismaClient, viewer: Viewer) 
     const view = toSupplyNoticeView(notice);
     if (view && !noticesByMatchId.has(notice.matchId)) noticesByMatchId.set(notice.matchId, view);
   }
-  return { items: applications.map((application) => toApplicationView(application, noticesByMatchId.get(application.matchId) ?? null)) };
+  return { items: applications.map((application) => ({
+    ...toApplicationView(application, noticesByMatchId.get(application.matchId) ?? null),
+    canReapply: application.status === "WITHDRAWN" && application.match.status === "OPEN"
+      && application.match.courtSource !== "COURT_TBD" && application.match.startsAt > sortNow
+      && (application.match.courtSource !== "PARTNER_COURT" || canAcceptCourtApplication(sortNow, application.match.startsAt))
+      && !applications.some(other => other.matchId === application.matchId && other.status !== "WITHDRAWN"),
+  })) };
 }
 
 export async function getReceivedApplications(prisma: PrismaClient, viewer: Viewer, matchId: string, statuses: Array<"PENDING" | "ACCEPTED" | "REJECTED" | "WITHDRAWN" | "CANCELLED"> = ["PENDING"]) {

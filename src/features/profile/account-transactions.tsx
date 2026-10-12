@@ -34,7 +34,7 @@ export function AccountTransactions() {
     {busy ? <p role="status" className="mt-5 text-sm">거래 확인 중…</p> : null}
     {error ? <p role="alert" className="mt-5 text-rose-700">{error}</p> : null}
     {!busy && !error && !items.length ? <p className="mt-8 text-sm">확인할 코트 거래가 없어요.</p> : null}
-    <div className="mt-6 space-y-5">{items.map((item) => <TransactionCard key={item.id} item={item} refresh={load} />)}</div>
+    <div className="mt-6 space-y-5">{items.map((item) => <TransactionCard key={item.application?.id ?? item.id} item={item} refresh={load} />)}</div>
     <h2 className="mt-8 text-lg font-bold">거래 문의 내역</h2><div className="mt-4 space-y-4">{inquiries.map((i) => <SupportThread key={i.id} inquiry={i} audience="member" endpointOverride={`${endpoint}/inquiries`} refresh={load} />)}</div>
   </div></main>;
 }
@@ -50,7 +50,7 @@ function TransactionCard({ item, refresh }: { item: MyCourtTransactions["items"]
   const send = async (inquiry: boolean) => {
     if (busy) return; setBusy(true); setError(""); setNotice("");
     try {
-      const response = await fetch(inquiry ? `${endpoint}/inquiries` : `/api/v1/court-match-applications/${a!.id}/refund-account`, { method: inquiry ? "POST" : "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(inquiry ? { message, matchId: item.id } : { bank, accountNumber, accountHolder }) });
+      const response = await fetch(inquiry ? `${endpoint}/inquiries` : `/api/v1/court-match-applications/${a!.id}/refund-account`, { method: inquiry ? "POST" : "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(inquiry ? { message, matchId: item.id, applicationId: a?.id } : { bank, accountNumber, accountHolder }) });
       const data = await response.json();
       if (!response.ok) throw new Error(apiMessage(data, "저장하지 못했어요."));
       await refresh(); setNotice(inquiry ? "문의를 접수했어요." : "환불 계좌를 저장했어요."); if (inquiry) setMessage("");

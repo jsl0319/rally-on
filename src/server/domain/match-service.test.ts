@@ -346,7 +346,7 @@ describe("match service operation safeguards", () => {
         // 코트 매칭은 별도 메뉴다. 매칭 탭 목록과 추천에 섞이지 않는다.
         courtSource: "EXTERNAL_RESERVED",
         NOT: [
-          { applications: { some: { applicantUserId: viewer.id } } },
+          { applications: { some: { applicantUserId: viewer.id, status: { not: "WITHDRAWN" } } } },
         ],
       }),
     }));

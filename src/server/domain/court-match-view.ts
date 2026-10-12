@@ -146,7 +146,9 @@ async function readMatch(prisma: PrismaClient, matchId: string) {
 /** Caller must first authorize access to the public slot (including private participant history). */
 export async function getCourtMatchParticipation(prisma: PrismaClient, viewer: { id: string; profile: { gender: "MALE" | "FEMALE" | null } }, matchId: string) {
   const match = await readMatch(prisma, matchId);
-  const application = match.applications.find((a) => a.applicantUserId === viewer.id);
+  const ownApplications = match.applications.filter((a) => a.applicantUserId === viewer.id)
+    .sort((a, b) => Number(a.status === "WITHDRAWN") - Number(b.status === "WITHDRAWN") || b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id));
+  const application = ownApplications[0];
   const info = summary(match);
   const isOperator = match.hostUserId === viewer.id;
   const legacy = !match.courtSlot || match.courtSlot.courtUnit.court.operatorApplication.applicantUserId !== match.hostUserId;
@@ -154,7 +156,7 @@ export async function getCourtMatchParticipation(prisma: PrismaClient, viewer: {
   if (legacy) blockedReason = "이전 방식으로 개설된 코트 매칭은 새 신청을 받지 않아요.";
   else if (match.host.status !== "ACTIVE") blockedReason = "운영이 중단되어 신규 신청을 받지 않아요.";
   else if (isOperator) blockedReason = "내가 개설한 코트 매칭이에요.";
-  else if (application) blockedReason = "이미 신청한 코트 매칭이에요.";
+  else if (ownApplications.some(a => a.status !== "WITHDRAWN")) blockedReason = "이미 신청한 코트 매칭이에요.";
   else if (match.status !== "OPEN" || match.courtSlot?.status !== "AVAILABLE") blockedReason = "지금은 참가 신청을 받지 않아요.";
   else if (!canAcceptCourtApplication(new Date(), match.startsAt)) blockedReason = "참가 신청이 마감됐어요.";
   else if (!viewer.profile.gender) blockedReason = "프로필에 성별을 입력해 주세요.";
@@ -171,8 +173,9 @@ export async function getCourtMatchParticipation(prisma: PrismaClient, viewer: {
     && now < match.startsAt;
   return {
     ...info, isOperator, legacy, operationsPaused, canApply: blockedReason === null, blockedReason,
-    operatorContact: participantContact(match, application),
+    operatorContact: ownApplications.map(a => participantContact(match, a)).find(Boolean) ?? null,
     application: application ? toApplication(application, info.guestFeeKrw) : null,
+    previousApplications: ownApplications.slice(1).map(a => toApplication(a, info.guestFeeKrw)),
     cancellation: cancellable && application
       ? buildCourtCancellationPreview(application, match, now)
       : null,
@@ -212,9 +215,10 @@ export async function getMyCourtTransactions(prisma: PrismaClient, userId: strin
   const matches = await prisma.match.findMany({ where: { courtSource: "PARTNER_COURT", OR: [{ hostUserId: userId }, { applications: { some: { applicantUserId: userId } } }] }, orderBy: [{ startsAt: "desc" }, { id: "asc" }], select: { id: true, title: true, startsAt: true, hostUserId: true, totalCourtFeeKrw: true } });
   for (const match of matches) await reconcileCourtMatch(prisma, match.id);
   const applications = await prisma.matchApplication.findMany({ where: { applicantUserId: userId, match: { courtSource: "PARTNER_COURT" } }, select: { ...applicationSelect, matchId: true, match: { select: contactMatchSelect } } });
-  return { items: matches.map((m) => {
-    const a = applications.find((a) => a.matchId === m.id);
-    return { id: m.id, title: m.title, startsAt: m.startsAt.toISOString(), isHost: m.hostUserId === userId, application: a ? toApplication(a, m.totalCourtFeeKrw ?? 0) : null, operatorContact: a ? participantContact(a.match, a) : null };
+  return { items: matches.flatMap((m) => {
+    const own = applications.filter(a => a.matchId === m.id).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    // 탈퇴·정지 후에도 예전 신청의 미처리 반환을 빠짐없이 제공한다.
+    return (own.length ? own : [null]).map(a => ({ id: m.id, title: m.title, startsAt: m.startsAt.toISOString(), isHost: m.hostUserId === userId, application: a ? toApplication(a, m.totalCourtFeeKrw ?? 0) : null, operatorContact: a ? participantContact(a.match, a) : null }));
   }) };
 }
 export type MyCourtTransactions = Awaited<ReturnType<typeof getMyCourtTransactions>>;

@@ -683,7 +683,8 @@ model MatchApplication {
   supportInquiries SupportInquiry[]
   financialReviews CourtFinancialReview[]
 
-  @@unique([matchId, applicantUserId])
+  /// 철회 이력은 보존한다. WITHDRAWN 외 신청은 부분 고유 인덱스로 1건만 허용한다.
+  @@index([matchId, applicantUserId, createdAt(sort: Desc)])
   @@unique([matchId, depositCode])
   @@index([matchId, status, createdAt])
   @@index([applicantUserId, status, createdAt(sort: Desc)])

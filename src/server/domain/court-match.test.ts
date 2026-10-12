@@ -88,6 +88,7 @@ function transactionFor(match: ReturnType<typeof courtMatch>, seatCount: number)
     $queryRaw: vi.fn().mockResolvedValue([{ id: "match-id" }]),
     match: { findUnique: vi.fn().mockResolvedValue(match), update: vi.fn().mockResolvedValue({}), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     matchApplication: {
+      findFirst: vi.fn().mockResolvedValue(null),
       findUnique: vi.fn().mockResolvedValue(null),
       count: vi.fn().mockResolvedValue(seatCount),
       create: vi.fn().mockResolvedValue({ id: "application-id" }),

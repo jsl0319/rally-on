@@ -1121,7 +1121,7 @@ POST /api/v1/applications/{applicationId}/withdraw
 
 - `PENDING`만 `WITHDRAWN`으로 전환할 수 있다.
 - 수락된 신청의 취소에는 사용하지 않는다.
-- 철회 후 재신청은 Core MVP에서 허용하지 않는다.
+- 철회(`WITHDRAWN`) 후에는 기존 신청 API로 새 신청을 만든다. 모집 상태·기한·정원·성별 조건을 다시 검사하며 이전 신청을 수정하지 않는다. 코트 매칭은 새 조건 동의·공 준비 자리·입금 코드·기한도 새로 부여한다. 거절·입금 만료·코트 확정 취소 상태는 재신청 대상으로 확대하지 않는다.
 - 성공 시 `withdrawnAt`을 포함한 변경된 `MatchApplicationView`를 반환한다.
 
 주요 오류:
@@ -1842,7 +1842,7 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 | 공개 후 일정·코트 수정 | 지원하지 않음 | Match PATCH, 변경 이력과 수락자 동의 필요 |
 | CLOSED 모집 재개 | 지원하지 않음 | `/reopen`과 대기 신청 복구 정책 필요 |
 | 수락 후 참가 취소 | 운영 문의 | 별도 Application 상태·이력·취소 API 필요 |
-| 철회·거절 후 재신청 | 지원하지 않음 | 유일 제약·재신청 API 정책 변경 |
+| 철회 후 재신청 | 기존 POST로 새 신청 생성 | 이전 거래 유지, 동시 중복 금지. 거절·만료·코트 확정 취소는 제외 |
 | 신고·차단 | 비공개 MVP 운영 문의 | 공개 출시 전 신고 API와 권한 모델 검토 |
 | 서비스 내 Match Chat | 새 `IN_APP_CHAT` Match에 소스 구현, 기존 카카오 링크 호환 및 공개 출시 게이트 유지 | `08-in-app-match-chat-design.md`의 Conversation·Message·Report·Moderation API와 보관 정책 |
 | 플레이 상태 이름 | 응답하지 않음 | 분류 규칙 확정 후 DTO 확장 |
@@ -2008,3 +2008,10 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 `GET /api/v1/partner-session-slots`는 `date=YYYY-MM-DD`(한국 날짜), `gameType`(활성 게임 유형), `sort=soonest|priceLow`를 받는다. 기본값은 시간순이며 가격순은 할인 전 1인 참가비 기준이다. 필터·정렬 후 기존 최대 50건을 반환하고 유효하지 않은 값은 400으로 거절한다. 공개 슬롯의 `ballContribution.available`은 경기 모집·시간 기한·남은 자리와 활성 공 준비 신청 유무를 반영한다. 개인 성별이나 중복 신청까지 보증하는 값은 아니며 최종 신청은 기존 서버 검증을 따른다.
 
 신청 안내 v5는 공 준비 최소 2구를 `terms.ballMinimumCount`로 보존한다. 과거 안내에 필드가 없으면 당시 3구 조건을 유지한다.
+
+### 2026-10-12 신청 이력 응답 확장
+
+- `GET /me/applications`: 철회 기록을 유지하며 `canReapply`(상세에서 재신청 확인 가능 여부)를 제공한다. 실제 신청 시 정원·성별·최신 기한을 다시 검증한다.
+- 코트 참가 상세: `application`은 최신 본인 신청, `previousApplications`는 그 이전 본인 신청이다. 타인의 신청·계좌는 반환하지 않는다. 이전 반환은 각각의 신청 ID에 대한 기존 환불 API를 사용한다.
+- 거래 정리 응답은 동일 매칭에 본인의 여러 신청이 있으면 모두 제공한다.
+- 문의 작성은 선택 `applicationId`를 받는다. 전달 시 매칭·본인 신청 소유권을 검증하고 타인의 ID 또는 다른 매칭 ID는 `APPLICATION_NOT_FOUND`로 거절한다. 생략 시 최신 본인 신청을 연결한다.

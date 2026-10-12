@@ -60,8 +60,9 @@ function fixture(status = "PENDING", confirmed = 0) {
       updateMany: vi.fn(async ({ data }: { data: object }) => { Object.assign(match, data); return { count: 1 }; }),
     },
     matchApplication: {
-      findUnique: vi.fn(async ({ where }: { where: { id?: string; matchId_applicantUserId?: { applicantUserId: string } } }) => {
-        const row = rows.find((r) => where.id ? r.id === where.id : r.applicantUserId === where.matchId_applicantUserId?.applicantUserId);
+      findFirst: vi.fn(async ({ where }: { where: { applicantUserId: string; status: { not: string } } }) => rows.find(r => r.applicantUserId === where.applicantUserId && r.status !== where.status.not) ?? null),
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
+        const row = rows.find((r) => r.id === where.id);
         return row ? { ...row, match: { ...match } } : null;
       }),
       findMany: vi.fn(async ({ where }: { where: Where }) => rows.filter((row) => matches(row, where)).map((r) => ({ ...r }))),
