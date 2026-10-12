@@ -47,7 +47,9 @@ test("보낸 신청은 서비스 유형을 구분하고 일반·코트 철회 �
   await expect(page.getByRole("button", { name: "다시 신청하기", exact: true })).toBeVisible();
   await page.goto("/partner-sessions");
   await page.getByRole("link").filter({ hasText: "E2E 준비된 테니스장" }).click();
+  await expect(page.getByRole("heading", { name: "참가 전 알아두세요", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "다시 신청하기", exact: true }).click();
+  await expect(page.getByRole("dialog").getByText("본인 사유의 취소", { exact: true })).toHaveCount(0);
   await page.getByRole("dialog").getByRole("checkbox").check();
   await page.getByRole("dialog").getByRole("button", { name: "신청 보내기", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);

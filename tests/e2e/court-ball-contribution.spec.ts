@@ -27,6 +27,9 @@ test("모바일 공 준비 신청 → 할인 입금 확정 → 미지참 기록 
     await expect(page.getByRole("heading", { name: "참가비 포함 항목", exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "같이 치기", exact: true }).click();
     const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("본인 사유의 취소", { exact: true })).toHaveCount(0);
+    await expect(dialog.getByText("전체 신청·입금·환불 안내", { exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "신청 보내기" })).toBeDisabled();
     await expect(dialog.getByRole("radio", { name: /기본 참가/ })).toBeChecked();
     await dialog.getByRole("checkbox", { name: "신청 조건과 취소·환불 안내를 확인했어요." }).check();
     await dialog.getByRole("radio", { name: /공 준비 참가/ }).check();

@@ -193,7 +193,7 @@ export function MatchDetailArticle({ detail, returnTo }: { detail: Detail; retur
           <p className="break-words text-sm font-semibold leading-6">{detail.court.name}{detail.court.courtNumber ? <> · {detail.court.courtNumber}</> : null}</p>
           <p className="mt-1.5 flex items-start gap-1.5 text-[13px] leading-5 text-[var(--tm-text-secondary)]"><MapPin size={16} className="mt-0.5 shrink-0" aria-hidden /><span className="min-w-0 break-words">{detail.court.address}</span></p>
         </>}
-        {detail.court.source !== "COURT_TBD" && detail.court.name && detail.court.address ? <CourtDirectionsButton variant="subtle" matchId={detail.id} name={detail.court.name} address={detail.court.address} /> : null}
+        {detail.court.source !== "COURT_TBD" && detail.court.name && detail.court.address ? <CourtDirectionsButton matchId={detail.id} name={detail.court.name} address={detail.court.address} /> : null}
         {detail.court.usageNote ? <div className="mt-4"><h3 className="text-[13px] font-semibold">현장 이용 안내</h3><p className="mt-2 whitespace-pre-wrap break-words text-[13px] leading-6 text-[var(--tm-text-muted)]">{detail.court.usageNote}</p></div> : null}
         {detail.court.participationNote ? <p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">{detail.court.participationNote}</p> : null}
       </Section>

@@ -70,7 +70,7 @@ test("코트 목록 필터·가격 정렬·빈 결과 복구와 모바일 상세
   await expect(dialog.getByRole("button", { name: "신청 보내기" })).toBeDisabled();
   await dialog.getByRole("radio", { name: /공 준비 참가/ }).check();
   await expect(dialog.getByText(/미지참 시 5,000원/).first()).toBeVisible();
-  await expect(dialog.getByText(/확정 전 전액 반환/)).toBeVisible();
+  await expect(dialog.getByText(/확정 전 전액 반환/)).toHaveCount(0);
   await dialog.getByRole("radio", { name: /공 준비 참가/ }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/private/tmp/rally-court-apply-refined-375.png" });
   await dialog.getByRole("button", { name: "취소", exact: true }).click();
