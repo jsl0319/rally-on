@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-14",
+  "source": "Mobbin MCP search_screens",
+  "note": "Brand launch screens used for visual principles; not app-icon assets or proof of performance.",
+  "screens": [
+    {
+      "id": "85c01f98-aeef-419d-8297-de2f5d081324",
+      "image_url": "https://mobbin.com/api/mcp/short/Sm2HbawS",
+      "mobbin_url": "https://mobbin.com/screens/85c01f98-aeef-419d-8297-de2f5d081324",
+      "app_name": "theScore",
+      "platform": "ios"
+    },
+    {
+      "id": "6a2bb0f6-8f18-4f54-9ce9-8519a0282076",
+      "image_url": "https://mobbin.com/api/mcp/short/wVqSmoYJ",
+      "mobbin_url": "https://mobbin.com/screens/6a2bb0f6-8f18-4f54-9ce9-8519a0282076",
+      "app_name": "DAZN",
+      "platform": "ios"
+    },
+    {
+      "id": "e2d25542-2b56-4803-8d6c-f9b8f26a395a",
+      "image_url": "https://mobbin.com/api/mcp/short/RPT3vVlb",
+      "mobbin_url": "https://mobbin.com/screens/e2d25542-2b56-4803-8d6c-f9b8f26a395a",
+      "app_name": "Mesh",
+      "platform": "ios"
+    }
+  ]
+}

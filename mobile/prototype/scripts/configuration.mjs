@@ -1,5 +1,7 @@
 import { isIP } from 'node:net';
 
+export const prototypeAppName = '랠리온 검증';
+
 function localHost(host) {
   if (['localhost', '127.0.0.1', '[::1]'].includes(host)) return true;
   if (isIP(host) !== 4) return false;
@@ -21,7 +23,7 @@ export function prototypeConfig(rawUrl, allowLocalHttp = false) {
   }
   return {
     appId: 'dev.rallyon.prototype',
-    appName: 'Rally On 검증',
+    appName: prototypeAppName,
     webDir: 'www',
     appendUserAgent: ' RallyOnNativePrototype/0.0.1',
     loggingBehavior: 'none',

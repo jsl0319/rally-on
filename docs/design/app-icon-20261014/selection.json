@@ -1,0 +1,15 @@
+{
+  "status": "approved",
+  "date": "2026-10-14",
+  "userLabel": "B 시안",
+  "selectedVariant": "b2-rally-r-inset",
+  "description": "R 안쪽 빈 공간에 테니스공을 넣은 B 수정안",
+  "serviceSource": "public/images/brand/app-icon.svg",
+  "nativeDisplayName": "랠리온 검증",
+  "preservedVariants": [
+    "a-rally-ball",
+    "b-rally-r",
+    "b2-rally-r-inset",
+    "c-court-lime"
+  ]
+}

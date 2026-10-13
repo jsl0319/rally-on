@@ -10,6 +10,11 @@ async function fixture(t) {
   await mkdir(`${root}ios/App/App/Base.lproj`, { recursive: true });
   await mkdir(`${root}native/ios`, { recursive: true });
   await mkdir(`${root}native/ios/RallyWordmark.imageset`, { recursive: true });
+  await mkdir(`${root}native/ios/AppIcon.appiconset`, { recursive: true });
+  await writeFile(`${root}ios/App/App/Info.plist`, '<plist><dict><key>CFBundleDisplayName</key><string>Rally On 검증</string></dict></plist>');
+  for (const file of ['AppIcon-512@2x.png', 'Contents.json']) {
+    await writeFile(`${root}native/ios/AppIcon.appiconset/${file}`, await readFile(new URL('../native/ios/AppIcon.appiconset/' + file, import.meta.url)));
+  }
   for (const file of ['RallyWordmark.pdf', 'Contents.json']) {
     await writeFile(`${root}native/ios/RallyWordmark.imageset/${file}`, await readFile(new URL('../native/ios/RallyWordmark.imageset/' + file, import.meta.url)));
   }
@@ -28,6 +33,8 @@ test('플랫폼 재준비는 반복 가능하고 추적 소스 갱신을 반영�
   const { root, source, mapSource, target } = await fixture(t);
   await prepareIOS(root);
   await prepareIOS(root);
+  assert.match(await readFile(`${root}ios/App/App/Info.plist`, 'utf8'), /<string>랠리온 검증<\/string>/);
+  assert.deepEqual(await readFile(`${root}ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`), await readFile(`${root}native/ios/AppIcon.appiconset/AppIcon-512@2x.png`));
   await writeFile(`${root}native/ios/SceneDelegate.swift`, source + '\n// updated\n');
   await prepareIOS(root);
   assert.equal(await readFile(target, 'utf8'), source + '\n// updated\n\n' + mapSource);
@@ -49,5 +56,24 @@ test('생성 프로젝트에서 다른 사람이 고친 SceneDelegate는 덮어�
   const edited = source + '\n// local change\n';
   await writeFile(target, edited);
   await assert.rejects(prepareIOS(root), /덮어쓰지/);
+  assert.equal(await readFile(target, 'utf8'), edited);
+});
+
+test('생성 프로젝트에서 별도 수정한 앱 아이콘은 덮어쓰지 않는다', async t => {
+  const { root } = await fixture(t);
+  await prepareIOS(root);
+  const target = `${root}ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`;
+  const edited = Buffer.from('local icon edit');
+  await writeFile(target, edited);
+  await assert.rejects(prepareIOS(root), /AppIcon.*덮어쓰지/);
+  assert.deepEqual(await readFile(target), edited);
+});
+
+test('앱 표시 이름에 별도 수정이 있으면 보존한다', async t => {
+  const { root } = await fixture(t);
+  const target = `${root}ios/App/App/Info.plist`;
+  const edited = '<plist><dict><key>CFBundleDisplayName</key><string>Local custom name</string></dict></plist>';
+  await writeFile(target, edited);
+  await assert.rejects(prepareIOS(root), /표시 이름.*덮어쓰지/);
   assert.equal(await readFile(target, 'utf8'), edited);
 });

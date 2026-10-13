@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Rally On — Rally Ball</title>
+  <defs><clipPath id="ball"><circle cx="558" cy="464" r="250"/></clipPath></defs>
+  <path fill="#174c3c" d="M0 0h1024v1024H0z"/>
+  <path d="m228 589 96-45M216 715l169-79" fill="none" stroke="#fffef2" stroke-width="42" stroke-linecap="round"/>
+  <circle cx="558" cy="464" r="250" fill="#d9ed92"/>
+  <g clip-path="url(#ball)" transform="rotate(-24 558 464)" fill="none" stroke="#174c3c" stroke-width="25">
+    <path d="M307 244c238 35 238 405 0 440M809 244c-238 35-238 405 0 440"/>
+  </g>
+</svg>

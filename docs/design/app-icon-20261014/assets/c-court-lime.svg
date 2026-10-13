@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Rally On — Court Lime</title>
+  <defs><clipPath id="ball"><circle cx="512" cy="512" r="284"/></clipPath></defs>
+  <path fill="#d9ed92" d="M0 0h1024v1024H0z"/>
+  <circle cx="512" cy="512" r="284" fill="#174c3c"/>
+  <g clip-path="url(#ball)" transform="rotate(-24 512 512)" fill="none" stroke="#d9ed92" stroke-width="30">
+    <path d="M227 262c270 40 270 460 0 500M797 262c-270 40-270 460 0 500"/>
+  </g>
+</svg>
