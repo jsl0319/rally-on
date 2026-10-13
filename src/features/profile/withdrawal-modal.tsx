@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Modal, ModalContainer, ModalContent, ModalContentItem, ModalHeading } from "@wanteddev/wds";
+import { ActionArea, ActionAreaButton, Modal, ModalContainer, ModalContent, ModalContentItem, ModalHeading } from "@wanteddev/wds";
 import { Button } from "@/components/ui/button";
 import type { WithdrawalPreview } from "@/server/domain/account-service";
 import { apiMessage, formatStatusChangedAt } from "@/features/partner/partner-session";
@@ -35,7 +35,7 @@ export function WithdrawalModal({ onCancel }: { onCancel: () => void }) {
       router.refresh();
     } catch (e) { setError(e instanceof Error ? e.message : "처리 결과를 확인해 주세요."); setBusy(false); }
   };
-  return <Modal open onOpenChange={(open) => { if (!open && !busy) onCancel(); }}><ModalContainer variant="bottom"><ModalContent><ModalContentItem>
+  return <Modal open onOpenChange={(open) => { if (!open && !busy) onCancel(); }}><ModalContainer variant="bottom" sx={{ width: "100%", maxWidth: 560, maxHeight: "calc(100dvh - var(--rally-safe-top) - 12px)" }}><ModalContent><ModalContentItem gap={0}>
     <ModalHeading>탈퇴 전 거래 확인</ModalHeading>
     <p className="mt-3 text-sm leading-6 text-[var(--tm-text-muted)]">시작 전 코트 매칭 신청은 취소돼요. 탈퇴 후에도 같은 카카오 계정으로 본인의 환불·문의만 확인할 수 있어요.</p>
     {preview ? <div className="mt-4 space-y-3 text-sm">
@@ -48,6 +48,10 @@ export function WithdrawalModal({ onCancel }: { onCancel: () => void }) {
     </div> : !error ? <p className="mt-4" role="status">거래 내역 확인 중…</p> : null}
     {error ? <p className="mt-3 text-sm text-rose-700" role="alert">{error}</p> : null}
     {!preview && error ? <Button className="mt-3" onClick={() => void load()}>다시 확인</Button> : null}
-    <div className="mt-6 grid grid-cols-2 gap-3"><Button disabled={busy} variant="secondary" onClick={onCancel}>돌아가기</Button><Button disabled={busy || !preview} onClick={() => void confirm()}>확인 후 탈퇴</Button></div>
-  </ModalContentItem></ModalContent></ModalContainer></Modal>;
+  </ModalContentItem></ModalContent>
+    <ActionArea variant="neutral" sx={{ paddingTop: 12, paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}>
+      <ActionAreaButton sx={{ minHeight: 52, borderRadius: 14 }} buttonColor="assistive" variant="alternative" disabled={busy} onClick={onCancel}>돌아가기</ActionAreaButton>
+      <ActionAreaButton sx={{ minHeight: 52, borderRadius: 14 }} variant="main" loading={busy} disabled={busy || !preview} onClick={() => void confirm()}>확인 후 탈퇴</ActionAreaButton>
+    </ActionArea>
+  </ModalContainer></Modal>;
 }
