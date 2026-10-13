@@ -46,7 +46,7 @@ function dateLabel(value: string | null): string {
 }
 
 export function MatchDiscoveryHeader() {
-  return <StickyPageHeader title="매칭" actions={<Link className="rally-text-action rounded-full bg-[var(--tm-bg-subtle)] px-4" href="/activity/received">내 매칭</Link>} />;
+  return <StickyPageHeader title="매칭" actions={<Link className="rally-header-action" href="/activity/received">내 매칭</Link>} />;
 }
 
 type DiscoveryValues = FilterCriteria & { sort: string; availableOnly?: boolean };

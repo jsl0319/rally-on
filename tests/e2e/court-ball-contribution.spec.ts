@@ -45,6 +45,12 @@ test("모바일 공 준비 신청 → 할인 입금 확정 → 미지참 기록 
     expect(a).toMatchObject({ courtFeeKrw: 31000, bringsBalls: true, status: "ACCEPTED" });
     const list = await (await member.request.get("/api/v1/partner-session-slots")).json();
     expect(list.items.find((slot: { id: string }) => slot.id === f.partnerSlotId).ballContribution.available).toBe(false);
+    await page.goto("/partner-sessions");
+    const card = page.locator(`a.rally-discovery-card[href="/partner-sessions/${f.partnerSlotId}"]`);
+    await expect(card).toBeVisible();
+    await expect(card.getByText(/공 준비 가능|공 준비 마감/)).toHaveCount(0);
+    await expect(card.getByText("5,000원 할인", { exact: true })).toHaveCount(0);
+    await page.goto(`/partner-sessions/${f.partnerSlotId}`);
     const base = `/api/v1/court-match-applications/${a.id}`;
     const input = { clientRequestId: randomUUID(), expectedReceiptVersion: 1, note: "현장 확인 결과 새 테니스공을 준비하지 않음", confirmed: true };
     expect((await request.post(`${base}/balls-missing`, { data: input })).status()).toBe(401);

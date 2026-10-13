@@ -147,6 +147,10 @@ input::-webkit-date-and-time-value { min-height: 1.5em; text-align: left; }
 .rally-input[aria-invalid="true"] { border-color: var(--tm-status-error-text); }
 body [wds-component="text-field"], body [wds-component="text-area"] { border-radius: 14px; }
 .rally-text-action { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--tm-action-primary); }
+/* Compact visible header actions retain a 44px vertical touch target. */
+.rally-header-action { position: relative; display: inline-flex; min-height: 32px; align-items: center; justify-content: center; gap: 4px; padding: 5px 12px; border: 1px solid var(--tm-border-default); border-radius: 999px; background: var(--tm-bg-surface); color: var(--tm-action-primary); font-size: 12px; line-height: 20px; font-weight: 600; white-space: nowrap; }
+.rally-header-action::after { content: ""; position: absolute; inset: -6px 0; }
+.rally-header-action:hover { border-color: var(--tm-border-strong); }
 .rally-filter-scroll { scrollbar-width: none; }
 .rally-filter-scroll::-webkit-scrollbar { display: none; }
 .rally-section { border-top: 1px solid var(--tm-border-default); padding: 24px; }

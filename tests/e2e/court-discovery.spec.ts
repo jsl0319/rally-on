@@ -28,7 +28,13 @@ test("코트 목록 필터·가격 정렬·빈 결과 복구와 모바일 상세
   const cards = page.locator(".rally-discovery-card");
   await expect(cards).toHaveCount(2);
   await expect(page.getByText("자동 승인", { exact: true })).toHaveCount(0);
-  await expect(cards.first().getByText("5,000원 할인", { exact: true })).toBeVisible();
+  const benefit = page.locator("details").filter({ hasText: "공 준비하면 5,000원 할인" });
+  await expect(benefit).toHaveCount(1);
+  await expect(cards.getByText(/5,000원 할인|선착순/)).toHaveCount(0);
+  await expect(cards.getByText(/공 준비 가능|공 준비 마감/)).toHaveCount(0);
+  await benefit.locator("summary").click();
+  await expect(benefit.getByText(/공을 준비하지 않으면/)).toBeVisible();
+  await benefit.locator("summary").click();
   await page.getByRole("button", { name: "시간 빠른순" }).click();
   await expect(page.getByRole("dialog").getByRole("button", { name: "날짜", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: /낮은 가격순.*할인 전/ }).click();
@@ -43,6 +49,7 @@ test("코트 목록 필터·가격 정렬·빈 결과 복구와 모바일 상세
   await page.getByRole("button", { name: "오늘", exact: true }).click();
   await page.getByRole("button", { name: "적용하기", exact: true }).click();
   await expect(page.getByText("조건에 맞는 코트 매칭이 없어요.")).toBeVisible();
+  await expect(benefit).toHaveCount(0);
   await page.getByRole("button", { name: "필터 초기화", exact: true }).click();
   await expect(cards).toHaveCount(2);
   await expect(cards.first()).toHaveAttribute("href", `/partner-sessions/${extra.id}`);
