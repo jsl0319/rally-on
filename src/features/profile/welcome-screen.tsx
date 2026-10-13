@@ -1,3 +1,4 @@
+import { LoginSupportContact } from "@/components/ui/login-support-contact";
 import { EntryBrand, EntryCourt } from "@/components/ui/entry-brand";
 import Link from "next/link";
 import { AppleLogo, ChatCircle } from "@phosphor-icons/react/dist/ssr";
@@ -23,6 +24,7 @@ export function WelcomeScreen({ loading, onSignIn, onOperator, error }: {
         </div>
         <button className="rally-welcome-operator" disabled={loading} onClick={onOperator} type="button">테니스장을 운영하고 계신가요?</button>
         <p className="rally-welcome-terms">계속하면 <Link href="/terms">이용약관</Link>과 <Link href="/privacy">개인정보 처리방침</Link>에<br />동의합니다.</p>
+        <LoginSupportContact />
       </div>
     </section>
   </main>;

@@ -20,6 +20,7 @@ function apiMessage(body: unknown, fallback: string) {
 export function MSupportInquiry() {
   // 코트 매칭 화면에서 넘어오면 어느 건인지 함께 보낸다. 운영자에게 되묻지 않아도 된다.
   const params = useSearchParams();
+  const inquiryId = params.get("inquiryId");
   const matchId = params.get("matchId");
   const applicationId = params.get("applicationId");
   const [items, setItems] = useState<Inquiry[] | null>(null);
@@ -28,7 +29,7 @@ export function MSupportInquiry() {
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [view, setView] = useState<"compose" | "history">("compose");
+  const [view, setView] = useState<"compose" | "history">(inquiryId ? "history" : "compose");
 
   const load = useCallback(async () => {
     try {
@@ -68,6 +69,7 @@ export function MSupportInquiry() {
   };
 
   const valid = message.trim().length >= 10;
+  const visibleItems = items && inquiryId && !submitted ? [...items.filter(item => item.id === inquiryId), ...items.filter(item => item.id !== inquiryId)] : items;
 
   return <main className="min-h-app bg-[var(--tm-bg-page)] pb-10 text-[var(--tm-text-primary)]">
     <AccountPageHeader title="1:1 문의" />
@@ -87,7 +89,7 @@ export function MSupportInquiry() {
         {submitted ? <p className="mb-4 rounded-xl bg-[var(--tm-bg-subtle)] p-3 text-sm leading-6 text-[var(--tm-action-primary)]" role="status">문의가 접수됐어요. 확인 후 답변드릴게요.</p> : null}
         <h2 className="sr-only">내 문의 내역</h2>
         {error ? <section role="alert" className="mb-4 rounded-xl bg-white p-4"><p className="text-sm">{error}</p><Button className="mt-3" onClick={() => void load()} size="small">다시 불러오기</Button></section> : null}
-        {items === null ? !error ? <CourtRallyLoader label="문의 내역을 불러오고 있어요." /> : null : items.length === 0 ? <div className="py-14 text-center"><ChatCircleText aria-hidden size={36} className="mx-auto text-[var(--tm-action-primary)]" /><p className="mt-4 font-semibold">아직 보낸 문의가 없어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">필요할 때 편하게 남겨 주세요.</p></div> : <ul className="space-y-3">{items.map((item, index) => <li key={item.id}><details className="rally-disclosure rounded-2xl border border-[var(--tm-border-default)] bg-white" open={submitted && index === 0 ? true : undefined} name="support-inquiry"><summary className="flex items-center gap-3 p-4"><span className="min-w-0 flex-1"><span className="text-[11px] font-semibold text-[var(--tm-action-primary)]">{item.statusLabel}</span><span className="mt-2 block truncate text-sm font-semibold">{item.message || "매칭 관련 문의"}</span><time className="mt-1 block text-[11px] text-[var(--tm-text-secondary)]">{new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Seoul" }).format(new Date(item.createdAt))}</time></span><CaretDown aria-hidden size={16} className="rally-disclosure-chevron shrink-0" /></summary><SupportThread inquiry={item} audience="member" refresh={load} embedded /></details></li>)}</ul>}
+        {items === null ? !error ? <CourtRallyLoader label="문의 내역을 불러오고 있어요." /> : null : items.length === 0 ? <div className="py-14 text-center"><ChatCircleText aria-hidden size={36} className="mx-auto text-[var(--tm-action-primary)]" /><p className="mt-4 font-semibold">아직 보낸 문의가 없어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">필요할 때 편하게 남겨 주세요.</p></div> : <ul className="space-y-3">{visibleItems?.map((item, index) => <li key={item.id}><details className="rally-disclosure rounded-2xl border border-[var(--tm-border-default)] bg-white" open={(!submitted && item.id === inquiryId) || (submitted && index === 0) ? true : undefined} name="support-inquiry"><summary className="flex items-center gap-3 p-4"><span className="min-w-0 flex-1"><span className="text-[11px] font-semibold text-[var(--tm-action-primary)]">{item.statusLabel}</span><span className="mt-2 block truncate text-sm font-semibold">{item.message || "매칭 관련 문의"}</span><time className="mt-1 block text-[11px] text-[var(--tm-text-secondary)]">{new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Seoul" }).format(new Date(item.createdAt))}</time></span><CaretDown aria-hidden size={16} className="rally-disclosure-chevron shrink-0" /></summary><SupportThread inquiry={item} audience="member" refresh={load} embedded /></details></li>)}</ul>}
       </>}
     </div>
   </main>;

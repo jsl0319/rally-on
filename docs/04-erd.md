@@ -1392,3 +1392,11 @@ Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_
 `CourtSlot.ballDiscountEnabled`는 기존 행 `false`, 새 초안 저장은 `true`다. 활성화 시 `priceKrw > 5000` DB 제약을 적용한다.
 `MatchApplication.courtFeeKrw`는 신청 시 고정한 실제 참가비이며 과거 `null`은 Match 금액으로 읽는다. `bringsBalls`는 역할 이력이다. 활성 신청(PENDING/ACCEPTED/CONFIRMED)에 대해 Match당 공 준비 1명만 허용하는 부분 유일 인덱스를 사용한다.
 `ballsMissingAt/By/RequestId/Note`는 운영자가 한 번 기록한 현장 미지참 감사 정보다. 원 참가비·동의 스냅샷을 바꾸지 않으며 추가 5,000원은 별도 납부 의무로 계산한다. 기존 수령 이력과 환불 이력은 그대로 재사용한다.
+
+## 서비스 관리 확장 (2026-10-13)
+
+- `Announcement.status`: `DRAFT`(새 공지 기본), `PUBLISHED`, `HIDDEN`. 기존 데이터는 공개 유지.
+- `isPinned`, `version`, `updatedAt`, `createdByUserId?`, `updatedByUserId?` 추가. 작성·수정자 ID는 내부 추적용 UUID이며 사용자 응답에 포함하지 않는다.
+- `publishedAt`은 초안에서 null, 최초 공개 때 설정, 이후 수정·재공개 시 유지. 공개 공지의 날짜 누락은 DB CHECK로 차단.
+- `NotificationType`: `SUPPORT_INQUIRY_RECEIVED`, `SUPPORT_INQUIRY_UPDATED`, `SUPPORT_INQUIRY_REPLIED`, `SUPPORT_INQUIRY_RESOLVED`, `SUPPORT_OPERATOR_REQUESTED` 추가. 알림에 문의 본문을 복사하지 않는다.
+- 기존 문의·메시지 모델과 버전·요청 ID를 그대로 사용한다. 상세 정책: `docs/03-31-service-administration.md`.

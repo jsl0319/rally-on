@@ -39,7 +39,7 @@ function notificationMark(type: string) {
   if (type.includes("REFUND") || type.includes("DEPOSIT")) return <CreditCard size={22} />;
   if (type.includes("CANCELLED") || type.includes("EXPIRED") || type === "APPLICATION_REJECTED") return <Warning size={22} />;
   if (type === "APPLICATION_ACCEPTED" || type === "COURT_MATCH_CONFIRMED") return <TennisBall size={22} />;
-  if (type === "APPLICATION_RECEIVED" || type === "MATCH_PARTICIPANT_LEFT") return <EnvelopeSimple size={22} />;
+  if (type.startsWith("SUPPORT_") || type === "APPLICATION_RECEIVED" || type === "MATCH_PARTICIPANT_LEFT") return <EnvelopeSimple size={22} />;
   return <Bell size={22} />;
 }
 

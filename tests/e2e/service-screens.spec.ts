@@ -77,7 +77,7 @@ test("마이·프로필·공지·문의·약관은 작은 화면에서 실제 �
   test.setTimeout(120000);
   await resetE2eDatabase();
   await prisma.announcement.deleteMany();
-  await prisma.announcement.create({ data: { title: "처음 만나는 메이트를 위한 이용 안내", body: "매칭 참가 전 장소와 시간을 확인해 주세요.\n준비물은 매칭 채팅에서 이야기해요." } });
+  await prisma.announcement.create({ data: { status: "PUBLISHED", publishedAt: new Date(), title: "처음 만나는 메이트를 위한 이용 안내", body: "매칭 참가 전 장소와 시간을 확인해 주세요.\n준비물은 매칭 채팅에서 이야기해요." } });
   await signIn(context);
   const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
   await page.setViewportSize({ width: 375, height: 812 });

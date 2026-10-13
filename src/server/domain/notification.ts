@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 export type NotificationType =
+  | "SUPPORT_INQUIRY_RECEIVED"
+  | "SUPPORT_INQUIRY_UPDATED"
+  | "SUPPORT_INQUIRY_REPLIED"
+  | "SUPPORT_INQUIRY_RESOLVED"
+  | "SUPPORT_OPERATOR_REQUESTED"
   | "APPLICATION_RECEIVED"
   | "APPLICATION_ACCEPTED"
   | "APPLICATION_REJECTED"
@@ -30,6 +35,7 @@ export type NotificationType =
  * 화면을 열면 언제든 같은 내용을 볼 수 있고, 알림함이 조용하길 바라는 사람이 있다.
  */
 const alwaysDelivered = new Set<NotificationType>([
+  "SUPPORT_INQUIRY_RECEIVED", "SUPPORT_INQUIRY_UPDATED", "SUPPORT_INQUIRY_REPLIED", "SUPPORT_INQUIRY_RESOLVED", "SUPPORT_OPERATOR_REQUESTED",
   "COURT_MATCH_DEPOSIT_REQUIRED",
   "COURT_MATCH_DEPOSIT_CLAIMED",
   "COURT_MATCH_CONFIRMED",
@@ -53,6 +59,16 @@ export function isAlwaysDeliveredNotification(type: NotificationType) {
  */
 export function buildNotificationContent(type: NotificationType, matchTitle: string): { title: string; body: string } {
   switch (type) {
+    case "SUPPORT_INQUIRY_RECEIVED":
+      return { title: "새 문의가 도착했어요", body: "서비스 관리에서 문의를 확인해 주세요." };
+    case "SUPPORT_INQUIRY_UPDATED":
+      return { title: "문의에 새 메시지가 도착했어요", body: "추가 문의 또는 운영자의 회신을 확인해 주세요." };
+    case "SUPPORT_INQUIRY_REPLIED":
+      return { title: "문의에 답변이 도착했어요", body: "내 문의 내역에서 담당자의 답변을 확인해 주세요." };
+    case "SUPPORT_INQUIRY_RESOLVED":
+      return { title: "문의가 해결 완료로 표시됐어요", body: "처리 내용을 확인해 주세요. 더 도움이 필요하면 추가 문의를 남길 수 있어요." };
+    case "SUPPORT_OPERATOR_REQUESTED":
+      return { title: "문의 확인 요청이 도착했어요", body: "담당자가 코트 매칭에 대해 확인을 요청했어요." };
     case "APPLICATION_RECEIVED":
       return { title: "새 신청이 도착했어요", body: `${matchTitle}에 함께 치고 싶다는 신청이 왔어요.` };
     case "APPLICATION_ACCEPTED":

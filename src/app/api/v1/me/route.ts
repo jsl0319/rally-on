@@ -26,6 +26,7 @@ export async function GET() {
     return Response.json({
       id: user.id,
       nickname: user.nickname,
+      canManageService: user.role === "INTERNAL_REVIEWER",
       nicknameConfirmed: user.nicknameConfirmedAt !== null,
       status: user.status,
       onboardingCompleted: user.onboardingCompletedAt !== null,

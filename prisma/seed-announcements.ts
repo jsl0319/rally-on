@@ -28,7 +28,7 @@ async function seedAnnouncements() {
     if (existing) {
       await prisma.announcement.update({ where: { id: existing.id }, data: { body: announcement.body } });
     } else {
-      await prisma.announcement.create({ data: announcement });
+      await prisma.announcement.create({ data: { ...announcement, status: "PUBLISHED", publishedAt: new Date() } });
     }
   }
 }

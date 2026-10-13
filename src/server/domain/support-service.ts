@@ -4,6 +4,8 @@ import { Prisma, type PrismaClient, type SupportInquiryStatus } from "@/generate
 import { DomainError } from "./profile-service";
 import { assertInternalReviewer } from "./operator-application-service";
 import { courtMoneySummary } from "./court-match-money";
+import { recordApplicationNotifications } from "./notification-service";
+import type { NotificationType } from "./notification";
 import { lockApplicationMatch } from "./court-match-service";
 
 export const supportInquiryInputSchema = z.object({
@@ -17,7 +19,7 @@ export const supportActionInputSchema = z.object({
   action: z.enum(["CLAIM", "REPLY", "REQUEST_OPERATOR", "OPERATOR_REPLY", "RESOLVE"]),
   body: z.string().trim().min(2).max(2000), expectedVersion: z.number().int().positive(), clientRequestId: z.uuid(),
 });
-export const supportListQuerySchema = z.object({ cursor: z.uuid().optional(), status: z.enum(["OPEN", "IN_PROGRESS", "WAITING_OPERATOR", "ANSWERED", "RESOLVED"]).optional() });
+export const supportListQuerySchema = z.object({ cursor: z.uuid().optional(), inquiryId: z.uuid().optional(), status: z.enum(["ACTION_REQUIRED", "OPEN", "IN_PROGRESS", "WAITING_OPERATOR", "ANSWERED", "RESOLVED"]).optional() });
 const statusLabels: Record<SupportInquiryStatus, string> = { OPEN: "접수됨", IN_PROGRESS: "검토 중", WAITING_OPERATOR: "운영자 확인 중", ANSWERED: "답변 완료", RESOLVED: "해결 완료" };
 const include = {
   assignee: { select: { status: true, role: true } },
@@ -51,12 +53,17 @@ function toView(i: Inquiry, audience: SupportAudience, viewerId: string) {
 }
 export type SupportInquiryView = ReturnType<typeof toView>;
 export async function createSupportInquiry(prisma: PrismaClient, userId: string, input: SupportInquiryInput, limited = false) {
-  const matchId = input.matchId ? (await prisma.match.findFirst({ where: { id: input.matchId, OR: [{ hostUserId: userId }, { applications: { some: { applicantUserId: userId } } }] }, select: { id: true } }))?.id ?? null : null;
-  if (limited && (!matchId || !(await prisma.match.count({ where: { id: matchId, courtSource: "PARTNER_COURT" } })))) throw new DomainError("SUPPORT_TRANSACTION_REQUIRED", 403, "본인의 기존 코트 매칭에 대해서만 문의할 수 있어요.");
-  const application = matchId ? await prisma.matchApplication.findFirst({ where: { matchId, applicantUserId: userId, ...(input.applicationId ? { id: input.applicationId } : {}) }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true } }) : null;
-  if (input.applicationId && !application) throw new DomainError("APPLICATION_NOT_FOUND", 404, "본인의 신청 내역을 다시 확인해 주세요.");
-  const inquiry = await prisma.supportInquiry.create({ data: { userId, matchId, applicationId: application?.id, message: input.message }, include });
-  return toView(inquiry, "member", userId);
+  return prisma.$transaction(async (tx) => {
+    await lockAccountTransactions(tx);
+    if (!limited) await assertActiveTransactionUser(tx, userId);
+    const matchId = input.matchId ? (await tx.match.findFirst({ where: { id: input.matchId, OR: [{ hostUserId: userId }, { applications: { some: { applicantUserId: userId } } }] }, select: { id: true } }))?.id ?? null : null;
+    if (limited && (!matchId || !(await tx.match.count({ where: { id: matchId, courtSource: "PARTNER_COURT" } })))) throw new DomainError("SUPPORT_TRANSACTION_REQUIRED", 403, "본인의 기존 코트 매칭에 대해서만 문의할 수 있어요.");
+    const application = matchId ? await tx.matchApplication.findFirst({ where: { matchId, applicantUserId: userId, ...(input.applicationId ? { id: input.applicationId } : {}) }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true } }) : null;
+    if (input.applicationId && !application) throw new DomainError("APPLICATION_NOT_FOUND", 404, "본인의 신청 내역을 다시 확인해 주세요.");
+    const inquiry = await tx.supportInquiry.create({ data: { userId, matchId, applicationId: application?.id, message: input.message }, include });
+    await notifySupportReviewers(tx, inquiry, "SUPPORT_INQUIRY_RECEIVED");
+    return toView(inquiry, "member", userId);
+  });
 }
 export async function listMySupportInquiries(prisma: PrismaClient, userId: string, limited = false) {
   const items = await prisma.supportInquiry.findMany({ where: { userId, ...(limited ? { match: { courtSource: "PARTNER_COURT" } } : {}) }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], include });
@@ -65,7 +72,7 @@ export async function listMySupportInquiries(prisma: PrismaClient, userId: strin
 export async function listSupportQueue(prisma: PrismaClient, viewer: { id: string; role: string }, audience: "reviewer" | "operator", query: z.infer<typeof supportListQuerySchema>) {
   if (audience === "reviewer") assertInternalReviewer(viewer);
   const items = await prisma.supportInquiry.findMany({
-    where: { ...(query.status ? { status: query.status } : {}), ...(audience === "operator" ? {
+    where: { ...(query.inquiryId ? { id: query.inquiryId } : {}), ...(query.status ? { status: query.status === "ACTION_REQUIRED" ? { in: ["OPEN", "IN_PROGRESS"] } : query.status } : {}), ...(audience === "operator" ? {
       match: { hostUserId: viewer.id, courtSlot: { courtUnit: { court: { operatorApplication: { applicantUserId: viewer.id } } } } },
       messages: { some: { action: "REQUEST_OPERATOR" } },
     } : {}) },
@@ -129,6 +136,22 @@ export async function actOnSupportInquiry(prisma: PrismaClient, viewer: { id: st
     }
     await tx.supportInquiryMessage.create({ data: { inquiryId, authorUserId: viewer.id, clientRequestId: input.clientRequestId, action: input.action, ...(input.action === "CLAIM" ? { previousAssigneeUserId: inquiry.assigneeUserId, nextAssigneeUserId: viewer.id } : {}), visibility: ["REQUEST_OPERATOR", "OPERATOR_REPLY"].includes(input.action) ? "OPERATOR" : "PUBLIC", body: input.body } });
     await tx.supportInquiry.update({ where: { id: inquiryId }, data: { status, version: { increment: 1 }, ...(input.action === "CLAIM" ? { assigneeUserId: viewer.id } : {}) } });
+    if (audience !== "reviewer") {
+      await notifySupportReviewers(tx, inquiry, "SUPPORT_INQUIRY_UPDATED");
+    } else if (input.action === "REQUEST_OPERATOR") {
+      await recordApplicationNotifications(tx, { recipientUserIds: [inquiry.match!.hostUserId], type: "SUPPORT_OPERATOR_REQUESTED", matchTitle: "", href: `/partner/support-inquiries?inquiryId=${inquiryId}` });
+    } else if (input.action === "REPLY" || input.action === "RESOLVE") {
+      const member = await tx.user.findUniqueOrThrow({ where: { id: inquiry.userId }, select: { status: true } });
+      await recordApplicationNotifications(tx, { recipientUserIds: [inquiry.userId], type: input.action === "REPLY" ? "SUPPORT_INQUIRY_REPLIED" : "SUPPORT_INQUIRY_RESOLVED", matchTitle: "", href: member.status === "ACTIVE" ? `/support/inquiry?inquiryId=${inquiryId}` : "/account/transactions" });
+    }
     return { id: inquiryId };
   });
+}
+
+/** Only eligible active staff receive handling alerts; never include the inquiry text. */
+async function notifySupportReviewers(tx: Prisma.TransactionClient, inquiry: Inquiry, type: NotificationType) {
+  const excluded = [inquiry.userId, ...(inquiry.match ? [inquiry.match.hostUserId] : [])];
+  const assigned = inquiry.assigneeUserId && inquiry.assignee?.status === "ACTIVE" && inquiry.assignee.role === "INTERNAL_REVIEWER" && !excluded.includes(inquiry.assigneeUserId);
+  const recipients = await tx.user.findMany({ where: { status: "ACTIVE", role: "INTERNAL_REVIEWER", id: { notIn: excluded, ...(assigned ? { equals: inquiry.assigneeUserId! } : {}) } }, select: { id: true } });
+  await recordApplicationNotifications(tx, { recipientUserIds: recipients.map(user => user.id), type, matchTitle: "", href: `/internal/support-inquiries?inquiryId=${inquiry.id}` });
 }

@@ -154,7 +154,7 @@ export function InternalOperatorApplicationReview() {
   const emptyDescription = status === "REVIEW_REQUIRED" ? "새 신청이 들어오면 이 목록에서 안전한 정보만 확인할 수 있어요." : "심사자가 조치한 운영자만 이 목록에 표시돼요.";
 
   return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-12 pt-4 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[560px]">
-    <PageHeader eyebrow="내부 관리" title="운영자 신청 검토" description="확인한 내용만 선택해 판정해요. 공개 중지와 코트 비활성화는 새 공급·사진만 막고 기존 세션은 취소하지 않아요." />
+    <PageHeader backHref="/internal" eyebrow="내부 관리" title="운영자 신청 검토" description="확인한 내용만 선택해 판정해요. 공개 중지와 코트 비활성화는 새 공급·사진만 막고 기존 세션은 취소하지 않아요." />
     <Tab onValueChange={(value) => { const nextStatus = value as ReviewStatus; if (status === nextStatus) { void load(); return; } setApplications(null); setStatus(nextStatus); }} value={status}>
       <TabList aria-label="운영자 심사 상태" className="mt-5">
         {statusTabs.map((tab) => <TabListItem key={tab.value} value={tab.value}>{tab.label}</TabListItem>)}

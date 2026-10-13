@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 
 type Me = {
+  canManageService: boolean;
   nickname: string;
   matchNotificationsEnabled: boolean;
   profileImageUrl: string | null;
@@ -157,10 +158,12 @@ export function M8MyPage() {
             toggle={<Switch aria-label="매칭 소식 알림" checked={me.matchNotificationsEnabled} disabled={savingNotificationPref} onCheckedChange={(next) => void toggleMatchNotifications(next)} size="small" />}
           />
           {notificationError ? <p className="px-3 py-2 text-xs text-[var(--tm-status-error-text)]" role="alert">{notificationError}</p> : null}
-          <p className="px-3 py-3 text-[11px] leading-5 text-[var(--tm-text-secondary)]">참가비·취소 안내는 알림 설정과 관계없이 전달돼요.</p>
+          <p className="px-3 py-3 text-[11px] leading-5 text-[var(--tm-text-secondary)]">참가비·취소·문의 답변 안내는 알림 설정과 관계없이 전달돼요.</p>
           <LinkRow href="/notices" icon={<Megaphone aria-hidden="true" className="size-5 text-[var(--tm-text-muted)]" />} title="공지사항" />
           <LinkRow href="/support/inquiry" icon={<Headset aria-hidden="true" className="size-5 text-[var(--tm-text-muted)]" />} title="1:1 문의" />
         </Card>
+
+        {me.canManageService ? <><SectionLabel>관리자 전용</SectionLabel><Card><LinkRow href="/internal" title="서비스 관리" description="1:1 문의 · 공지사항 · 운영 확인" icon={<ShieldCheck aria-hidden className="size-5 text-[var(--tm-action-primary)]" />} /></Card></> : null}
 
         <SectionLabel>약관</SectionLabel>
         <Card>

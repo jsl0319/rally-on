@@ -1584,6 +1584,10 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     await actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", claim);
     await actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", claim);
     await actOnSupportInquiry(prisma, staff, inquiry.id, "reviewer", action("REQUEST_OPERATOR", "신청자의 은행 입금 내역을 대조해 주세요.", 2));
+    const operatorAlert = await prisma.notification.findFirstOrThrow({ where: { userId: owner.id, type: "SUPPORT_OPERATOR_REQUESTED" } });
+    expect(operatorAlert.href).toBe(`/partner/support-inquiries?inquiryId=${inquiry.id}`);
+    expect(operatorAlert.body).not.toContain("회원 비공개 원문");
+    expect((await listSupportQueue(prisma, { id: outsider.id, role: "MEMBER" }, "operator", { inquiryId: inquiry.id })).items).toHaveLength(0);
     const queue = await listSupportQueue(prisma, owner, "operator", {});
     expect(queue.items[0].message).toBeNull();
     expect(queue.items[0].messages.map((m) => m.body)).toEqual(["신청자의 은행 입금 내역을 대조해 주세요."]);

@@ -2015,3 +2015,18 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 - 코트 참가 상세: `application`은 최신 본인 신청, `previousApplications`는 그 이전 본인 신청이다. 타인의 신청·계좌는 반환하지 않는다. 이전 반환은 각각의 신청 ID에 대한 기존 환불 API를 사용한다.
 - 거래 정리 응답은 동일 매칭에 본인의 여러 신청이 있으면 모두 제공한다.
 - 문의 작성은 선택 `applicationId`를 받는다. 전달 시 매칭·본인 신청 소유권을 검증하고 타인의 ID 또는 다른 매칭 ID는 `APPLICATION_NOT_FOUND`로 거절한다. 생략 시 최신 본인 신청을 연결한다.
+
+## 서비스 관리자 메뉴 · 문의 알림 · 공지 관리 (2026-10-13)
+
+`docs/03-31-service-administration.md`가 본 기능의 정본이다. 서비스 관리자 = 활성 `INTERNAL_REVIEWER`. 코트 운영자 권한만으로 접근할 수 없다.
+
+- `GET /api/v1/me`: `canManageService: boolean` 추가. 메뉴 표시용이며 서버 권한 판정을 대체하지 않는다.
+- `GET /api/internal/overview`: 답변할 문의(`OPEN`+`IN_PROGRESS`), 운영자 확인 중, 공지 초안 수 반환.
+- `GET /api/internal/support-inquiries`: 기존 상태 외 `status=ACTION_REQUIRED`로 접수됨·검토 중만 조회. `inquiryId`로 특정 문의 조회. 운영자 목록도 `inquiryId` 지원하되 기존 소유·대조 요청 범위 안에서만 조회.
+- 문의 접수·추가 문의·대조 회신·공개 답변·해결 완료·대조 요청은 같은 트랜잭션에서 앱 내부 알림을 저장한다. 처리 요청의 `clientRequestId` 재시도는 알림도 중복하지 않는다.
+- `GET /api/internal/announcements`: `status=DRAFT|PUBLISHED|HIDDEN`, `cursor` 선택. 최대 50건과 `nextCursor` 반환.
+- `POST /api/internal/announcements`: `{id: UUID, title: 1..120자, body: 1..2000자, isPinned: boolean}`. 항상 초안 생성. 동일 ID·작성자·내용 재시도는 기존 공지 반환, 다른 내용은 409.
+- `GET /api/internal/announcements/{id}`: 편집용 공지 반환.
+- `PATCH /api/internal/announcements/{id}`: `{title, body, isPinned, status, expectedVersion}`. 활성 관리자 재확인과 버전 비교 후 변경. 충돌 409, 입력 오류 422, 권한 없음 403. 공개 후 초안으로 돌리지 않고 숨김으로 전환한다.
+- 관리자 공지 반환: `id,title,body,status,isPinned,version,publishedAt,updatedAt`. 작성자 내부 ID는 반환하지 않는다.
+- `GET /api/v1/announcements`: 공개 공지만 반환. `isPinned` 추가, 상단 고정 우선·공개 최신순. 초안·숨김·작성자 정보 비노출.

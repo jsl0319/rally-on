@@ -2,6 +2,7 @@
 
 import { PageHeader } from "@/components/ui/page-header";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { SupportInquiryView } from "@/server/domain/support-service";
 import { Button } from "@/components/ui/button";
@@ -9,28 +10,32 @@ import { apiMessage } from "@/features/partner/partner-session";
 import { SupportThread } from "./support-thread";
 
 export function SupportQueue({ audience }: { audience: "reviewer" | "operator" }) {
+  const params = useSearchParams();
+  const inquiryId = params.get("inquiryId");
+  const [focused, setFocused] = useState(Boolean(inquiryId));
   const [items, setItems] = useState<SupportInquiryView[]>([]);
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(inquiryId || audience === "operator" ? "" : "ACTION_REQUIRED");
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const endpoint = audience === "reviewer" ? "/api/internal/support-inquiries" : "/api/v1/operator/support-inquiries";
-  const load = useCallback(async (next?: string) => {
+  const load = useCallback(async (next?: string, signal?: AbortSignal) => {
     setBusy(true); setError("");
     try {
-      const params = new URLSearchParams({ ...(status ? { status } : {}), ...(next ? { cursor: next } : {}) });
-      const response = await fetch(`${endpoint}?${params}`, { cache: "no-store" });
+      const params = new URLSearchParams({ ...(focused && inquiryId ? { inquiryId } : {}), ...(status ? { status } : {}), ...(next ? { cursor: next } : {}) });
+      const response = await fetch(`${endpoint}?${params}`, { cache: "no-store", signal });
       const data = await response.json();
       if (!response.ok) throw new Error(apiMessage(data, "문의를 불러오지 못했어요."));
       setItems((old) => next ? [...old, ...data.items] : data.items); setCursor(data.nextCursor);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "불러오지 못했어요."); }
-    finally { setBusy(false); }
-  }, [endpoint, status]);
-  useEffect(() => { const timer = setTimeout(() => void load(), 0); return () => clearTimeout(timer); }, [load]);
+    } catch (caught) { if (!signal?.aborted) setError(caught instanceof Error ? caught.message : "불러오지 못했어요."); }
+    finally { if (!signal?.aborted) setBusy(false); }
+  }, [endpoint, status, focused, inquiryId]);
+  useEffect(() => { const controller = new AbortController(); const timer = setTimeout(() => void load(undefined, controller.signal), 0); return () => { clearTimeout(timer); controller.abort(); }; }, [load]);
   return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-8 pt-4 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[640px]">
-    <PageHeader backHref={audience === "reviewer" ? "/internal/operator-applications" : "/partner"} title={audience === "reviewer" ? "1:1 문의 처리" : "담당자 대조 요청"} />
+    <PageHeader backHref={audience === "reviewer" ? "/internal" : "/partner"} title={audience === "reviewer" ? "1:1 문의 처리" : "담당자 대조 요청"} />
     {audience === "reviewer" ? <Link className="mb-4 block text-sm font-semibold text-[var(--tm-action-primary)]" href="/internal/court-handoffs">비활성 운영자 거래 인계 →</Link> : null}
-    <label className="mt-5 block text-sm">처리 상태<select className="rally-input ml-3 rounded-xl border border-[var(--tm-border-default)] bg-white p-3" value={status} onChange={(e) => setStatus(e.target.value)}>{[["", "전체"], ["OPEN", "접수됨"], ["IN_PROGRESS", "검토 중"], ["WAITING_OPERATOR", "운영자 확인 중"], ["ANSWERED", "답변 완료"], ["RESOLVED", "해결 완료"]].map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select></label>
+    {focused ? <Button className="mt-4" variant="secondary" size="medium" disabled={busy} onClick={() => { setFocused(false); setStatus(""); }}>전체 문의 보기</Button> : null}
+    <label className="mt-5 block text-sm">처리 상태<select disabled={busy} className="rally-input ml-3 rounded-xl border border-[var(--tm-border-default)] bg-white p-3" value={status} onChange={(e) => setStatus(e.target.value)}>{[["", "전체"], ["ACTION_REQUIRED", "답변할 문의"], ["OPEN", "접수됨"], ["IN_PROGRESS", "검토 중"], ["WAITING_OPERATOR", "운영자 확인 중"], ["ANSWERED", "답변 완료"], ["RESOLVED", "해결 완료"]].map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select></label>
     <Button className="mt-3" disabled={busy} size="medium" variant="secondary" onClick={() => void load()}>새로고침</Button>
     {error ? <p className="mt-4 text-rose-700" role="alert">{error}</p> : null}
     {!busy && !error && !items.length ? <p className="mt-6 text-sm text-[var(--tm-text-secondary)]">해당 상태의 문의가 없어요.</p> : null}

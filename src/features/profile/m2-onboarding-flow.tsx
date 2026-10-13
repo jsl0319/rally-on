@@ -3,6 +3,7 @@
 import { FormControl, FormField, FormLabel, FormMessage, TextField } from "@wanteddev/wds";
 import { signIn } from "next-auth/react";
 import { Check, ArrowLeft, TennisBall } from "@phosphor-icons/react";
+import { LoginSupportContact } from "@/components/ui/login-support-contact";
 import { WelcomeScreen } from "./welcome-screen";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -253,7 +254,7 @@ export function ChoiceList({ options, selected, onSelect }: { options: ReadonlyA
 }
 
 function ServiceCheckError({ onRetry }: { onRetry: () => void }) {
-  return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-page)] px-6 py-12 text-[var(--tm-text-primary)]"><section className="w-full max-w-[420px]"><div role="alert"><h1 className="text-balance text-[28px] font-bold leading-tight">잠시 연결이 끊겼어요</h1><p className="mt-4 text-base leading-7 text-[var(--tm-text-secondary)]">네트워크 상태를 확인한 뒤 다시 시도해 주세요.</p></div><Button className="mt-8" fullWidth onClick={onRetry}>다시 연결하기</Button></section></main>;
+  return <main className="grid min-h-app place-items-center bg-[var(--tm-bg-page)] px-6 py-12 text-[var(--tm-text-primary)]"><section className="w-full max-w-[420px]"><div role="alert"><h1 className="text-balance text-[28px] font-bold leading-tight">잠시 연결이 끊겼어요</h1><p className="mt-4 text-base leading-7 text-[var(--tm-text-secondary)]">네트워크 상태를 확인한 뒤 다시 시도해 주세요.</p></div><Button className="mt-8" fullWidth onClick={onRetry}>다시 연결하기</Button><div className="mt-5"><LoginSupportContact /></div></section></main>;
 }
 
 /** 입력 화면 수. 닉네임 + 질문 네 개다. 막대와 숫자가 같은 값을 보게 한다. */
