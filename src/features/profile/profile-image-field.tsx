@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRef, useState } from "react";
 import { Camera, UserCircle } from "@phosphor-icons/react";
+import { useActionToast } from "@/components/feedback/use-action-toast";
 
 const maxProfileImageBytes = 5 * 1024 * 1024;
 
@@ -15,6 +16,7 @@ function errorMessage(body: unknown, fallback: string) {
  * `기본 사진으로`는 올린 사진만 지우고 카카오 사진으로 되돌린다.
  */
 export function ProfileImageField({ nickname, onChange, url }: { nickname: string; onChange: (url: string | null) => void; url: string | null }) {
+  const showComplete = useActionToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -34,6 +36,7 @@ export function ProfileImageField({ nickname, onChange, url }: { nickname: strin
       const body: unknown = await response.json();
       if (!response.ok) throw new Error(errorMessage(body, "사진을 올리지 못했어요."));
       onChange((body as { profileImageUrl: string | null }).profileImageUrl);
+      showComplete("프로필 사진이 저장되었습니다.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "사진을 올리지 못했어요.");
     } finally {
@@ -49,6 +52,7 @@ export function ProfileImageField({ nickname, onChange, url }: { nickname: strin
       const body: unknown = await response.json();
       if (!response.ok) throw new Error(errorMessage(body, "사진을 되돌리지 못했어요."));
       onChange((body as { profileImageUrl: string | null }).profileImageUrl);
+      showComplete("기본 프로필 사진으로 변경되었습니다.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "사진을 되돌리지 못했어요.");
     } finally {

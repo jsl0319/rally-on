@@ -14,6 +14,7 @@ import { ProfileImageField } from "./profile-image-field";
 import { BackButton } from "@/components/navigation/back-button";
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+import { useActionToast } from "@/components/feedback/use-action-toast";
 
 type ExperienceRange = "UNDER_3_MONTHS" | "MONTHS_3_TO_6" | "MONTHS_6_TO_12" | "YEARS_1_TO_2" | "YEARS_2_PLUS";
 type RallyLevel = "STARTING" | "SHORT_RALLY" | "COMFORTABLE_RALLY" | "STANDARD_RALLY";
@@ -68,6 +69,7 @@ function OptionCard({ active, description, onClick, title }: { active: boolean; 
 
 export function ProfileEditPage({ returnTo = "/my" }: { returnTo?: string }) {
   const router = useRouter();
+  const showComplete = useActionToast();
   const [draft, setDraft] = useState<ProfileDraft>(emptyDraft);
   const [nickname, setNickname] = useState("");
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
@@ -134,6 +136,7 @@ export function ProfileEditPage({ returnTo = "/my" }: { returnTo?: string }) {
         }
       }
       await requestJson(await fetch("/api/v1/me/tennis-profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gender: draft.gender, experienceRange: draft.experienceRange, rallyLevel: draft.rallyLevel, gameExperience: draft.gameExperience, playPurposes: draft.playPurposes, expectedVersion: draft.version }) }), "프로필을 저장하지 못했어요.");
+      showComplete("프로필 저장이 완료되었습니다.");
       router.replace(getSafeReturnTo(returnTo));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "프로필을 저장하지 못했어요.");

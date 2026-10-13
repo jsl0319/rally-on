@@ -223,3 +223,18 @@ html.rally-pull-refresh-page, html.rally-pull-refresh-page body { overscroll-beh
 .rally-discovery-card .rally-card-footer { grid-column: 1 / -1; border-top: 1px solid var(--tm-border-subtle); }
 
 .rally-discovery-card .rally-card-badges > span { padding: 2px 6px; border-radius: 6px; }
+
+/* Keep completion feedback above the keyboard and bottom actions, including after navigation. */
+#wds-region-manager-bottom {
+  top: calc(var(--rally-safe-top) + 12px);
+  bottom: auto;
+  width: calc(100% - 32px);
+  min-width: 0;
+  max-width: 420px;
+  padding: 0;
+}
+#wds-region-manager-bottom [data-role="toast"] { background: var(--tm-action-primary); box-shadow: 0 8px 28px #183a2e26; }
+#wds-region-manager-bottom [data-role="toast"] > [role="presentation"] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  #wds-region-manager-bottom [role="status"] { animation-duration: .01ms; }
+}

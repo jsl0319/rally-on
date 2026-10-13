@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+import { useActionToast } from "@/components/feedback/use-action-toast";
 
 import type { SupportInquiryView as Inquiry } from "@/server/domain/support-service";
 import { SupportThread } from "@/features/support/support-thread";
@@ -18,6 +19,7 @@ function apiMessage(body: unknown, fallback: string) {
 }
 
 export function MSupportInquiry() {
+  const showComplete = useActionToast();
   // 코트 매칭 화면에서 넘어오면 어느 건인지 함께 보낸다. 운영자에게 되묻지 않아도 된다.
   const params = useSearchParams();
   const inquiryId = params.get("inquiryId");
@@ -57,6 +59,7 @@ export function MSupportInquiry() {
       const response = await fetch("/api/v1/support-inquiries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message, matchId, applicationId }) });
       const body: unknown = await response.json();
       if (!response.ok) throw new Error(apiMessage(body, "문의를 보내지 못했어요."));
+      showComplete("문의가 접수되었습니다.");
       setMessage("");
       setSubmitted(true);
       setView("history");

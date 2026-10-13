@@ -90,7 +90,10 @@ test("마이·프로필·공지·문의·약관은 작은 화면에서 실제 �
   await toggle.click();
   await expect(page.locator("main").getByRole("alert")).toContainText("알림 설정을 저장하지 못했어요");
   await expect(toggle).toHaveAttribute("aria-checked", before!);
+  await expect(page.locator("#wds-region-manager-bottom").getByRole("status")).toHaveCount(0);
   await page.unroute("**/api/v1/me");
+  await toggle.click();
+  await expect(page.getByRole("status").filter({ hasText: /매칭 소식 알림을 (켰|껐)습니다/ })).toBeInViewport();
   await page.getByRole("link", { name: /프로필 수정/ }).click();
   await expect(page.getByLabel("닉네임", { exact: true })).toHaveValue(e2eUsers.applicant.nickname);
   await shot(page, "profile");
@@ -100,6 +103,7 @@ test("마이·프로필·공지·문의·약관은 작은 화면에서 실제 �
   await page.getByLabel("닉네임", { exact: true }).fill("랠리친구");
   await page.getByRole("button", { name: "저장하기" }).click();
   await expect(page).toHaveURL(/\/my$/);
+  await expect(page.getByRole("status").filter({ hasText: "프로필 저장이 완료되었습니다." })).toBeInViewport();
   await expect(page.getByText("랠리친구", { exact: true })).toBeVisible();
   const me = await (await context.request.get(`${E2E_BASE_URL}/api/v1/me`)).json();
   expect(me.tennisProfile.experienceRange).toBe("YEARS_1_TO_2");
@@ -112,7 +116,7 @@ test("마이·프로필·공지·문의·약관은 작은 화면에서 실제 �
   await shot(page, "support");
   await page.getByLabel("문의 내용", { exact: true }).fill("매칭 채팅을 이용하는 방법이 궁금해요.");
   await page.getByRole("button", { name: "문의 보내기" }).click();
-  await expect(page.getByRole("status")).toContainText("문의가 접수됐어요");
+  await expect(page.getByRole("status").filter({ hasText: "문의가 접수되었습니다." })).toBeInViewport();
   const inquiries = await (await context.request.get(`${E2E_BASE_URL}/api/v1/support-inquiries`)).json();
   expect(inquiries.items[0].message).toBe("매칭 채팅을 이용하는 방법이 궁금해요.");
   await page.getByLabel("추가 문의", { exact: true }).fill("답변은 이 화면에서 확인하면 될까요?");
@@ -139,6 +143,58 @@ test("마이·프로필·공지·문의·약관은 작은 화면에서 실제 �
   await page.goto("/my/profile");
   await expect(page.getByLabel("닉네임", { exact: true })).toBeVisible(); await fit(page);
   expect(errors).toEqual([]);
+});
+
+test("로그아웃은 확인 후에만 실행되고 취소·연결 실패 시 재시도할 수 있다", async ({ page, context }) => {
+  await resetE2eDatabase();
+  await signIn(context);
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto("/my");
+  let attempts = 0;
+  page.on("request", request => { if (request.url().endsWith("/api/auth/signout") && request.method() === "POST") attempts++; });
+  const trigger = page.getByRole("button", { name: "로그아웃", exact: true });
+  await trigger.click();
+  const dialog = page.getByRole("alertdialog", { name: "로그아웃할까요?" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "취소" })).toBeFocused();
+  await fit(page);
+  await page.screenshot({ path: "/private/tmp/rally-logout-confirmation.png" });
+  expect(attempts).toBe(0);
+  await dialog.getByRole("button", { name: "취소" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+  await expect(page).toHaveURL(/\/my$/);
+  expect((await context.request.get("/api/v1/me")).status()).toBe(200);
+  await trigger.click();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  expect(attempts).toBe(0);
+  await trigger.click();
+  await page.route("**/api/auth/signout", route => route.abort("failed"), { times: 1 });
+  await dialog.getByRole("button", { name: "로그아웃", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("로그아웃하지 못했어요");
+  expect((await context.request.get("/api/v1/me")).status()).toBe(200);
+  await dialog.getByRole("button", { name: "로그아웃", exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  expect((await context.request.get("/api/v1/me")).status()).toBe(401);
+  expect(attempts).toBe(2);
+  await expect(page.getByRole("button", { name: "카카오로 시작하기" })).toBeVisible();
+});
+
+test("내 거래 정리에서도 로그아웃을 취소하면 계정과 거래 화면을 유지한다", async ({ page, context }) => {
+  await resetE2eDatabase();
+  await signIn(context);
+  await prisma.user.update({ where: { id: e2eUsers.applicant.id }, data: { status: "WITHDRAWN", withdrawnAt: new Date() } });
+  await page.goto("/account/transactions");
+  await page.getByRole("button", { name: "로그아웃", exact: true }).click();
+  const dialog = page.getByRole("alertdialog", { name: "로그아웃할까요?" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "취소" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page).toHaveURL(/\/account\/transactions$/);
+  expect((await context.request.get("/api/v1/me/transactions")).status()).toBe(200);
 });
 
 test("새 채팅 목록에서 대화하고 보낸 신청·만든 매칭의 취소와 재모집을 처리한다", async ({ page, context, browser }) => {

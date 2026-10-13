@@ -1,6 +1,6 @@
 "use client";
 import { CourtRefundAgreementHistory } from "@/features/partner/court-refund-agreement-history";
-import { signOut } from "next-auth/react";
+import { LogoutButton } from "./logout-button";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { MyCourtTransactions } from "@/server/domain/court-match-view";
@@ -30,7 +30,7 @@ export function AccountTransactions() {
   return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-8 pt-4 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[560px]">
     <h1 className="rally-page-title text-2xl font-bold">내 거래 정리</h1>
     <p className="mt-3 text-sm leading-6 text-[var(--tm-text-muted)]">본인의 기존 코트 매칭 환불과 문의를 확인해요. 탈퇴·정지된 계정의 일반 서비스 이용은 재개되지 않아요.</p>
-    <div className="mt-4 flex gap-3"><Button variant="secondary" size="medium" disabled={busy} onClick={() => void load()}>새로고침</Button><Button variant="secondary" size="medium" onClick={() => void signOut({ callbackUrl: "/login" })}>로그아웃</Button></div>
+    <div className="mt-4 flex gap-3"><Button variant="secondary" size="medium" disabled={busy} onClick={() => void load()}>새로고침</Button><LogoutButton className="border border-[var(--tm-border-default)] px-5 text-sm" /></div>
     {busy ? <p role="status" className="mt-5 text-sm">거래 확인 중…</p> : null}
     {error ? <p role="alert" className="mt-5 text-rose-700">{error}</p> : null}
     {!busy && !error && !items.length ? <p className="mt-8 text-sm">확인할 코트 거래가 없어요.</p> : null}

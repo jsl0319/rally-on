@@ -6,12 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+import { useActionToast } from "@/components/feedback/use-action-toast";
 import { apiMessage } from "@/features/partner/partner-session";
 import type { AdminAnnouncement } from "@/server/domain/announcement-service";
 import { announcementStatusLabels } from "./announcement-manager";
 
 export function AnnouncementEditor({ announcementId }: { announcementId?: string }) {
   const router = useRouter();
+  const showComplete = useActionToast();
   const [saved, setSaved] = useState<AdminAnnouncement | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -46,7 +48,11 @@ export function AnnouncementEditor({ announcementId }: { announcementId?: string
       });
       const data = await response.json();
       if (!response.ok) throw new Error(apiMessage(data, "저장하지 못했어요. 입력한 내용은 유지돼요."));
-      if (!saved) router.replace(`/internal/announcements/${data.id}`);
+      const completion = data.status === "PUBLISHED"
+        ? saved?.status === "PUBLISHED" ? "공지 수정이 완료되었습니다." : "공지사항이 공개되었습니다."
+        : data.status === "HIDDEN" ? "공지사항을 숨겼습니다." : "초안 저장이 완료되었습니다.";
+      showComplete(completion);
+      if (!saved) router.replace(`/internal/announcements/${data.id}`, { scroll: false });
       setSaved(data); setTitle(data.title); setBody(data.body);
       setMessage(data.status === "PUBLISHED" ? "공개했어요. 사용자 공지사항에 반영됐어요." : data.status === "HIDDEN" ? "숨겼어요. 사용자 목록에 표시되지 않아요." : "초안을 저장했어요. 준비되면 공개해 주세요.");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "저장하지 못했어요."); }

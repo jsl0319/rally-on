@@ -2,7 +2,7 @@
 
 import { Switch } from "@wanteddev/wds";
 import { WithdrawalModal } from "./withdrawal-modal";
-import { signOut } from "next-auth/react";
+import { LogoutButton } from "./logout-button";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -13,6 +13,7 @@ import { PullToRefresh } from "@/components/feedback/pull-to-refresh";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+import { useActionToast } from "@/components/feedback/use-action-toast";
 
 type Me = {
   canManageService: boolean;
@@ -67,6 +68,7 @@ function needsMyAction(application: SentApplicationSummary) {
 }
 
 export function M8MyPage() {
+  const showComplete = useActionToast();
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState("");
   const [notificationError, setNotificationError] = useState("");
@@ -75,6 +77,7 @@ export function M8MyPage() {
   const [pendingSentCount, setPendingSentCount] = useState(0);
   const [pendingReceivedCount, setPendingReceivedCount] = useState(0);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -114,6 +117,7 @@ export function M8MyPage() {
         body: JSON.stringify({ matchNotificationsEnabled: next }),
       });
       if (!response.ok) throw new Error("알림 설정을 저장하지 못했어요.");
+      showComplete(next ? "매칭 소식 알림을 켰습니다." : "매칭 소식 알림을 껐습니다.");
     } catch {
       setNotificationError("알림 설정을 저장하지 못했어요. 다시 시도해 주세요.");
       setMe((current) => current ? { ...current, matchNotificationsEnabled: !next } : current);
@@ -123,7 +127,7 @@ export function M8MyPage() {
   };
 
 
-  return <PullToRefresh onRefresh={load} disabled={savingNotificationPref || withdrawalOpen}><main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
+  return <PullToRefresh onRefresh={load} disabled={savingNotificationPref || withdrawalOpen || logoutOpen}><main className="flex min-h-app flex-col bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
     <StickyPageHeader title="마이" actions={<NotificationBell unreadCount={unreadNotificationCount} />} />
     <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-5">
 
@@ -172,7 +176,7 @@ export function M8MyPage() {
         </Card>
 
         <div className="mt-8 flex items-center justify-center gap-1 text-xs">
-          <button className="min-h-11 rounded-xl px-3 font-semibold text-[var(--tm-text-secondary)]" onClick={() => void signOut({ callbackUrl: "/login" })} type="button">로그아웃</button>
+          <LogoutButton onOpenChange={setLogoutOpen} />
           <span aria-hidden="true" className="text-[var(--tm-border-strong)]">·</span>
           <button className="min-h-11 rounded-xl px-3 font-semibold text-[var(--tm-text-secondary)]" onClick={() => setWithdrawalOpen(true)} type="button">회원 탈퇴</button>
         </div>

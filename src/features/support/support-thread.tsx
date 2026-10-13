@@ -2,10 +2,12 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useActionToast } from "@/components/feedback/use-action-toast";
 import type { SupportAudience, SupportInquiryView } from "@/server/domain/support-service";
 import { apiMessage, formatStatusChangedAt } from "@/features/partner/partner-session";
 
 export function SupportThread({ inquiry: i, audience, refresh, endpointOverride, embedded = false }: { embedded?: boolean; endpointOverride?: string; inquiry: SupportInquiryView; audience: SupportAudience; refresh: () => Promise<void> }) {
+  const showComplete = useActionToast();
   const [body, setBody] = useState("");
   const [action, setAction] = useState(audience === "operator" ? "OPERATOR_REPLY" : "REPLY");
   const [busy, setBusy] = useState(false);
@@ -21,6 +23,7 @@ export function SupportThread({ inquiry: i, audience, refresh, endpointOverride,
       const response = await fetch(`${endpoint}/${i.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: chosen, body: text, expectedVersion: i.version, clientRequestId: pending.current.id }) });
       const data: unknown = await response.json();
       if (!response.ok) throw new Error(apiMessage(data, "답변을 저장하지 못했어요."));
+      showComplete(chosen === "CLAIM" ? "문의 담당자로 지정되었습니다." : chosen === "RESOLVE" ? "해결 완료로 처리되었습니다." : chosen === "REQUEST_OPERATOR" ? "운영자에게 확인을 요청했습니다." : audience === "member" ? "추가 문의가 접수되었습니다." : "답변이 저장되었습니다.");
       await refresh(); setBody(""); pending.current = null;
     } catch (caught) { setError(caught instanceof Error ? caught.message : "저장하지 못했어요."); }
     finally { setBusy(false); }
