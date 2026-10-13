@@ -33,4 +33,4 @@ images.forEach((bytes, i) => {
 });
 await writeFile(`${root}src/app/favicon.ico`, Buffer.concat([header, ...images]));
 if (!(await readFile(source)).equals(await readFile(`${root}src/app/icon.svg`))) throw new Error('Icon source mismatch');
-console.log('Rally On B2: web favicon, Apple touch icon and iOS AppIcon generated.');
+console.log('Rally On B: web favicon, Apple touch icon and iOS AppIcon generated.');

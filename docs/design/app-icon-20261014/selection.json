@@ -2,8 +2,8 @@
   "status": "approved",
   "date": "2026-10-14",
   "userLabel": "B 시안",
-  "selectedVariant": "b2-rally-r-inset",
-  "description": "R 안쪽 빈 공간에 테니스공을 넣은 B 수정안",
+  "selectedVariant": "b-rally-r",
+  "description": "R 바깥 오른쪽 위에 테니스공을 겹친 B 원안",
   "serviceSource": "public/images/brand/app-icon.svg",
   "nativeDisplayName": "랠리온 검증",
   "preservedVariants": [
@@ -11,5 +11,6 @@
     "b-rally-r",
     "b2-rally-r-inset",
     "c-court-lime"
-  ]
+  ],
+  "clarification": "사용자가 B2가 아닌 B 원안이라고 명시적으로 정정함"
 }

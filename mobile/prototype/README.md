@@ -36,7 +36,7 @@ iOS 지도 연결은 앱 화면에서 시작된 카카오맵 `/link/to/` 링크�
 
 ## iPhone
 
-앱 표시 이름은 **랠리온 검증**이며, 앱 식별자 `dev.rallyon.prototype`은 유지한다. 홈 화면 아이콘은 사용자가 확정한 B 수정안(R 안쪽에 테니스공)이다. 원본은 저장소 루트의 `public/images/brand/app-icon.svg`, iOS 원본은 `native/ios/AppIcon.appiconset`에 보관한다. `prepare:ios`는 기존 프로젝트에도 아이콘과 이름을 반영하며 별도 로컬 수정을 발견하면 중단한다. 이름·아이콘 변경은 웹 배포만으로 적용되지 않아 기기 앱 빌드·재설치가 필요하다.
+앱 표시 이름은 **랠리온 검증**이며, 앱 식별자 `dev.rallyon.prototype`은 유지한다. 홈 화면 아이콘은 사용자가 확정한 B 원안(R 바깥 오른쪽 위에 테니스공)이다. 원본은 저장소 루트의 `public/images/brand/app-icon.svg`, iOS 원본은 `native/ios/AppIcon.appiconset`에 보관한다. `prepare:ios`는 기존 프로젝트에도 아이콘과 이름을 반영하며 별도 로컬 수정을 발견하면 중단한다. 이름·아이콘 변경은 웹 배포만으로 적용되지 않아 기기 앱 빌드·재설치가 필요하다.
 
 아이콘 원본을 바꾸면 저장소 루트에서 `node ops/brand/generate-icons.mjs`로 웹/iOS 이미지를 함께 갱신한다. 추가 패키지 설치 없이 기존 Next.js 의존성의 sharp를 사용한다. 이전 시안은 `docs/design/app-icon-20261014/`에 유지한다. Android 실기기 반영·검증은 보류 상태다.
 

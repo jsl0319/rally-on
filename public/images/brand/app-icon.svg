@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <title>Rally On — Rally R Inset</title>
-  <defs><clipPath id="ball"><circle cx="547" cy="421" r="98"/></clipPath></defs>
+  <title>Rally On — Rally R</title>
+  <defs><clipPath id="ball"><circle cx="677" cy="365" r="145"/></clipPath></defs>
   <path fill="#174c3c" d="M0 0h1024v1024H0z"/>
-  <path transform="translate(206 88) scale(11)" d="M3.445 64.000L16.805 64.000L20.406 47.055L25.680 47.055L31.078 64.000L45.633 64.000L39.277 44.945C45.314 42.344 49.610 37.352 51.104 30.320C53.391 19.563 47.313 13.094 35.922 13.094L14.266 13.094Z" fill="#fffef2"/>
-  <circle cx="547" cy="421" r="114" fill="#174c3c"/>
-  <circle cx="547" cy="421" r="98" fill="#d9ed92"/>
-  <g clip-path="url(#ball)" transform="rotate(-24 547 421)" fill="none" stroke="#174c3c" stroke-width="15">
-    <path d="M448 334c94 14 94 160 0 174M646 334c-94 14-94 160 0 174"/>
+  <path transform="translate(173 103) scale(10)" d="M3.445 64.000L16.805 64.000L20.406 47.055L25.680 47.055L31.078 64.000L45.633 64.000L39.277 44.945C45.314 42.344 49.610 37.352 51.104 30.320C53.391 19.563 47.313 13.094 35.922 13.094L14.266 13.094ZM22.633 36.578L25.353 23.781L30.557 23.781C35.619 23.781 38.068 25.820 37.112 30.320C36.170 34.750 32.899 36.578 27.836 36.578Z" fill="#fffef2"/>
+  <circle cx="677" cy="365" r="167" fill="#174c3c"/>
+  <circle cx="677" cy="365" r="145" fill="#d9ed92"/>
+  <g clip-path="url(#ball)" transform="rotate(-24 677 365)" fill="none" stroke="#174c3c" stroke-width="18">
+    <path d="M531 237c139 20 139 236 0 256M823 237c-139 20-139 236 0 256"/>
   </g>
 </svg>
