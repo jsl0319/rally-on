@@ -94,11 +94,17 @@ Neon은 앱 런타임에 풀링된 `DATABASE_URL`을 사용합니다. 마이그�
 `DATABASE_URL_UNPOOLED`가 있으면 이를 우선 사용하며, 없으면 일반
 `DATABASE_URL`로 동작합니다.
 
-Production 배포는 다음과 같습니다.
+Production 배포는 [운영 배포 절차](docs/11-production-release.md)를 따릅니다.
+Git 자동 빌드와 CLI 운영 배포를 동시에 실행하지 않습니다. 운영 반영 완료는
+빌드 성공뿐 아니라 원격 main·운영 주소의 배포 버전·대기 배포를 대조해 판정합니다.
 
 ```bash
-vercel --prod
+npm run release:check
 ```
+
+운영 도메인 자동 연결은 해제되어 있습니다. `git push`는 빌드만 생성합니다.
+위 문서의 후보 점검 → 화면 확인 → `vercel promote` → 최종 점검 순서로 운영에 반영합니다.
+점검 실패를 무시하고 배포 완료로 보고하지 않습니다.
 
 Production Kakao 앱에는 실제 Vercel 도메인의 다음 경로를 Redirect URI로
 등록해야 합니다.
