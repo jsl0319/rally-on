@@ -2028,5 +2028,6 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 - `POST /api/internal/announcements`: `{id: UUID, title: 1..120자, body: 1..2000자, isPinned: boolean}`. 항상 초안 생성. 동일 ID·작성자·내용 재시도는 기존 공지 반환, 다른 내용은 409.
 - `GET /api/internal/announcements/{id}`: 편집용 공지 반환.
 - `PATCH /api/internal/announcements/{id}`: `{title, body, isPinned, status, expectedVersion}`. 활성 관리자 재확인과 버전 비교 후 변경. 충돌 409, 입력 오류 422, 권한 없음 403. 공개 후 초안으로 돌리지 않고 숨김으로 전환한다.
+- `DELETE /api/internal/announcements/{id}`: `{expectedVersion: 양의 정수}`. 활성 관리자만 버전 일치 시 영구 삭제. 완료·이미 삭제된 ID 재시도는 204, 최신 수정과 충돌하면 409, 잘못된 UUID·입력은 422, 비로그인 401·권한 없음 403. 삭제 후 조회는 404.
 - 관리자 공지 반환: `id,title,body,status,isPinned,version,publishedAt,updatedAt`. 작성자 내부 ID는 반환하지 않는다.
 - `GET /api/v1/announcements`: 공개 공지만 반환. `isPinned` 추가, 상단 고정 우선·공개 최신순. 초안·숨김·작성자 정보 비노출.

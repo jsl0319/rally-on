@@ -1396,6 +1396,7 @@ Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_
 ## 서비스 관리 확장 (2026-10-13)
 
 - `Announcement.status`: `DRAFT`(새 공지 기본), `PUBLISHED`, `HIDDEN`. 기존 데이터는 공개 유지.
+- 2026-10-14 공지 단건 삭제는 관리자 확인 후 행을 영구 제거한다. `id`와 `version`을 함께 비교해 최신 수정의 오삭제를 막으며 휴지통 상태·새 컬럼은 추가하지 않는다.
 - `isPinned`, `version`, `updatedAt`, `createdByUserId?`, `updatedByUserId?` 추가. 작성·수정자 ID는 내부 추적용 UUID이며 사용자 응답에 포함하지 않는다.
 - `publishedAt`은 초안에서 null, 최초 공개 때 설정, 이후 수정·재공개 시 유지. 공개 공지의 날짜 누락은 DB CHECK로 차단.
 - `NotificationType`: `SUPPORT_INQUIRY_RECEIVED`, `SUPPORT_INQUIRY_UPDATED`, `SUPPORT_INQUIRY_REPLIED`, `SUPPORT_INQUIRY_RESOLVED`, `SUPPORT_OPERATOR_REQUESTED` 추가. 알림에 문의 본문을 복사하지 않는다.

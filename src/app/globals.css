@@ -69,6 +69,14 @@ body {
   text-size-adjust: 100%;
 }
 
+/* WDS scroll locking copies body margins into padding. Keep the native safe
+   area intact so opening/closing an alert does not move the page underneath. */
+body[data-scroll-locked] {
+  padding-top: var(--rally-safe-top) !important;
+  padding-left: env(safe-area-inset-left, 0px) !important;
+  padding-right: env(safe-area-inset-right, 0px) !important;
+}
+
 /* Prevent scrolled content from showing through the native status bar. */
 body::before {
   content: "";

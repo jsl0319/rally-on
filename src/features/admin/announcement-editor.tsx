@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, AlertContainer, AlertContent, AlertDescription, AlertHeading, AlertTrigger } from "@wanteddev/wds";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
@@ -23,6 +24,8 @@ export function AnnouncementEditor({ announcementId }: { announcementId?: string
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const requestId = useRef<string | null>(null);
   const pending = useRef(false);
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -58,6 +61,26 @@ export function AnnouncementEditor({ announcementId }: { announcementId?: string
     } catch (caught) { setError(caught instanceof Error ? caught.message : "저장하지 못했어요."); }
     finally { pending.current = false; setBusy(false); }
   }
+  function changeDeleteOpen(open: boolean) {
+    if (pending.current) return;
+    setDeleteError("");
+    setDeleteOpen(open);
+  }
+  async function remove() {
+    if (!saved || pending.current) return;
+    pending.current = true; setBusy(true); setDeleteError("");
+    try {
+      const response = await fetch(`/api/internal/announcements/${saved.id}`, {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedVersion: saved.version }),
+      });
+      if (!response.ok) throw new Error(apiMessage(await response.json(), "삭제하지 못했어요. 다시 시도해 주세요."));
+      showComplete("공지사항이 삭제되었습니다.");
+      setDeleteOpen(false);
+      router.replace("/internal/announcements");
+    } catch (caught) { setDeleteError(caught instanceof Error ? caught.message : "삭제하지 못했어요. 다시 시도해 주세요."); }
+    finally { pending.current = false; setBusy(false); }
+  }
   const valid = title.trim().length > 0 && body.trim().length > 0;
   return <main className="min-h-app bg-[var(--tm-bg-page)] px-5 pb-12 pt-4 text-[var(--tm-text-primary)]"><div className="mx-auto max-w-[640px]">
     <PageHeader title={saved || announcementId ? "공지 수정" : "새 공지 작성"} backHref="/internal/announcements" />
@@ -77,6 +100,22 @@ export function AnnouncementEditor({ announcementId }: { announcementId?: string
         {saved?.status === "PUBLISHED" ? <Button fullWidth variant="secondary" disabled={busy || !valid} onClick={() => void save("HIDDEN")}>사용자 목록에서 숨기기</Button> : null}
       </div>
       <Link href="/internal/announcements" className="mt-5 block py-3 text-center text-sm text-[var(--tm-text-secondary)]">공지 목록으로</Link>
+      {saved ? <div className="mt-5 border-t border-[var(--tm-border-default)] pt-4">
+        <Alert open={deleteOpen} onOpenChange={changeDeleteOpen}>
+          <AlertTrigger><button type="button" disabled={busy} className="min-h-11 w-full rounded-xl px-3 text-sm font-semibold text-[var(--tm-status-error-text)] disabled:opacity-50">공지 삭제</button></AlertTrigger>
+          <AlertContainer disableOutsideClickClose={busy} disableEscapeKeyDownClose={busy} sx={{ width: "calc(100vw - 40px)", maxWidth: 360, borderRadius: 24 }}>
+            <AlertContent>
+              <AlertHeading>공지사항을 삭제할까요?</AlertHeading>
+              <AlertDescription><strong className="mb-2 block break-words font-semibold text-[var(--tm-text-primary)]">{saved.title}</strong>사용자 목록과 관리 목록에서 삭제되며, 복구할 수 없어요.</AlertDescription>
+              {deleteError ? <p role="alert" className="mt-3 text-sm leading-6 text-[var(--tm-status-error-text)]">{deleteError}</p> : null}
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                <Button fullWidth variant="neutral" disabled={busy} onClick={() => changeDeleteOpen(false)}>취소</Button>
+                <button type="button" disabled={busy} onClick={() => void remove()} className="min-h-[52px] rounded-[14px] bg-[var(--tm-status-error-text)] px-4 text-sm font-bold text-white disabled:opacity-50">{busy ? "삭제 중…" : "삭제하기"}</button>
+              </div>
+            </AlertContent>
+          </AlertContainer>
+        </Alert>
+      </div> : null}
     </> : null}
   </div></main>;
 }

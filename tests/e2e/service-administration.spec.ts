@@ -20,22 +20,84 @@ test("로그인 문의 주소와 관리자 메뉴·페이지·API 권한", async
   await page.setViewportSize({ width: 320, height: 568 }); await fit(page);
   await page.screenshot({ path: "/private/tmp/rally-admin-login.png", fullPage: true });
   expect((await context.request.get("/api/internal/overview")).status()).toBe(401);
+  const deleteId = crypto.randomUUID();
+  expect((await context.request.delete(`/api/internal/announcements/${deleteId}`, { data: { expectedVersion: 1 } })).status()).toBe(401);
   await signIn(context, e2eUsers.applicant.id);
   await page.goto("/my");
   await expect(page.getByRole("link", { name: /프로필 수정/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /서비스 관리/ })).toHaveCount(0);
   expect((await context.request.get("/api/internal/announcements")).status()).toBe(403);
+  expect((await context.request.delete(`/api/internal/announcements/${deleteId}`, { data: { expectedVersion: 1 } })).status()).toBe(403);
   expect((await context.request.post("/api/internal/announcements", { data: { id: crypto.randomUUID(), title: "임의 공지", body: "권한 없는 작성", isPinned: false } })).status()).toBe(403);
   await page.goto("/internal"); await expect(page).not.toHaveURL(/\/internal$/);
   await signIn(context, e2eUsers.operator.id);
   expect((await context.request.get("/api/internal/overview")).status()).toBe(403);
+  expect((await context.request.delete(`/api/internal/announcements/${deleteId}`, { data: { expectedVersion: 1 } })).status()).toBe(403);
   await signIn(context, e2eUsers.reviewer.id);
+  expect((await context.request.delete(`/api/internal/announcements/${deleteId}`, { data: {} })).status()).toBe(422);
   await page.goto("/my"); await page.getByRole("link", { name: /서비스 관리/ }).click();
   await expect(page.getByText("답변할 문의 0건 · 운영자 확인 중 0건")).toBeVisible(); await fit(page);
   await page.screenshot({ path: "/private/tmp/rally-admin-home.png", fullPage: true });
   await db.user.update({ where: { id: e2eUsers.reviewer.id }, data: { role: "MEMBER" } });
   expect((await context.request.get("/api/internal/overview")).status()).toBe(403);
+  expect((await context.request.delete(`/api/internal/announcements/${deleteId}`, { data: { expectedVersion: 1 } })).status()).toBe(403);
   await page.reload(); await expect(page).not.toHaveURL(/\/internal$/);
+});
+
+test("공지 삭제는 확인 후 실행되고 취소·실패·수정 충돌에서 내용을 보존한다", async ({ page, context, browser }) => {
+  await signIn(context, e2eUsers.reviewer.id);
+  await page.setViewportSize({ width: 320, height: 568 });
+  const memberContext = await browser.newContext();
+  await signIn(memberContext, e2eUsers.applicant.id);
+  const created = await context.request.post("/api/internal/announcements", { data: { id: crypto.randomUUID(), title: "[테스트] 삭제 확인", body: "삭제 테스트용 공지입니다.", isPinned: false } });
+  const item = await created.json();
+  await context.request.patch(`/api/internal/announcements/${item.id}`, { data: { title: item.title, body: item.body, isPinned: false, status: "PUBLISHED", expectedVersion: 1 } });
+  try {
+    await page.goto(`/internal/announcements/${item.id}`);
+    await page.addStyleTag({ content: ":root { --rally-safe-top: 47px; }" });
+    const trigger = page.getByRole("button", { name: "공지 삭제", exact: true });
+    await trigger.scrollIntoViewIfNeeded();
+    const scrollBefore = await page.evaluate(() => window.scrollY);
+    await trigger.click();
+    const dialog = page.getByRole("alertdialog", { name: "공지사항을 삭제할까요?" });
+    await expect(dialog).toContainText(item.title);
+    await expect(dialog).toContainText("복구할 수 없어요");
+    await expect(page.locator("body")).toHaveCSS("padding-top", "47px");
+    await fit(page);
+    await page.screenshot({ path: "/private/tmp/rally-announcement-delete.png" });
+    await dialog.getByRole("button", { name: "취소", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+    expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollBefore, 0);
+    expect(await db.announcement.count({ where: { id: item.id } })).toBe(1);
+
+    await page.route(`**/api/internal/announcements/${item.id}`, async route => {
+      if (route.request().method() === "DELETE") await route.fulfill({ status: 503, json: { error: { message: "잠시 후 다시 시도해 주세요." } } });
+      else await route.continue();
+    });
+    await trigger.click(); await dialog.getByRole("button", { name: "삭제하기", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText("잠시 후");
+    await expect(page.getByRole("status").filter({ hasText: "공지사항이 삭제되었습니다." })).toHaveCount(0);
+    expect(await db.announcement.count({ where: { id: item.id } })).toBe(1);
+    await page.unroute(`**/api/internal/announcements/${item.id}`);
+    await context.request.patch(`/api/internal/announcements/${item.id}`, { data: { title: "다른 관리 화면의 최신 내용", body: item.body, isPinned: false, status: "PUBLISHED", expectedVersion: 2 } });
+    await dialog.getByRole("button", { name: "삭제하기", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText("다른 화면에서 수정됐어요");
+    expect((await db.announcement.findUniqueOrThrow({ where: { id: item.id } })).title).toBe("다른 관리 화면의 최신 내용");
+    await dialog.getByRole("button", { name: "취소", exact: true }).click();
+    await page.reload();
+    await trigger.click();
+    await expect(dialog).toContainText("다른 관리 화면의 최신 내용");
+    await dialog.getByRole("button", { name: "삭제하기", exact: true }).click();
+    await expect(page).toHaveURL(/\/internal\/announcements$/);
+    await expect(page.getByRole("status").filter({ hasText: "공지사항이 삭제되었습니다." })).toBeInViewport();
+    await expect(page.getByText("아직 등록된 공지가 없어요")).toBeVisible();
+    expect((await (await memberContext.request.get(`${E2E_BASE_URL}/api/v1/announcements`)).json()).items).toHaveLength(0);
+    expect((await context.request.get(`/api/internal/announcements/${item.id}`)).status()).toBe(404);
+    expect((await context.request.delete(`/api/internal/announcements/${item.id}`, { data: { expectedVersion: 3 } })).status()).toBe(204);
+    await page.goto(`/internal/announcements/${item.id}`);
+    await expect(page.locator("main").getByRole("alert")).toContainText("공지를 찾을 수 없어요");
+  } finally { await memberContext.close(); }
 });
 
 test("회원 문의 → 관리자 알림 → 답변 → 회원 알림에서 해당 문의 → 재문의", async ({ page, context, browser }) => {

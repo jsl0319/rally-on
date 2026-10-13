@@ -11,6 +11,7 @@ const content = {
 };
 export const announcementCreateSchema = z.object({ ...content, id: z.uuid() }).strict();
 export const announcementUpdateSchema = z.object({ ...content, status: z.enum(["DRAFT", "PUBLISHED", "HIDDEN"]), expectedVersion: z.number().int().positive() }).strict();
+export const announcementDeleteSchema = z.object({ expectedVersion: z.number().int().positive() }).strict();
 export const announcementListSchema = z.object({ status: z.enum(["DRAFT", "PUBLISHED", "HIDDEN"]).optional(), cursor: z.uuid().optional() });
 
 function toAdminView(item: Announcement) {
@@ -71,5 +72,19 @@ export async function updateAnnouncement(prisma: PrismaClient, viewer: { id: str
     const result = await tx.announcement.updateMany({ where: { id, version: expectedVersion }, data: { ...data, publishedAt: previous.publishedAt ?? (data.status === "PUBLISHED" ? new Date() : null), updatedByUserId: viewer.id, version: { increment: 1 } } });
     if (!result.count) throw new DomainError("ANNOUNCEMENT_CONFLICT", 409, "다른 화면에서 수정됐어요. 입력 내용을 복사한 뒤 공지를 다시 열어 주세요.");
     return toAdminView(await tx.announcement.findUniqueOrThrow({ where: { id } }));
+  });
+}
+
+export async function deleteAnnouncement(prisma: PrismaClient, viewer: { id: string; role: string }, id: string, input: z.infer<typeof announcementDeleteSchema>) {
+  assertInternalReviewer(viewer);
+  await prisma.$transaction(async tx => {
+    await lockAccountTransactions(tx);
+    assertInternalReviewer(await assertActiveTransactionUser(tx, viewer.id));
+    // Compare and delete atomically so an unseen edit cannot be removed.
+    const result = await tx.announcement.deleteMany({ where: { id, version: input.expectedVersion } });
+    if (!result.count && await tx.announcement.findUnique({ where: { id }, select: { id: true } })) {
+      throw new DomainError("ANNOUNCEMENT_CONFLICT", 409, "다른 화면에서 수정됐어요. 공지를 다시 열어 최신 내용을 확인한 뒤 삭제해 주세요.");
+    }
+    // Already absent: a retry after a lost response also succeeds.
   });
 }

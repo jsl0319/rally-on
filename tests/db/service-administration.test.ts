@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@/generated/prisma/client";
 import { createPrismaPg } from "../../src/server/db/prisma-adapter";
 import { requireE2eDatabaseUrl } from "../e2e/e2e-environment";
-import { createAnnouncement, updateAnnouncement, listAnnouncements, listAdminAnnouncements, getAdminAnnouncement, announcementCreateSchema } from "@/server/domain/announcement-service";
+import { createAnnouncement, updateAnnouncement, deleteAnnouncement, listAnnouncements, listAdminAnnouncements, getAdminAnnouncement, announcementCreateSchema, announcementDeleteSchema } from "@/server/domain/announcement-service";
 import { createSupportInquiry, actOnSupportInquiry, listSupportQueue } from "@/server/domain/support-service";
 
 const databaseUrl = process.env.E2E_DATABASE_URL?.trim() ? requireE2eDatabaseUrl() : null;
@@ -50,13 +50,49 @@ describe.skipIf(!databaseUrl)("서비스 관리 · 실제 DB", () => {
     const item = await createAnnouncement(db, admin, draft());
     await expect(createAnnouncement(db, member, draft())).rejects.toMatchObject({ status: 403 });
     await expect(listAdminAnnouncements(db, member, {})).rejects.toMatchObject({ status: 403 });
+    await expect(deleteAnnouncement(db, member, item.id, { expectedVersion: 1 })).rejects.toMatchObject({ status: 403 });
     await db.user.update({ where: { id: admin.id }, data: { role: "MEMBER" } });
     await expect(getAdminAnnouncement(db, admin, item.id)).rejects.toMatchObject({ status: 403 });
     await expect(updateAnnouncement(db, admin, item.id, { ...item, status: "PUBLISHED", expectedVersion: 1 })).rejects.toMatchObject({ status: 403 });
+    await expect(deleteAnnouncement(db, admin, item.id, { expectedVersion: 1 })).rejects.toMatchObject({ status: 403 });
     await db.user.update({ where: { id: admin.id }, data: { role: "INTERNAL_REVIEWER", status: "SUSPENDED" } });
     await expect(createAnnouncement(db, admin, draft())).rejects.toMatchObject({ status: 403 });
+    await expect(deleteAnnouncement(db, admin, item.id, { expectedVersion: 1 })).rejects.toMatchObject({ status: 403 });
+    expect(await db.announcement.count()).toBe(1);
     expect(announcementCreateSchema.safeParse({ ...draft(), title: "  " }).success).toBe(false);
     expect(announcementCreateSchema.safeParse({ ...draft(), status: "PUBLISHED" }).success).toBe(false);
+    expect(announcementDeleteSchema.safeParse({}).success).toBe(false);
+    expect(announcementDeleteSchema.safeParse({ expectedVersion: 0 }).success).toBe(false);
+    expect(announcementDeleteSchema.safeParse({ expectedVersion: 1, status: "PUBLISHED" }).success).toBe(false);
+  });
+
+  it.each(["DRAFT", "PUBLISHED", "HIDDEN"] as const)("%s 공지를 삭제하면 두 목록과 상세에서 사라지고 삭제 재시도는 안전하다", async status => {
+    const admin = await user("관리자", "INTERNAL_REVIEWER");
+    let item = await createAnnouncement(db, admin, draft());
+    if (status !== "DRAFT") item = await updateAnnouncement(db, admin, item.id, { ...item, status, expectedVersion: item.version });
+    const keep = await createAnnouncement(db, admin, draft());
+    await deleteAnnouncement(db, admin, item.id, { expectedVersion: item.version });
+    await deleteAnnouncement(db, admin, item.id, { expectedVersion: item.version });
+    expect((await listAdminAnnouncements(db, admin, {})).items.map(i => i.id)).toEqual([keep.id]);
+    expect((await listAnnouncements(db)).items).toEqual([]);
+    await expect(getAdminAnnouncement(db, admin, item.id)).rejects.toMatchObject({ status: 404 });
+    await expect(updateAnnouncement(db, admin, item.id, { ...item, expectedVersion: item.version })).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("오래된 화면의 삭제는 새 수정을 지우지 않으며 수정·삭제 경합도 한쪽만 성공한다", async () => {
+    const admin = await user("관리자", "INTERNAL_REVIEWER");
+    const item = await createAnnouncement(db, admin, draft());
+    const edited = await updateAnnouncement(db, admin, item.id, { ...item, title: "보존할 새 내용", expectedVersion: item.version });
+    await expect(deleteAnnouncement(db, admin, item.id, { expectedVersion: item.version })).rejects.toMatchObject({ status: 409 });
+    expect((await getAdminAnnouncement(db, admin, item.id)).title).toBe("보존할 새 내용");
+    const attempts = await Promise.allSettled([
+      updateAnnouncement(db, admin, item.id, { ...edited, title: "동시 수정", expectedVersion: edited.version }),
+      deleteAnnouncement(db, admin, item.id, { expectedVersion: edited.version }),
+    ]);
+    expect(attempts.filter(r => r.status === "fulfilled")).toHaveLength(1);
+    const remaining = await db.announcement.findUnique({ where: { id: item.id } });
+    if (attempts[0].status === "fulfilled") expect(remaining?.title).toBe("동시 수정");
+    else expect(remaining).toBeNull();
   });
 
   it("문의 접수·답변·추가 문의를 해당 담당자에게만 알리고 재시도는 중복하지 않는다", async () => {
