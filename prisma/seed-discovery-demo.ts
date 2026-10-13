@@ -1,7 +1,7 @@
 /**
  * Discovery fixtures with an optional, guarded replacement of known old test matches. No dotenv: the caller must inject the intended DB.
  * Default: validate and preview. --apply inserts one atomic batch; reruns are no-ops.
- * Requires --date=YYYY-MM-DD and --expected-host=<database hostname>.
+ * Requires --date=YYYY-MM-DD and --expected-host=<database hostname>. --count=6 adds a sixth pair (default 5).
  * All accounts, courts, contact/settlement details are explicitly fictional test data.
  */
 import { PrismaClient } from "../src/generated/prisma/client";
@@ -15,6 +15,9 @@ import { courtCompositionPolicyVersion } from "../src/matches/court-composition"
 
 const option = (name: string) => process.argv.find((arg) => arg.startsWith(`--${name}=`))?.split("=")[1];
 const date = option("date");
+const countOption = option("count") ?? "5";
+if (countOption !== "5" && countOption !== "6") throw new Error("--count must be 5 or 6.");
+const fixtureCount = Number(countOption);
 if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) {
   throw new Error("A valid --date=YYYY-MM-DD is required.");
 }
@@ -31,7 +34,9 @@ const fixtures = [
   { name: "잠실 나이트코트", district: "송파구", city: "SEOUL", day: 2, time: "20:00", end: "22:00", courtTime: "19:30", courtEnd: "21:30", type: "MENS_DOUBLES", male: 1, female: 0, count: 1, capacity: 4, courtMale: 4, courtFemale: 0, minimum: 4, fee: 20000, courtFee: 22000, approval: "AUTO", purposes: ["GAME"], gender: "MALE", experience: "YEARS_1_TO_2", rally: "STANDARD_RALLY", game: "CAN_PLAY", welcome: false, intro: "퇴근 후 남자 복식 게임을 함께할 한 분을 찾아요.", balls: true, equipment: false, facilitator: false },
   { name: "분당 그린코트", district: "성남시", city: "GYEONGGI", day: 2, time: "10:30", end: "12:00", courtTime: "11:00", courtEnd: "13:00", type: "WOMENS_DOUBLES", male: 0, female: 3, count: 3, capacity: 6, courtMale: 0, courtFemale: 6, minimum: 4, fee: 8000, courtFee: 18000, approval: "OPERATOR", purposes: ["STROKE_PRACTICE", "GAME_INTRO"], gender: "FEMALE", experience: "YEARS_1_TO_2", rally: "COMFORTABLE_RALLY", game: "PLAYED_FEW", welcome: true, intro: "스트로크 연습 후 여자 복식을 번갈아 즐겨요.", balls: false, equipment: false, facilitator: true },
   { name: "하남 리버코트", district: "하남시", city: "GYEONGGI", day: 3, time: "18:00", end: "20:30", courtTime: "18:30", courtEnd: "21:00", type: "MIXED_DOUBLES", male: 1, female: 1, count: 2, capacity: 6, courtMale: 3, courtFemale: 3, minimum: 4, fee: 15000, courtFee: 12000, approval: "OPERATOR", purposes: ["RALLY_PRACTICE", "GAME"], gender: "FEMALE", experience: "YEARS_1_TO_2", rally: "COMFORTABLE_RALLY", game: "PLAYED_FEW", welcome: false, intro: "가볍게 랠리하고 혼복을 돌아가며 즐기는 저녁이에요.", balls: true, equipment: false, facilitator: false },
+  { name: "연남 위켄드코트", district: "마포구", city: "SEOUL", day: 3, time: "09:30", end: "12:00", courtTime: "10:00", courtEnd: "12:30", type: "OTHER", male: null, female: null, count: 5, capacity: 6, courtMale: null, courtFemale: null, minimum: 2, fee: 30000, courtFee: 8000, approval: "AUTO", purposes: ["CASUAL_HIT", "STROKE_PRACTICE"], gender: "MALE", experience: "MONTHS_3_TO_6", rally: "SHORT_RALLY", game: "NONE", welcome: true, intro: "주말 아침, 성별과 게임 경험에 상관없이 번갈아 공을 쳐요. 처음 오시는 분도 환영해요.", balls: false, equipment: false, facilitator: false },
 ] as const;
+const selectedFixtures = fixtures.slice(0, fixtureCount);
 
 function at(day: number, time: string) {
   const target = new Date(`${date}T00:00:00Z`);
@@ -39,7 +44,7 @@ function at(day: number, time: string) {
   return `${target.toISOString().slice(0, 10)}T${time}:00+09:00`;
 }
 
-const entries = fixtures.map((fixture, index) => {
+const entries = selectedFixtures.map((fixture, index) => {
   const name = `[테스트] ${fixture.name}`;
   const address = `${fixture.city === "SEOUL" ? "서울" : "경기"} ${fixture.district} (가상 코트)`;
   const general = matchCreateInputSchema.parse({
@@ -103,7 +108,7 @@ async function replaceOldFixtures(tx: Prisma.TransactionClient) {
 async function main() {
   const prisma = new PrismaClient({ adapter: createPrismaPg(databaseUrl) });
   try {
-    const regions = await prisma.region.findMany({ where: { active: true, type: "DISTRICT", OR: fixtures.map((f) => ({ name: f.district, parentCode: f.city })) }, select: { code: true, name: true, parentCode: true } });
+    const regions = await prisma.region.findMany({ where: { active: true, type: "DISTRICT", OR: selectedFixtures.map((f) => ({ name: f.district, parentCode: f.city })) }, select: { code: true, name: true, parentCode: true } });
     const regionFor = (f: typeof fixtures[number]) => {
       const region = regions.find((r) => r.name === f.district && r.parentCode === f.city);
       if (!region) throw new Error(`Missing fixture region: ${f.district}`);
@@ -111,10 +116,10 @@ async function main() {
     };
     entries.forEach(({ fixture }) => regionFor(fixture));
     const existing = await prisma.match.findMany({ where: { id: { in: matchIds } }, select: { id: true, hostUserId: true } });
-    if (existing.length !== 0 && existing.length !== 10) throw new Error("Partial batch exists; refusing to change existing records.");
+    if (existing.length !== 0 && existing.length !== matchIds.length) throw new Error("Partial batch exists; refusing to change existing records.");
     if (existing.some((m) => m.hostUserId !== (m.id.includes("-0008-") ? operatorId : id(2, Number(m.id.slice(-12)))))) throw new Error("Fixture ID collision.");
     const summary = entries.map(({ index, name, general, slot }) => ({ name, general: { id: id(1, index), startsAt: general.courtSource === "EXTERNAL_RESERVED" ? general.startsAt : null, gameType: general.gameType, fee: fixtures[index - 1].fee, recruits: general.recruitCount }, court: { slotId: id(7, index), startsAt: slot.startsAt, gameType: slot.gameType, fee: slot.priceKrw, capacity: slot.maxParticipantCount, minimum: slot.minParticipantCount, approval: slot.approvalMode } }));
-    if (!process.argv.includes("--apply") || existing.length === 10) {
+    if (!process.argv.includes("--apply") || existing.length === matchIds.length) {
       console.log(JSON.stringify({ action: existing.length ? "already-exists" : "dry-run", replace: process.argv.includes("--replace-existing") ? { known: await prisma.match.count({ where: knownOldFixtures }), removable: await prisma.match.count({ where: safeToRemove }) } : null, entries: summary }, null, 2));
       return;
     }
@@ -126,7 +131,7 @@ async function main() {
       for (const { fixture: f, index: i, name, address, general, slot } of entries) {
         if (general.courtSource !== "EXTERNAL_RESERVED") throw new Error("Unexpected fixture source.");
         await tx.user.create({ data: {
-          id: id(2, i), nickname: `[테스트] ${["새싹", "혼복", "야간", "그린", "리버"][i - 1]}${batch.slice(-4)}`,
+          id: id(2, i), nickname: `[테스트] ${["새싹", "혼복", "야간", "그린", "리버", "주말"][i - 1]}${batch.slice(-4)}`,
           nicknameConfirmedAt: now, onboardingCompletedAt: now,
           tennisProfile: { create: { gender: f.gender, experienceRange: f.experience, rallyLevel: f.rally, gameExperience: f.game, purposes: { create: f.purposes.map((purpose) => ({ purpose })) } } },
         } });
@@ -168,7 +173,7 @@ async function main() {
       }
       return removed;
     }, { timeout: 120_000, maxWait: 10_000 });
-    console.log(JSON.stringify({ action: "created", count: 10, removed, entries: summary }, null, 2));
+    console.log(JSON.stringify({ action: "created", count: matchIds.length, removed, entries: summary }, null, 2));
   } finally { await prisma.$disconnect(); }
 }
 
