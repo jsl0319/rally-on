@@ -2031,3 +2031,13 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 
 - `DELETE /api/internal/announcements/{id}`: `{expectedVersion: 양의 정수}`. 활성 관리자만 버전 일치 시 영구 삭제. 완료·이미 삭제된 ID 재시도는 204, 최신 수정과 충돌하면 409, 잘못된 UUID·입력은 422, 비로그인 401·권한 없음 403. 삭제 후 조회는 404.
 - 관리자 공지 반환: `id,title,body,status,isPinned,version,publishedAt,updatedAt`. 작성자 내부 ID는 반환하지 않는다.
 - `GET /api/v1/announcements`: 공개 공지만 반환. `isPinned` 추가, 상단 고정 우선·공개 최신순. 초안·숨김·작성자 정보 비노출.
+
+
+## 웹 푸시 (2026-10-14)
+
+- `GET /api/v1/me/push`: 활성화 여부·VAPID 공개키·본인 브라우저 연결 ID만 반환한다. 설정 누락 시 `enabled:false`. 활성화 시 로그인·활성 계정 필수. HttpOnly/SameSite=Strict 브라우저 식별 쿠키를 발급한다. 계정이 바뀐 연결은 삭제한다. 응답은 no-store.
+- `POST /api/v1/me/push`: 로그인·활성 계정·동일 Origin·브라우저 쿠키·기존 API 제한 필수. `{action:"subscribe",subscription:{endpoint,keys:{p256dh,auth}}}`로 연결하며 수신자 ID는 받지 않는다. HTTPS 브라우저 푸시 제공사만 허용한다. 다른 브라우저에 묶인 endpoint는 409, 최대 10개 기기, 잘못된 입력 422, 출처 불일치 403.
+- `{action:"refresh",subscriptionId}`는 본인의 기존 연결만 갱신하며 삭제된 연결을 다시 생성하지 않는다. 해제와 동시에 들어온 갱신은 재등록하지 않으며 사라진 연결은 409.
+- `{action:"unsubscribe"}`는 이 사용자·브라우저 연결만 삭제한다. `{action:"test"}`는 1분에 한 번 테스트 알림을 기록하고 응답 후 발송한다. 성공 응답은 요청 접수이며 실제 기기 수신을 뜻하지 않는다.
+- `/my/notifications/open/{id}`: 로그인·활성 계정·알림 소유권 확인 후 허용된 서비스 내부 상세 경로로 이동한다. 다른 사용자의 ID는 알림함으로 보내며 원문을 노출하지 않는다. 이동한 페이지/API도 기존 업무 권한을 재검사한다.
+- 기존 `/api/cron/reconcile-matches`의 동일한 인증 뒤 응답 후 정리·발송을 수행한다. 기존 거래 판정과 푸시 결과는 별개이며 발송 결과/오류는 개인정보 없는 `push.dispatch.*` 로그와 DB 이력으로 확인한다.

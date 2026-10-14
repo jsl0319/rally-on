@@ -17,7 +17,7 @@ type NavigationItem = {
   badge?: (badges: Badges) => number;
 };
 
-const iconClassName = "size-7 shrink-0";
+const iconClassName = "size-6 shrink-0";
 
 /**
  * 안 읽은 것이 있다는 사실은 하단 메뉴에서 보여야 한다. 알림이 마이 탭 안쪽 종

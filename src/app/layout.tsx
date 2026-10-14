@@ -1,3 +1,4 @@
+import { WebPushLifecycle } from "@/features/notifications/web-push-lifecycle";
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_KR } from "next/font/google";
 import type { ReactNode } from "react";
@@ -45,7 +46,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="flex min-h-dvh flex-col">
-        <WdsProviders><InitialEntryProvider>{children}</InitialEntryProvider></WdsProviders>
+        <WdsProviders><WebPushLifecycle /><InitialEntryProvider>{children}</InitialEntryProvider></WdsProviders>
       </body>
     </html>
   );

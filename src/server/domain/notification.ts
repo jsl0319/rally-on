@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export type NotificationType =
+  | "PUSH_TEST"
   | "SUPPORT_INQUIRY_RECEIVED"
   | "SUPPORT_INQUIRY_UPDATED"
   | "SUPPORT_INQUIRY_REPLIED"
@@ -59,6 +60,8 @@ export function isAlwaysDeliveredNotification(type: NotificationType) {
  */
 export function buildNotificationContent(type: NotificationType, matchTitle: string): { title: string; body: string } {
   switch (type) {
+    case "PUSH_TEST":
+      return { title: "테스트 알림을 요청했어요", body: "외부 알림이 도착했는지 확인해 주세요." };
     case "SUPPORT_INQUIRY_RECEIVED":
       return { title: "새 문의가 도착했어요", body: "서비스 관리에서 문의를 확인해 주세요." };
     case "SUPPORT_INQUIRY_UPDATED":

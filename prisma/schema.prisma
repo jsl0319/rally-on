@@ -287,6 +287,7 @@ model User {
   createdAt                 DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                 DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  pushSubscriptions                  PushSubscription[]
   authAccounts                       AuthAccount[]
   tennisProfile                      TennisProfile?
   apiRateLimit                       ApiRateLimit?
@@ -398,6 +399,7 @@ model ApiRateLimit {
 }
 
 enum NotificationType {
+  PUSH_TEST
   SUPPORT_INQUIRY_RECEIVED
   SUPPORT_INQUIRY_UPDATED
   SUPPORT_INQUIRY_REPLIED
@@ -424,6 +426,8 @@ enum NotificationType {
 }
 
 model Notification {
+  pushQueuedAt DateTime? @map("push_queued_at") @db.Timestamptz(6)
+  pushDeliveries PushDelivery[]
   id        String           @id @default(uuid()) @db.Uuid
   userId    String           @map("user_id") @db.Uuid
   type      NotificationType
@@ -437,6 +441,7 @@ model Notification {
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId, readAt])
+  @@index([pushQueuedAt, createdAt])
   @@map("notifications")
 }
 
@@ -1269,4 +1274,37 @@ model CourtRefundAgreement {
   @@unique([applicationId, clientRequestId])
   @@unique([applicationId, version])
   @@map("court_refund_agreements")
+}
+
+
+model PushSubscription {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  deviceHash String @unique @map("device_hash") @db.VarChar(64)
+  endpoint String @unique @db.VarChar(2048)
+  p256dh String @db.VarChar(100)
+  authKey String @map("auth_key") @db.VarChar(30)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries PushDelivery[]
+  @@index([userId, expiresAt])
+  @@map("push_subscriptions")
+}
+
+model PushDelivery {
+  id String @id @default(uuid()) @db.Uuid
+  notificationId String @map("notification_id") @db.Uuid
+  subscriptionId String @map("subscription_id") @db.Uuid
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  leaseToken String? @map("lease_token") @db.Uuid
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+  outcome String? @db.VarChar(24)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  subscription PushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  @@unique([notificationId, subscriptionId])
+  @@index([finishedAt, nextAttemptAt])
+  @@map("push_deliveries")
 }

@@ -49,6 +49,7 @@ export async function withdrawAccount(prisma: PrismaClient, user: User, token: s
     for (const a of preview.items.filter((a) => a.cancel)) await cancelCourtApplicationLocked(tx, user, a.id, now);
     for (const match of preview.hosted) await tx.courtTransactionHandoff.upsert({ where: { matchId: match.id }, create: { matchId: match.id }, update: {} });
     await tx.user.update({ where: { id: user.id }, data: { status: "WITHDRAWN", withdrawnAt: now, matchNotificationsEnabled: false, profileImageObjectRef: null, profileImageContentType: null, kakaoProfileImageUrl: null } });
+    await tx.pushSubscription.deleteMany({ where: { userId: user.id } });
     return { withdrawnAt: now.toISOString() };
   }, { timeout: 20000 });
   if ("changed" in result) throw new DomainError("WITHDRAWAL_PREVIEW_CHANGED", 409, "신청 상태나 반환 금액이 바뀌었어요. 최신 내역을 다시 확인해 주세요.");

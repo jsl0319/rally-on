@@ -1,4 +1,6 @@
 import NextAuth from "next-auth";
+import { detachPushDevice } from "@/server/push/device";
+import { pushConfig } from "@/server/push/policy";
 import Kakao from "next-auth/providers/kakao";
 
 import { Prisma } from "@/generated/prisma/client";
@@ -77,10 +79,16 @@ async function createInitialUser(provider: string, providerAccountId: string, pr
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [Kakao],
   session: { strategy: "jwt" },
+  events: {
+    async signOut(message) {
+      if (pushConfig() && "token" in message && typeof message.token?.userId === "string") await detachPushDevice(message.token.userId);
+    },
+  },
   callbacks: {
     async signIn({ account, profile }) {
       if (account?.provider !== "kakao" || !account.providerAccountId || !profile) return false;
 
+      if (pushConfig()) await detachPushDevice();
       const existingAccount = await getPrisma().authAccount.findUnique({
         where: { provider_providerAccountId: { provider: account.provider, providerAccountId: account.providerAccountId } },
       });

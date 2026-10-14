@@ -1,6 +1,7 @@
 "use client";
 
 import { Alert, AlertContainer, AlertContent, AlertDescription, AlertHeading, AlertTrigger } from "@wanteddev/wds";
+import { setPushBinding } from "@/features/notifications/web-push-client";
 import { signOut } from "next-auth/react";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,8 @@ export function LogoutButton({ className = "", onOpenChange }: { className?: str
     setBusy(true);
     setError("");
     try {
+      // The Auth.js event also removes the server binding; a broken worker must not block logout.
+      await setPushBinding(null).catch(() => undefined);
       await signOut({ callbackUrl: "/login" });
     } catch {
       pending.current = false;

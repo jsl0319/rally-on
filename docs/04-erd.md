@@ -1401,3 +1401,12 @@ Match에 nullable `gameType`(MatchGameType: MIXED_DOUBLES, MENS_DOUBLES, WOMENS_
 - `publishedAt`은 초안에서 null, 최초 공개 때 설정, 이후 수정·재공개 시 유지. 공개 공지의 날짜 누락은 DB CHECK로 차단.
 - `NotificationType`: `SUPPORT_INQUIRY_RECEIVED`, `SUPPORT_INQUIRY_UPDATED`, `SUPPORT_INQUIRY_REPLIED`, `SUPPORT_INQUIRY_RESOLVED`, `SUPPORT_OPERATOR_REQUESTED` 추가. 알림에 문의 본문을 복사하지 않는다.
 - 기존 문의·메시지 모델과 버전·요청 ID를 그대로 사용한다. 상세 정책: `docs/03-31-service-administration.md`.
+
+
+## 웹 푸시 (2026-10-14)
+
+- `Notification.pushQueuedAt`: 커밋된 인앱 알림을 발송 작업으로 전개한 시각. 도입 이전 알림은 migration에서 처리 완료로 표시해 소급 발송하지 않는다.
+- `PushSubscription`: 사용자 FK, 유일한 브라우저 쿠키 해시와 endpoint, 수신 암호화 키, 최초 연결·만료 시각. 같은 브라우저의 계정 변경은 이전 연결을 삭제한다. 키는 공개 API로 반환하지 않는다.
+- `PushDelivery`: 원본 알림·구독 FK의 유일 조합, 시도 횟수·다음 실행 시각·작업 임대 토큰·완료 시각·결과. 원본 또는 구독 삭제 시 함께 삭제한다. 별도 거래 상태를 만들지 않는다.
+- `PUSH_TEST`: 사용자가 본인 기기의 수신 확인을 요청한 테스트 알림. 앱의 신청·입금·환불 상태는 변경하지 않는다.
+- 공유 경계는 기존 Notification 사건·접근 권한·이동 경로 및 개인정보 없는 `pushPayload`다. 현재 구독 모델·전송 구현은 웹 전용이며 네이티브 토큰/환경은 실제 iOS·Android 구현 시 별도로 추가한다.

@@ -1,3 +1,6 @@
+import { after } from "next/server";
+import { cleanupPush, dispatchPush } from "@/server/push/dispatch";
+import { pushConfig } from "@/server/push/policy";
 import { NextResponse } from "next/server";
 
 import { getPrisma } from "@/server/db/prisma";
@@ -20,6 +23,13 @@ export async function GET(request: Request) {
     return new NextResponse(null, { status: 401 });
   }
 
+  if (pushConfig()) after(async () => {
+    try {
+      const prisma = getPrisma();
+      await cleanupPush(prisma);
+      console.info({ event: "push.dispatch.completed", ...await dispatchPush(prisma) });
+    } catch { console.error({ event: "push.dispatch.failed" }); }
+  });
   const startedAt = Date.now();
   try {
     const prisma = getPrisma();

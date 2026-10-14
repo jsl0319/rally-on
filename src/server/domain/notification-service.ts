@@ -1,3 +1,4 @@
+import { schedulePushDispatch } from "@/server/push/schedule";
 import { Prisma } from "@/generated/prisma/client";
 import type { PrismaClient } from "@/generated/prisma/client";
 
@@ -27,6 +28,7 @@ export async function recordApplicationNotification(
   await transaction.notification.create({
     data: { userId: input.recipientUserId, type: input.type, title, body, href: input.href },
   });
+  schedulePushDispatch();
 }
 
 /**
@@ -56,6 +58,7 @@ export async function recordApplicationNotifications(
   await transaction.notification.createMany({
     data: recipients.map(({ id }) => ({ userId: id, type: input.type, title, body, href: input.href })),
   });
+  schedulePushDispatch();
 }
 
 /** 읽지 않은 알림 수만 센다. 목록까지 불러오지 않아 배지용으로 가볍다. */
