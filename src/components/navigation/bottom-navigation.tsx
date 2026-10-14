@@ -17,7 +17,7 @@ type NavigationItem = {
   badge?: (badges: Badges) => number;
 };
 
-const iconClassName = "size-[22px] shrink-0";
+const iconClassName = "size-6 shrink-0";
 
 /**
  * 안 읽은 것이 있다는 사실은 하단 메뉴에서 보여야 한다. 알림이 마이 탭 안쪽 종
@@ -61,7 +61,7 @@ function BadgedIcon({ count, children, label }: { count: number; children: React
   if (count <= 0) return <>{children}</>;
   return <span className="relative inline-flex">
     {children}
-    <span className="absolute -right-2 -top-0.5 inline-flex min-w-4 items-center justify-center rounded-full bg-[var(--tm-status-error-text)] px-1 text-[9px] font-bold leading-4 text-white" role="status">
+    <span className="absolute -right-1.5 -top-0.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-[var(--tm-status-error-text)] px-1 text-[10px] font-bold leading-[18px] text-white" role="status">
       <span className="sr-only">{label} </span>{count > 9 ? "9+" : count}
     </span>
   </span>;
