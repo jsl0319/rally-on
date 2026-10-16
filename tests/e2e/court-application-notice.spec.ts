@@ -30,6 +30,17 @@ test("조건 변경은 재확인을 요구하고 신청 당시 안내는 본인�
     expect((await member.context.request.post(endpoint, { data: {} })).status()).toBe(422);
     await member.page.goto(`/partner-sessions/${fixture.partnerSlotId}`);
     await expect(member.page.getByText("본인 사유의 취소", { exact: true }).first()).toBeVisible();
+    const notice = member.page.locator("section").filter({ has: member.page.getByRole("heading", { name: "참가 전 알아두세요", exact: true }) });
+    await expect(notice.getByText("100%", { exact: true })).toBeVisible();
+    await expect(notice.getByText("50%", { exact: true })).toBeVisible();
+    await expect(notice.getByText("0%", { exact: true })).toBeVisible();
+    await expect(notice.getByText("이용 안내", { exact: true })).toHaveCount(0);
+    await expect(notice.getByText("본인 사유의 취소", { exact: true })).toHaveCount(1);
+    await notice.scrollIntoViewIfNeeded();
+    await member.page.screenshot({ path: "/tmp/rally-court-notice-mobile.png" });
+    await member.page.setViewportSize({ width: 320, height: 812 });
+    expect(await member.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await member.page.setViewportSize({ width: 390, height: 844 });
     await member.page.getByRole("button", { name: "같이 치기", exact: true }).click();
     const dialog = member.page.getByRole("dialog", { name: "같이 치기", exact: true });
     const submit = dialog.getByRole("button", { name: "신청 보내기", exact: true });
@@ -87,8 +98,9 @@ test("운영자 승인 대기에도 확인 기록을 남기고 과거 신청에�
     await prisma.courtSlot.update({ where: { id: fixture.partnerSlotId }, data: { approvalMode: "OPERATOR" } });
     await prisma.matchApplication.create({ data: { matchId: fixture.partnerMatchId, applicantUserId: e2eUsers.host.id, applicantGender: e2eUsers.host.gender, status: "PENDING", profileSnapshot: {}, profileSnapshotVersion: 1 } });
     await member.page.goto(`/partner-sessions/${fixture.partnerSlotId}`);
-    await member.page.getByText("전체 신청·입금·환불 안내", { exact: true }).click();
-    await expect(member.page.getByText(/운영자 승인 후 입금 기한을 안내해요/)).toBeVisible();
+    await member.page.locator("summary").filter({ hasText: "입금과 확정" }).click();
+    await expect(member.page.getByText("운영자가 신청을 승인하면 입금 안내를 제공합니다.", { exact: true })).toBeVisible();
+    await expect(member.page.getByText("운영자가 입금을 확인하면 참가가 확정됩니다.", { exact: true })).toBeHidden();
     await member.page.getByRole("button", { name: "같이 치기", exact: true }).click();
     const dialog = member.page.getByRole("dialog", { name: "같이 치기", exact: true });
     await dialog.getByLabel(/운영자에게 보낼 자기소개/).fill("천천히 함께 연습하고 싶어요.");
@@ -109,7 +121,7 @@ test("운영자 승인 대기에도 확인 기록을 남기고 과거 신청에�
   } finally { await member.context.close(); await oldMember.context.close(); }
 });
 
-test("운영자가 제공 범위를 선택해 저장·공개하면 상세와 신청 기록에 같은 내용이 보인다", async ({ browser, request }) => {
+test("제공 범위는 저장하되 새 상세와 신청 안내에서 중복 이용 안내를 표시하지 않는다", async ({ browser, request }) => {
   test.setTimeout(120000);
   const errors: string[] = [];
   const operator = await session(browser, e2eUsers.operator.id, errors);
@@ -155,8 +167,8 @@ test("운영자가 제공 범위를 선택해 저장·공개하면 상세와 신
     await member.page.goto(`/partner-sessions/${created.id}`);
     await expect(member.page.getByRole("heading", { name: "참가비 포함 항목", exact: true })).toHaveCount(0);
     const sentence = "코트 이용·매칭 참가 · 현장 경기 진행 포함. 테니스공 · 장비 대여 · 레슨 미포함.";
-    await member.page.getByText("전체 신청·입금·환불 안내", { exact: true }).click();
-    await expect(member.page.getByText(sentence, { exact: true })).toBeVisible();
+    await expect(member.page.getByText("이용 안내", { exact: true })).toHaveCount(0);
+    await expect(member.page.getByText(sentence, { exact: true })).toHaveCount(0);
     await member.page.screenshot({ path: "/tmp/rally-r06-scope-detail.png" });
     await member.page.getByRole("button", { name: "같이 치기", exact: true }).click();
     const dialog = member.page.getByRole("dialog", { name: "같이 치기", exact: true });
@@ -167,11 +179,20 @@ test("운영자가 제공 범위를 선택해 저장·공개하면 상세와 신
     await expect(dialog).toHaveCount(0);
     await member.page.getByText("신청 당시 확인한 안내", { exact: true }).click();
     const record = member.page.locator("details").filter({ has: member.page.locator("summary", { hasText: /^신청 당시 확인한 안내$/ }) });
-    await record.getByText("전체 신청·입금·환불 안내", { exact: true }).click();
-    await expect(record.getByText(sentence, { exact: true })).toBeVisible();
+    await expect(record.getByText("이용 안내", { exact: true })).toHaveCount(0);
+    await expect(record.getByText(sentence, { exact: true })).toHaveCount(0);
     const match = await prisma.match.findFirstOrThrow({ where: { courtSlotId: created.id } });
     const application = await prisma.matchApplication.findFirstOrThrow({ where: { matchId: match.id } });
     expect(application.courtNoticeSnapshot).toMatchObject({ terms: { serviceScope: scope } });
+    // A past v5 record keeps the original wording; the current presentation must not rewrite consent.
+    const oldNotice = JSON.parse(JSON.stringify(application.courtNoticeSnapshot));
+    oldNotice.version = "court-application-2026-10-12-v5";
+    oldNotice.terms.sections.push({ title: "이용 안내", body: sentence });
+    await prisma.matchApplication.update({ where: { id: application.id }, data: { courtNoticeSnapshot: oldNotice } });
+    await member.page.reload();
+    await member.page.getByText("신청 당시 확인한 안내", { exact: true }).click();
+    await record.locator("summary").filter({ hasText: /^이용 안내$/ }).click();
+    await expect(record.getByText(sentence, { exact: true })).toBeVisible();
     expect((await prisma.courtSlot.findUniqueOrThrow({ where: { id: fixture.partnerSlotId } })).serviceScope).toBeNull();
     for (const page of [operator.page, member.page]) expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(errors).toEqual([]);

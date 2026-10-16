@@ -57,14 +57,13 @@ describe("코트 매칭 신청 전 안내", () => {
     expect(notice).not.toContain("private-profile");
   });
 
-  it("포함·미포함을 기록하고 과거 정보 미등록을 미포함으로 바꾸지 않는다", () => {
+  it("이용 안내를 새 화면에서 제외하되 제공 범위와 과거 동의 원문은 보존한다", () => {
     const notice = buildCourtApplicationNotice(match);
-    const section = notice.terms.sections.find((s) => s.title === "이용 안내");
-    expect(section?.body).toBe("코트 이용·매칭 참가 · 테니스공 · 현장 경기 진행 포함. 장비 대여 · 레슨 미포함.");
+    expect(notice.terms.sections.some(s => s.title === "이용 안내")).toBe(false);
+    expect(notice.terms.serviceScope).toEqual(match.courtSlot.serviceScope);
     const unknown = buildCourtApplicationNotice({ ...match, courtSlot: { ...match.courtSlot, serviceScope: null } });
     expect(unknown.terms.serviceScope).toBeNull();
-    expect(unknown.terms.sections.at(-1)?.body).toContain("등록되지 않았어요");
-    const old = { ...notice, version: "court-application-2026-09-12-v1", terms: { ...notice.terms, sections: notice.terms.sections.filter((s) => s.title !== "참가비 포함 항목") } };
+    const old = { ...notice, version: "court-application-2026-09-12-v1", terms: { ...notice.terms, sections: [{ title: "이용 안내", body: "공·장비·레슨·현장 진행의 제공 여부가 등록되지 않았어요." }] } };
     delete old.terms.serviceScope;
     expect(readCourtApplicationNotice(old)).toEqual(old);
     expect(readCourtApplicationNotice(old)?.terms).not.toHaveProperty("serviceScope");
@@ -89,5 +88,14 @@ it("2구 조건은 새 안내에 고정하고 과거 3구 동의 원문을 보�
   previous.terms.sections = previous.terms.sections.map(s => ({ ...s, body: s.body.replace("최소 2구", "최소 3구") }));
   expect(readCourtApplicationNotice(previous)).toEqual(previous);
   expect(readCourtApplicationNotice(previous)?.terms.ballMinimumCount ?? 3).toBe(3);
-  expect(updated.terms.sections.find(s => s.title === "입금과 확정")?.summary).toContain("확인하면 참가 확정");
+  expect(updated.terms.sections.find(s => s.title === "입금과 확정")?.summary).toContain("입금을 확인하면 참가가 확정");
+});
+
+it("환불률을 새 안내에 보존하고 기존 문장형 환불 기록은 소급 변환하지 않는다", () => {
+  const notice = buildCourtApplicationNotice(match);
+  const rates = [{ label: "이틀 전까지", percent: 100 }, { label: "하루 전", percent: 50 }, { label: "당일", percent: 0 }];
+  expect(readCourtApplicationNotice(notice)?.terms.sections.find(s => s.title === "본인 사유의 취소")?.refundRates).toEqual(rates);
+  const old = { ...notice, version: "court-application-2026-10-12-v5", terms: { ...notice.terms, sections: [{ title: "본인 사유의 취소", body: "확정 전 전액 반환해요. 확정 후 이틀 전 100%, 하루 전 50%, 당일 0%예요." }] } };
+  expect(readCourtApplicationNotice(old)).toEqual(old);
+  expect(readCourtApplicationNotice(old)?.terms.sections[0]).not.toHaveProperty("refundRates");
 });

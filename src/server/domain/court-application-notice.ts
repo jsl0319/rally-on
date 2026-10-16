@@ -4,10 +4,10 @@ import { z } from "zod";
 import type { GameType } from "@/matches/game-type";
 import { gameTypeLabels } from "@/matches/game-type";
 import { checkCourtComposition, courtCompositionPolicyVersion } from "@/matches/court-composition";
-import { courtServiceScopeSchema, describeCourtServiceScope, readCourtServiceScope } from "@/matches/court-service-scope";
+import { courtServiceScopeSchema, readCourtServiceScope } from "@/matches/court-service-scope";
 import { confirmationWindowMinutes, depositWindowMinutes, getApplicationDeadline, getJudgementAt, getPaymentDueAt, getLateConfirmationDeadline } from "./court-match";
 
-export const courtApplicationNoticeVersion = "court-application-2026-10-12-v5";
+export const courtApplicationNoticeVersion = "court-application-2026-10-17-v6";
 export const courtApplicationNoticeSchema = z.object({
   version: z.string(), fingerprint: z.string(),
   terms: z.object({
@@ -20,7 +20,9 @@ export const courtApplicationNoticeSchema = z.object({
     compositionPolicyVersion: z.number(), approvalMode: z.string(),
     usageNote: z.string().nullable(),
     serviceScope: courtServiceScopeSchema.nullable().optional(),
-    sections: z.array(z.object({ title: z.string(), summary: z.string().optional(), body: z.string() })),
+    sections: z.array(z.object({ title: z.string(), summary: z.string().optional(), body: z.string(),
+      refundRates: z.array(z.object({ label: z.string(), percent: z.number().int().min(0).max(100) })).optional(),
+    })),
   }),
 });
 export type CourtApplicationNotice = z.infer<typeof courtApplicationNoticeSchema>;
@@ -59,16 +61,17 @@ export function buildCourtApplicationNotice(match: NoticeMatch, bringBalls = fal
     usageNote: slot?.usageNote ?? null,
     serviceScope,
     sections: [
-      ...(slot?.ballDiscountEnabled ? [{ title: "테니스공 준비", body: bringBalls
-        ? `${ballContributionLabel}해 주세요. 참가비 5,000원을 할인받으며 공 미지참 시 운영자 확인 후 5,000원을 추가 입금해요. 신청 접수 순으로 경기당 1명만 확보해요.`
-        : "공 준비 참가자 1명이 새 테니스공 1캔(최소 2구)을 가져와 함께 사용해요. 공 준비 할인은 별도 선택한 한 명에게만 적용해요. 준비자가 정해지지 않거나 취소하면 운영자가 참가자와 준비 방법을 조율해요." }] : []),
-      { title: "진행 조건", summary: `${requirement} · ${time(judgement)} 입금 확인 기준`, body: `${requirement}. ${time(judgement)}까지 입금 확인이 끝난 참가자로 판정해요. 운영자는 참가 인원에 포함하지 않아요.` },
-      { title: "입금과 확정", summary: `${slot?.approvalMode === "AUTO" ? "신청 후 바로 입금 안내를 받아요." : "운영자가 신청을 수락하면 입금 안내를 받아요."} 기한 내 이체하고 운영자가 확인하면 참가 확정돼요.`, body: `${slot?.approvalMode === "AUTO" ? "조건과 자리가 맞으면 자동 승인해요." : "운영자 승인 후 입금 기한을 안내해요."} 승인 후 기본 ${depositWindowMinutes / 60}시간, 판정 전에는 늦어도 ${time(prePaymentCutoff)}까지 이체해 주세요. 운영자 확인 기한은 이체 기한에서 ${confirmationWindowMinutes}분 뒤예요. 정확한 기한은 승인 후 다시 안내해요. 입금 알림만으로 참가가 확정되지는 않아요.` },
-      { title: "추가 모집 기한", body: `진행 판정을 통과한 경기만 ${time(getApplicationDeadline(match.startsAt))}까지 추가 신청·승인을 받아요. 추가 모집의 이체 기한은 ${time(getPaymentDueAt(judgement, match.startsAt))}, 운영자 확인은 ${time(getLateConfirmationDeadline(match.startsAt))}까지예요.` },
-      { title: "본인 사유의 취소", summary: "확정 전 전액 반환. 확정 후 이틀 전까지 100%, 하루 전 50%, 당일 0%.", body: "확정 전 철회·거절·만료 건의 실제 입금액은 전액 반환해요. 확정 후 본인 사유로 취소하면 이틀 전까지 참가비 전액, 하루 전 50%, 당일 0%예요. 취소는 시작 전까지 가능하며 초과 입금은 별도로 반환해요." },
-      { title: "경기 취소와 반환", summary: "진행 조건 미달·제공 불가 취소 시 남은 참가자 전액 반환. 이전 본인 사유 취소는 당시 기준을 유지해요.", body: `진행 조건 미달이나 운영자의 제공 불가로 경기 전체가 취소되면 남은 참가자의 실제 입금액은 전액 반환 대상이에요.${currentPolicy ? " 판정 후 구성 부족은 운영자가 보충 여부를 확인하고 제공 불가하면 취소해요." : ""} 먼저 본인 사유로 취소한 신청은 당시 기준을 유지해요. 입금·환불은 운영자가 통장에서 대조하고 직접 이체해요. 앱은 자동 송금하지 않아요.` },
-      { title: "이용 중 일부 제공 불가", body: "우천·시설 문제로 일부 이용하지 못한 경우, 문제 발생 당시 확정 참가자는 운영자와 반환 금액을 직접 협의해 주세요. 운영자가 합의 금액·사유를 기록하고 직접 반환해요. 앱은 시간 비례 금액을 자동 계산하지 않으며, 기존 전액 반환 조건과 이전 본인 사유 취소 기준은 유지해요." },
-      { title: "이용 안내", body: describeCourtServiceScope(slot?.ballDiscountEnabled && serviceScope ? { ...serviceScope, balls: false } : serviceScope) },
+      { title: "진행 조건", summary: `${requirement} · ${time(judgement)} 입금 확인 기준`, body: `필요 인원: ${requirement}\n${time(judgement)}까지 입금 확인이 완료된 참가자로 판정합니다.\n운영자는 참가 인원에 포함되지 않습니다.` },
+      { title: "입금과 확정", summary: "운영자가 입금을 확인하면 참가가 확정됩니다.", body: `${slot?.approvalMode === "AUTO" ? "조건과 잔여 인원이 맞으면 신청 즉시 입금 안내를 제공합니다." : "운영자가 신청을 승인하면 입금 안내를 제공합니다."}\n승인 후 기본 ${depositWindowMinutes / 60}시간 이내, 진행 판정 전에는 늦어도 ${time(prePaymentCutoff)}까지 입금해야 합니다.\n운영자 확인 기한은 입금 기한의 ${confirmationWindowMinutes}분 뒤입니다. 개인별 정확한 기한은 승인 후 표시됩니다.\n입금 알림만으로는 참가가 확정되지 않습니다. 운영자의 입금 확인이 필요합니다.` },
+      { title: "본인 사유의 취소", summary: "확정 전 전액 반환 · 확정 후 취소일별 환불", body: "확정 전 철회·거절·만료된 신청은 실제 입금액을 전액 반환합니다.\n취소는 경기 시작 전까지 가능하며, 초과 입금액은 별도로 반환합니다.", refundRates: [
+        { label: "이틀 전까지", percent: 100 }, { label: "하루 전", percent: 50 }, { label: "당일", percent: 0 },
+      ] },
+      { title: "경기 취소와 반환", summary: "인원 미달·제공 불가로 전체 취소 시 전액 반환", body: `진행 조건 미달 또는 운영자의 제공 불가로 경기 전체가 취소되면, 남은 참가자의 실제 입금액을 전액 반환합니다.\n먼저 본인 사유로 취소한 신청에는 당시 환불 기준을 적용합니다.${currentPolicy ? "\n진행 판정 후 인원이 부족해지면 운영자가 보충 여부를 확인합니다. 제공이 불가능하면 경기를 취소합니다." : ""}\n입금 대조와 환불 송금은 운영자가 직접 처리합니다. 앱에서 자동 송금하지 않습니다.` },
+      { title: "우천·시설 문제로 일부 중단", summary: "당시 확정 참가자와 운영자가 반환액을 협의합니다.", body: "일부 시간을 이용하지 못한 경우, 문제 발생 당시 확정 참가자와 운영자가 반환 금액을 직접 협의합니다.\n운영자가 합의 금액·사유를 기록하고 직접 반환합니다. 시간에 비례한 자동 계산은 하지 않습니다.\n기존 전액 반환 조건과 이전 본인 사유 취소의 환불 기준은 유지됩니다." },
+      ...(slot?.ballDiscountEnabled ? [{ title: "테니스공 준비", summary: bringBalls ? "공 미지참 시 5,000원을 추가 입금합니다." : "공 준비 참가자 1명이 새 공을 가져옵니다.", body: bringBalls
+        ? `${ballContributionLabel}해야 합니다.\n경기당 1명에게 신청 접수 순으로 5,000원 할인을 적용합니다.\n공을 가져오지 않으면 운영자 확인 후 5,000원을 추가 입금해야 합니다.`
+        : `공 준비 참가자 1명이 새 테니스공 1캔(최소 ${ballMinimumCount}구)을 가져와 함께 사용합니다.\n5,000원 할인은 공 준비로 신청한 1명에게만 적용됩니다.\n준비자가 없거나 취소하면 운영자가 참가자와 준비 방법을 협의합니다.` }] : []),
+      { title: "추가 모집 기한", summary: `${time(getApplicationDeadline(match.startsAt))}까지 신청·승인`, body: `진행 판정을 통과한 경기만 추가 모집합니다.\n신청·승인: ${time(getApplicationDeadline(match.startsAt))}까지\n입금: ${time(getPaymentDueAt(judgement, match.startsAt))}까지\n운영자 입금 확인: ${time(getLateConfirmationDeadline(match.startsAt))}까지` },
     ],
   };
   const fingerprint = createHash("sha256").update(JSON.stringify({ version: courtApplicationNoticeVersion, terms })).digest("hex");

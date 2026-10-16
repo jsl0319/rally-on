@@ -1494,6 +1494,8 @@ PUT  /api/v1/operator/courts/{courtId}/settlement-account     운영자 입금 �
 
 `court-application-2026-10-01-v2` 안내는 `terms.serviceScope`(공·장비·레슨·현장 경기 진행의 포함 여부)와 해당 원문/요약을 해시에 포함한다. 기존 v1 신청 기록은 필드가 없어도 원문 그대로 읽으며 새 값을 소급하지 않는다. 과거 Slot의 NULL은 미포함이 아니라 미등록으로 표시한다.
 
+`court-application-2026-10-17-v6`는 새 안내의 `이용 안내` 표시 항목을 제거하고 `습니다` 체와 문단 개행을 사용한다. `terms.serviceScope`와 `usageNote`는 보존한다. `terms.sections[].refundRates`는 선택 필드로 `{ label: string, percent: integer(0..100) }[]`이며 본인 사유 취소의 100/50/0 환불률 표시에 사용하고 해시·동의 기록에 포함한다. 과거 버전의 본문·이용 안내는 원문 그대로 조회하며 새 표를 소급하지 않는다. 계산 규칙·신청 입력 계약·DB 스키마는 변경하지 않는다.
+
 `POST /court-matches/{matchId}/applications`의 본문:
 
 ```json
