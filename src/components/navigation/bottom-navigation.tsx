@@ -3,7 +3,10 @@
 import { ChatCircleDots, TennisBall, UserCircle, UsersThree } from "@phosphor-icons/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import type { NotificationCounts } from "@/notifications/activity";
+import { notificationsChangedEvent } from "@/notifications/changed";
 
 type Badges = { notifications: number; chats: number };
 
@@ -30,11 +33,14 @@ function useBadges() {
   const pathname = usePathname();
   const [badges, setBadges] = useState<Badges>({ notifications: 0, chats: 0 });
 
+  const requestSequence = useRef(0);
   const load = useCallback(async () => {
+    const sequence = ++requestSequence.current;
     try {
       const response = await fetch("/api/v1/me/badges", { cache: "no-store" });
       if (!response.ok) return;
       const body = await response.json() as Partial<Badges>;
+      if (sequence !== requestSequence.current) return;
       setBadges({ notifications: Number(body.notifications ?? 0), chats: Number(body.chats ?? 0) });
     } catch {
       // 배지는 보조 정보다. 실패해도 화면을 막지 않는다.
@@ -46,11 +52,18 @@ function useBadges() {
     const initial = window.setTimeout(() => { void load(); }, 0);
     const timer = window.setInterval(() => { if (!document.hidden) void load(); }, 60_000);
     const onVisible = () => { if (!document.hidden) void load(); };
+    const onRead = (event: Event) => {
+      requestSequence.current++;
+      const counts = (event as CustomEvent<NotificationCounts>).detail;
+      setBadges(current => ({ ...current, notifications: counts.unreadCount }));
+    };
+    window.addEventListener(notificationsChangedEvent, onRead);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       window.clearTimeout(initial);
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener(notificationsChangedEvent, onRead);
     };
   }, [load, pathname]);
 

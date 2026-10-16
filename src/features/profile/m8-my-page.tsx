@@ -5,7 +5,7 @@ import { WithdrawalModal } from "./withdrawal-modal";
 import { LogoutButton } from "./logout-button";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, CaretRight, ClipboardText, FileText, Headset, Megaphone, PaperPlaneTilt, ShieldCheck, UserCircle } from "@phosphor-icons/react";
 
 import { StickyPageHeader } from "@/components/navigation/sticky-page-header";
@@ -13,6 +13,8 @@ import { PullToRefresh } from "@/components/feedback/pull-to-refresh";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+import type { NotificationCounts } from "@/notifications/activity";
+import { notificationsChangedEvent } from "@/notifications/changed";
 import { useActionToast } from "@/components/feedback/use-action-toast";
 
 type Me = {
@@ -50,23 +52,6 @@ async function fetchJsonSafe<T>(url: string): Promise<T | null> {
   }
 }
 
-type SentApplicationSummary = {
-  status: string;
-  courtMatch: { depositClaimedAt: string | null; awaitingRefund: boolean; refundRequested: boolean } | null;
-};
-
-/**
- * 배지는 "내가 손대야 할 신청" 수다. 일반 매칭은 모집자의 검토를 기다리는 것뿐이지만,
- * 코트 매칭은 승인 뒤에 입금이, 취소 뒤에 환불 계좌 입력이 남는다.
- */
-function needsMyAction(application: SentApplicationSummary) {
-  if (application.status === "PENDING") return true;
-  const courtMatch = application.courtMatch;
-  if (!courtMatch) return false;
-  if (courtMatch.awaitingRefund) return !courtMatch.refundRequested;
-  return application.status === "ACCEPTED" && !courtMatch.depositClaimedAt;
-}
-
 export function M8MyPage() {
   const showComplete = useActionToast();
   const [me, setMe] = useState<Me | null>(null);
@@ -74,10 +59,30 @@ export function M8MyPage() {
   const [notificationError, setNotificationError] = useState("");
   const [savingNotificationPref, setSavingNotificationPref] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
-  const [pendingSentCount, setPendingSentCount] = useState(0);
-  const [pendingReceivedCount, setPendingReceivedCount] = useState(0);
+  const [unreadSentCount, setUnreadSentCount] = useState(0);
+  const [unreadReceivedCount, setUnreadReceivedCount] = useState(0);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
+
+  const countsSequence = useRef(0);
+  const applyCounts = useCallback((counts: NotificationCounts) => {
+    setUnreadNotificationCount(counts.unreadCount);
+    setUnreadSentCount(counts.activityUnreadCounts?.sent ?? 0);
+    setUnreadReceivedCount(counts.activityUnreadCounts?.received ?? 0);
+  }, []);
+  const loadCounts = useCallback(async () => {
+    const sequence = ++countsSequence.current;
+    const counts = await fetchJsonSafe<NotificationCounts>("/api/v1/me/notifications");
+    if (counts && sequence === countsSequence.current) applyCounts(counts);
+  }, [applyCounts]);
+  useEffect(() => {
+    const onChanged = (event: Event) => {
+      countsSequence.current++;
+      applyCounts((event as CustomEvent<NotificationCounts>).detail);
+    };
+    window.addEventListener(notificationsChangedEvent, onChanged);
+    return () => window.removeEventListener(notificationsChangedEvent, onChanged);
+  }, [applyCounts]);
 
   const load = useCallback(async () => {
     try {
@@ -87,18 +92,11 @@ export function M8MyPage() {
       if (!response.ok) throw new Error(getErrorMessage(body));
       setMe(body as Me);
 
-      const [notifications, sentApplications, hostedMatches] = await Promise.all([
-        fetchJsonSafe<{ unreadCount: number }>("/api/v1/me/notifications"),
-        fetchJsonSafe<{ items: SentApplicationSummary[] }>("/api/v1/me/applications"),
-        fetchJsonSafe<{ items: Array<{ pendingApplicationCount: number }> }>("/api/v1/me/hosted-matches"),
-      ]);
-      setUnreadNotificationCount(notifications?.unreadCount ?? 0);
-      setPendingSentCount(sentApplications?.items.filter(needsMyAction).length ?? 0);
-      setPendingReceivedCount(hostedMatches?.items.reduce((sum, item) => sum + item.pendingApplicationCount, 0) ?? 0);
+      await loadCounts();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "내 정보를 불러오지 못했어요.");
     }
-  }, []);
+  }, [loadCounts]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void load(); }, 0);
@@ -138,14 +136,14 @@ export function M8MyPage() {
         <SectionLabel>내 활동</SectionLabel>
         <Card>
           <LinkRow
-            badge={<CountBadge count={pendingReceivedCount} />}
+            badge={<CountBadge count={unreadReceivedCount} />}
             description="모집과 신청자 관리"
             href="/activity/received"
             icon={<IconChip><ClipboardText aria-hidden="true" className="size-5" /></IconChip>}
             title="내가 만든 매칭"
           />
           <LinkRow
-            badge={<CountBadge count={pendingSentCount} />}
+            badge={<CountBadge count={unreadSentCount} />}
             description="신청 상태와 남은 할 일"
             href="/activity/sent"
             icon={<IconChip><PaperPlaneTilt aria-hidden="true" className="size-5" /></IconChip>}
@@ -260,5 +258,5 @@ function ToggleRow({ description, icon, title, toggle }: { description?: string;
 
 function CountBadge({ count }: { count: number }) {
   if (count <= 0) return null;
-  return <span className="inline-flex min-h-6 shrink-0 items-center rounded-full bg-[var(--tm-action-primary)] px-2 text-xs font-bold text-white">{count}</span>;
+  return <span aria-label={`새 소식 ${count}개`} className="inline-flex min-h-6 shrink-0 items-center rounded-full bg-[var(--tm-status-error-text)] px-2 text-xs font-bold text-white">{count > 9 ? "9+" : count}</span>;
 }

@@ -10,6 +10,7 @@ import { CalendarBlank, CaretDown, TennisBall, Users } from "@phosphor-icons/rea
 import { useCallback, useEffect, useState } from "react";
 
 import { ActivityTabs } from "@/components/navigation/activity-tabs";
+import { useActivityReadReceipt } from "@/features/notifications/use-activity-read-receipt";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
@@ -95,6 +96,8 @@ function getErrorMessage(body: unknown, fallback: string) {
 
 export function M5SentApplications() {
   const [items, setItems] = useState<SentApplication[] | null>(null);
+  const [readReceipt, setReadReceipt] = useState<string[]>();
+  useActivityReadReceipt(readReceipt);
   const [error, setError] = useState("");
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
   const [withdrawConfirmId, setWithdrawConfirmId] = useState<string | null>(null);
@@ -105,7 +108,9 @@ export function M5SentApplications() {
       const response = await fetch("/api/v1/me/applications", { cache: "no-store" });
       const body: unknown = await response.json();
       if (!response.ok) throw new Error(getErrorMessage(body, "신청 내역을 불러오지 못했어요."));
-      setItems((body as { items: SentApplication[] }).items);
+      const result = body as { items: SentApplication[]; activityReadReceipt?: string[] };
+      setItems(result.items);
+      setReadReceipt(result.activityReadReceipt);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "신청 내역을 불러오지 못했어요."); }
   }, []);
 

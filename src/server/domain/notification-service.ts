@@ -1,6 +1,7 @@
 import { schedulePushDispatch } from "@/server/push/schedule";
 import { Prisma } from "@/generated/prisma/client";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { activityScope, activityUnreadCounts, type ActivityScope } from "@/notifications/activity";
 
 import { buildNotificationContent, isAlwaysDeliveredNotification, type NotificationType } from "@/server/domain/notification";
 
@@ -67,17 +68,18 @@ export function countUnreadNotifications(prisma: PrismaClient, userId: string) {
 }
 
 export async function getMyNotifications(prisma: PrismaClient, userId: string) {
-  const [items, unreadCount] = await Promise.all([
+  const [items, unread] = await Promise.all([
     prisma.notification.findMany({
       where: { userId },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 50,
     }),
-    prisma.notification.count({ where: { userId, readAt: null } }),
+    prisma.notification.findMany({ where: { userId, readAt: null }, select: { type: true, href: true } }),
   ]);
 
   return {
-    unreadCount,
+    unreadCount: unread.length,
+    activityUnreadCounts: activityUnreadCounts(unread),
     items: items.map((item) => ({
       id: item.id,
       type: item.type,
@@ -88,6 +90,14 @@ export async function getMyNotifications(prisma: PrismaClient, userId: string) {
       createdAt: item.createdAt.toISOString(),
     })),
   };
+}
+
+/** Capture before the corresponding list query; never acknowledge notifications through a GET. */
+export async function getActivityReadReceipt(prisma: PrismaClient, userId: string, scope: ActivityScope) {
+  const unread = await prisma.notification.findMany({
+    where: { userId, readAt: null }, select: { id: true, type: true, href: true },
+  });
+  return unread.filter(item => activityScope(item) === scope).map(item => item.id);
 }
 
 export async function markNotificationsRead(prisma: PrismaClient, userId: string, ids?: string[]) {

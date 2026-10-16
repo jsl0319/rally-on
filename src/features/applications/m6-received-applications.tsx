@@ -10,6 +10,7 @@ import { CalendarBlank, TennisBall } from "@phosphor-icons/react";
 import { use, useCallback, useEffect, useState } from "react";
 
 import { ActivityTabs } from "@/components/navigation/activity-tabs";
+import { useActivityReadReceipt } from "@/features/notifications/use-activity-read-receipt";
 import { BackButton } from "@/components/navigation/back-button";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
@@ -110,7 +111,8 @@ function LoadingOrError({ error, label, load }: { error: string; label: string; 
 }
 
 export function M6ReceivedApplications() {
-  const { data, error, load } = useJsonLoader<{ items: HostedMatch[] }>("/api/v1/me/hosted-matches");
+  const { data, error, load } = useJsonLoader<{ items: HostedMatch[]; activityReadReceipt?: string[] }>("/api/v1/me/hosted-matches");
+  useActivityReadReceipt(data?.activityReadReceipt);
   return <PullToRefresh onRefresh={load}><PageShell withNavigation header={<AccountPageHeader backHref="/my" title="내가 만든 매칭" />}>
     <ActivityTabs current="received" />
     {data !== null && error ? <LoadingOrError error={error} label="" load={load} /> : null}
