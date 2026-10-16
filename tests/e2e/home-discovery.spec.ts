@@ -87,7 +87,7 @@ test("프로필이 누락된 계정은 목록 API 검증 후 온보딩으로 복
   await signIn(context);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /테니스와 친해진 지/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "나와 맞는 매칭 보기" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "매칭 둘러보기" })).toHaveCount(0);
 });
 
 test("신규 가입자가 온보딩 완료 후 같은 홈 주소에서 목록에 도착한다", async ({ page, context }) => {
@@ -103,7 +103,7 @@ test("신규 가입자가 온보딩 완료 후 같은 홈 주소에서 목록에
   await page.getByText("편하게 공 주고받기", { exact: true }).click();
   await page.getByRole("button", { name: "여자", exact: true }).click();
   await page.getByRole("button", { name: "프로필 완성하기" }).click();
-  await page.getByRole("button", { name: "나와 맞는 매칭 보기" }).click();
+  await page.getByRole("button", { name: "매칭 둘러보기" }).click();
   await expect(page.getByText(courtName, { exact: true })).toBeVisible();
 });
 

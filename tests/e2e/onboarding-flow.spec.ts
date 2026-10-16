@@ -45,11 +45,11 @@ test("가입 직후 온보딩을 마치면 홈에 도착한다", async ({ browse
   await page.goto("/");
   await expect(page.getByRole("button", { name: "이 이름으로 시작할게요" })).toBeVisible({ timeout: 20_000 });
   // 진행 표시는 입력 화면 수와 같아야 한다. 닉네임과 첫 질문이 둘 다 1/4이던 적이 있다.
-  await expect(page.getByText("1/5")).toBeVisible();
+  await expect(page.getByText("1 / 5")).toBeVisible();
 
   await page.locator("input[type='text']").first().fill("코트새내기");
   await page.getByRole("button", { name: "이 이름으로 시작할게요" }).click();
-  await expect(page.getByText("2/5")).toBeVisible();
+  await expect(page.getByText("2 / 5")).toBeVisible();
 
   await page.getByText("6개월~1년").click();
   await page.getByRole("button", { name: "다음" }).click();
@@ -58,15 +58,15 @@ test("가입 직후 온보딩을 마치면 홈에 도착한다", async ({ browse
   await page.getByText("규칙은 알고 있어요").click();
   await page.getByRole("button", { name: "다음" }).click();
 
-  await expect(page.getByText("5/5")).toBeVisible();
+  await expect(page.getByText("5 / 5")).toBeVisible();
   await page.getByText("편하게 공 주고받기").click();
   await page.getByRole("button", { name: "여자" }).click();
   await page.getByRole("button", { name: "프로필 완성하기" }).click();
 
-  await expect(page.getByRole("button", { name: "추천 매칭 보기" })).toBeVisible({ timeout: 20_000 });
-  await page.getByRole("button", { name: "추천 매칭 보기" }).click();
+  await expect(page.getByRole("button", { name: "매칭 둘러보기" })).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("button", { name: "매칭 둘러보기" }).click();
 
   // 여기서 막히면 신규 가입자는 서비스를 한 번도 보지 못한다.
-  await expect(page.getByRole("heading", { name: "매칭 둘러보기" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "매칭", exact: true })).toBeVisible({ timeout: 15_000 });
   await context.close();
 });

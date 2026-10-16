@@ -8,7 +8,7 @@ test('생성된 시작 경로가 iOS의 로컬 파일 존재 검사도 통과한
   const root = await mkdtemp(`${tmpdir()}/rally-configure-`);
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(`${root}/scripts`);
-  for (const name of ['configure.mjs', 'configuration.mjs', 'prepare.mjs', 'prepare-ios.mjs']) {
+  for (const name of ['configure.mjs', 'configuration.mjs', 'prepare.mjs', 'prepare-ios.mjs', 'prepare-android.mjs']) {
     await copyFile(new URL(`../scripts/${name}`, import.meta.url), `${root}/scripts/${name}`);
   }
   for (const path of ['/', '/login']) {

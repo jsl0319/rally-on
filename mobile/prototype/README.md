@@ -38,7 +38,7 @@ iOS 지도 연결은 앱 화면에서 시작된 카카오맵 `/link/to/` 링크�
 
 앱 표시 이름은 **랠리온 검증**이며, 앱 식별자 `dev.rallyon.prototype`은 유지한다. 홈 화면 아이콘은 사용자가 확정한 B 원안(R 바깥 오른쪽 위에 테니스공)이다. 원본은 저장소 루트의 `public/images/brand/app-icon.svg`, iOS 원본은 `native/ios/AppIcon.appiconset`에 보관한다. `prepare:ios`는 기존 프로젝트에도 아이콘과 이름을 반영하며 별도 로컬 수정을 발견하면 중단한다. 이름·아이콘 변경은 웹 배포만으로 적용되지 않아 기기 앱 빌드·재설치가 필요하다.
 
-아이콘 원본을 바꾸면 저장소 루트에서 `node ops/brand/generate-icons.mjs`로 웹/iOS 이미지를 함께 갱신한다. 추가 패키지 설치 없이 기존 Next.js 의존성의 sharp를 사용한다. 이전 시안은 `docs/design/app-icon-20261014/`에 유지한다. Android 실기기 반영·검증은 보류 상태다.
+아이콘 원본을 바꾸면 저장소 루트에서 `node ops/brand/generate-icons.mjs`로 웹/iOS/Android 이미지를 함께 갱신한다. 추가 패키지 설치 없이 기존 Next.js 의존성의 sharp를 사용한다. 이전 시안은 `docs/design/app-icon-20261014/`에 유지한다.
 
 ```sh
 npm run prepare:ios
@@ -48,6 +48,12 @@ npm run open:ios
 Xcode에서 App 타깃의 Signing & Capabilities → 본인 Team을 선택하고 케이블로 연결한 iPhone을 실행 대상으로 고른다. 기기 신뢰·개발자 모드를 직접 승인한 뒤 Debug Run 한다. 개인 무료 서명으로 가능한 범위의 기기 검증을 먼저 하고, 유료 가입이나 TestFlight 배포는 후속으로 진행한다. SPM 의존성 내려받기에는 네트워크가 필요하다.
 
 ## Android
+
+Android 휴대전화와 태블릿 모두 같은 검증 앱을 설치한다. 현재 최소 지원은 API 24다. 2026-10-16 갤럭시 탭 S7 FE(Android 14)에서 실기기 검증을 재개했다. 설치 성공과 로그인·화면 검증 결과는 별도로 기록한다.
+
+`prepare:android`는 `native/android`의 이름·B 원안 아이콘·시작 화면 색·기기 뒤로가기 처리를 생성 프로젝트에 반영한다. 기존 별도 수정은 덮어쓰지 않는다. 시스템 뒤로가기는 같은 서비스의 이전 화면으로 돌아가며, 로그인·외부 인증·로그아웃 전 화면으로 넘어갈 때는 앱을 백그라운드로 보낸다. 인증 중에는 카카오 인증 취소 경로만 유지한다. iOS 전용 지도 연결이나 시작 애니메이션까지 Android에 적용된 것으로 간주하지 않는다.
+
+태블릿에서는 세로·가로 화면, 키보드와 하단 메뉴, 시스템 뒤로가기 버튼/제스처를 추가 확인한다. APK 검증 설치에는 스토어 등록이 필요하지 않다. Android 휴대전화의 작은 화면 확인은 별도 후속 검증이다.
 
 ```sh
 npm run prepare:android

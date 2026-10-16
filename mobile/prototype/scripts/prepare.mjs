@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { prototypeConfig } from './configuration.mjs';
 import { prepareIOS } from './prepare-ios.mjs';
+import { prepareAndroid } from './prepare-android.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const platform = process.argv[2];
@@ -25,6 +26,7 @@ try {
     if (result.status !== 0) throw new Error('플랫폼 준비가 끝나지 않았어요. 위 개발 도구/의존성 오류를 확인해 주세요.');
   }
   if (platform === 'ios') await prepareIOS(root);
+  if (platform === 'android') await prepareAndroid(root);
   console.log('플랫폼 프로젝트 준비 완료. 네이티브 빌드/실기기 로그인 성공을 뜻하지 않습니다.');
 } catch (error) {
   console.error(error.code === 'ENOENT' ? '먼저 npm install과 npm run configure를 실행해 주세요.' : error.message);

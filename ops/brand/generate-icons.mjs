@@ -1,4 +1,4 @@
-import { readFile, writeFile, copyFile } from 'node:fs/promises';
+import { readFile, writeFile, copyFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
@@ -33,4 +33,19 @@ images.forEach((bytes, i) => {
 });
 await writeFile(`${root}src/app/favicon.ico`, Buffer.concat([header, ...images]));
 if (!(await readFile(source)).equals(await readFile(`${root}src/app/icon.svg`))) throw new Error('Icon source mismatch');
-console.log('Rally On B: web favicon, Apple touch icon and iOS AppIcon generated.');
+// The adaptive foreground keeps the B mark inside Android's circular mask.
+// Android applies the launcher shape; do not bake rounded corners into the art.
+const android = `${root}mobile/prototype/native/android/res`;
+for (const [density, scale] of [['mdpi', 1], ['hdpi', 1.5], ['xhdpi', 2], ['xxhdpi', 3], ['xxxhdpi', 4]]) {
+  const directory = `${android}/mipmap-${density}`;
+  await mkdir(directory, { recursive: true });
+  const size = 48 * scale;
+  const icon = await sharp(source).resize(size, size).removeAlpha().png().toBuffer();
+  await writeFile(`${directory}/ic_launcher.png`, icon);
+  await writeFile(`${directory}/ic_launcher_round.png`, icon);
+  const canvas = 108 * scale;
+  const art = await sharp(source).resize(Math.round(canvas * 0.74)).png().toBuffer();
+  await sharp({ create: { width: canvas, height: canvas, channels: 4, background: '#174c3c' } })
+    .composite([{ input: art, gravity: 'centre' }]).png().toFile(`${directory}/ic_launcher_foreground.png`);
+}
+console.log('Rally On B: web, iOS and Android icons generated.');
