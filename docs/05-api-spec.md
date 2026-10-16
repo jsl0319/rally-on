@@ -1726,7 +1726,7 @@ Match Chat MVP는 모든 Match의 유일한 연락 수단이다. 공개 출시�
 
 | 메서드·경로 | 권한 | 계약 목적 |
 | --- | --- | --- |
-| `GET /api/v1/matches/{matchId}/conversation` | 모집자 또는 `ACCEPTED` 참가자 | 방 상태·안전한 멤버 닉네임·내 미확인 수 조회 |
+| `GET /api/v1/matches/{matchId}/conversation` | 실제 방 멤버: 일반 매칭 모집자·수락자, 운영자 주최 코트 매칭 운영자·`CONFIRMED` 참가자 | 방 상태·안전한 멤버 닉네임·내 미확인 수 조회 |
 | `GET /api/v1/matches/{matchId}/conversation/messages?before=cursor` | 방 멤버 | `(createdAt, id)` 커서 기반 과거 메시지 30개와, 호출자 최신 일반 발신 메시지의 제한된 미확인 인원 수 조회 |
 | `POST /api/v1/matches/{matchId}/conversation/image-uploads` | 발신 가능한 방 멤버 | JPEG·PNG·WebP 1장(5 MiB 이하)을 비공개 `PENDING` 객체로 업로드하고 불투명 ID 반환 |
 | `DELETE /api/v1/matches/{matchId}/conversation/image-uploads/{imageUploadId}` | 해당 발신자 | 아직 연결되지 않은 비공개 업로드 즉시 삭제 요청 |
@@ -1745,6 +1745,14 @@ Match Chat MVP는 모든 Match의 유일한 연락 수단이다. 공개 출시�
 첫 전달 방식은 채팅 화면 전면 상태의 5초 폴링이다. 메시지 발신에는 낙관 표시와 서버 확인을 사용하며, `clientRequestId`로 재시도를 합친다. 이 폴링은 `lastSentMessageRead`의 미확인 인원 수도 갱신한다. WebSocket·Redis·새 프로덕션 의존성은 별도 승인 없이 추가하지 않는다.
 
 새 Match 생성·상세·신청 응답은 `contact`로 `conversationStatus`와 안전한 방 진입 경로만 반환한다. 외부 URL과 연락 수단 union은 제공하지 않으며, 첫 수락 전에는 `conversationStatus = NOT_CREATED`만 보이고 실제 방 경로·멤버는 반환하지 않는다.
+
+2026-10-16 채팅 표시 계약 보완:
+
+- 목록·상세의 `match.kind`는 `GENERAL | COURT`, 상세의 `match.hostRole`은 `HOST | OPERATOR`다. 기존 `courtSource`로 종류를 구분하고, 실제 코트 소유 운영자와 매칭 모집자가 같은 경우에만 `OPERATOR`를 반환한다.
+- 메시지 `sender`는 `{ nickname, role: HOST | OPERATOR | PARTICIPANT }` 또는 `null`이다. 역할은 서버가 실제 발신자와 매칭 소유 관계로 결정한다. 동명 닉네임, 내부 관리자 권한, 클라이언트 입력으로 운영자 표시를 얻을 수 없다.
+- `/chats`와 `/chats/{matchId}` 페이지는 활성 계정으로 진입하며 테니스 프로필을 요구하지 않는다. 모든 데이터 조회·발신 API는 실제 방 멤버십을 검사한다. 일반 참가 신청·추천 화면의 온보딩 조건은 유지한다.
+- 운영자 경기 관리 응답에 `chatHref: string | null`, `chatReadOnly: boolean`을 추가한다. 보관 전 방의 실제 모집자 멤버에게만 링크를 반환하며, 내부 업무 인계 담당자에게는 반환하지 않는다.
+- 코트 매칭은 첫 `CONFIRMED` 전환과 방·운영자/참가자 멤버 생성이 같은 트랜잭션이다. `PENDING`·`ACCEPTED`에는 입장 권한을 주지 않으며 이후 확정자는 같은 방에 들어간다. 일반 매칭 및 과거 일반 모집자 주최 제휴 세션은 기존 수락 기준을 유지한다.
 
 ## 24. API 테스트 시나리오
 

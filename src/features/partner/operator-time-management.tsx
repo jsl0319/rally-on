@@ -199,7 +199,7 @@ export function OperatorDashboard() {
   const attentionCount = slotData.items.filter((slot) => slot.status === "BLOCKED" || slot.status === "CANCELLED").length;
   return <PageShell>
     <PageHeader eyebrow="운영 홈" title={application.venue.name} description="코트 매칭을 등록하고 신청·입금·환불을 관리해요." actions={<Button as={Link} href="/partner/application" size="medium" variant="secondary">심사 상태</Button>} />
-    <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2"><Link className="rally-text-action" href="/partner/support-inquiries">담당자 대조 요청 →</Link><Link className="rally-text-action" href="/my/notifications">알림·수신 설정 →</Link></div>
+    <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2"><Link className="rally-text-action" href="/chats">단체 채팅 →</Link><Link className="rally-text-action" href="/partner/support-inquiries">담당자 대조 요청 →</Link><Link className="rally-text-action" href="/my/notifications">알림·수신 설정 →</Link></div>
     <RestrictionNotice restriction={slotData.supplyRestriction} />
     {needsAction.length ? <section className="mt-6 rounded-[20px] border border-[var(--tm-action-primary)] bg-white p-5">
       <p className="text-sm font-semibold text-[var(--tm-action-primary)]">지금 처리할 일</p>

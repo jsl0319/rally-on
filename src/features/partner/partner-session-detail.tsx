@@ -72,7 +72,7 @@ export function PartnerSessionDetail({ slotId }: { slotId: string }) {
     </section>
     {applied && participation ? <section className="border-t border-[var(--tm-border-subtle)] py-5"><h2 className="mb-3 text-[17px] font-bold">연락하기</h2>
       <div className="grid gap-2">
-        {participation.chatHref ? <Button as={Link} fullWidth href={participation.chatHref} variant="secondary"><ChatCircle size={19} aria-hidden />참가자 채팅방</Button> : null}
+        {participation.chatHref ? <Button as={Link} fullWidth href={participation.chatHref} variant="secondary"><ChatCircle size={19} aria-hidden />단체 채팅방</Button> : ["PENDING", "ACCEPTED"].includes(participation.application?.status ?? "") ? <p className="mb-1 text-sm text-[var(--tm-text-secondary)]">참가가 확정되면 운영자·참가자와 단체 채팅을 할 수 있어요.</p> : null}
         {participation.operatorContact ? <>
           <Button as="a" fullWidth href={participation.operatorContact.telHref} variant="secondary"><Phone size={18} aria-hidden />운영자에게 전화</Button>
           <p className="text-center text-xs leading-5 text-[var(--tm-text-secondary)]">{formatCourtContactPhone(participation.operatorContact.phone)} · {participation.operatorContact.hours}</p>

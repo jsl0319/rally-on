@@ -39,18 +39,37 @@ const messageInclude = {
   imageUploads: { where: { status: "ATTACHED" }, select: { id: true, position: true }, orderBy: [{ position: "asc" }, { id: "asc" }] },
 } satisfies Prisma.MatchChatMessageInclude;
 
+const chatMatchSelect = {
+  id: true, title: true, startsAt: true, endsAt: true, status: true, hostUserId: true, courtSource: true,
+  courtSlot: { select: { courtUnit: { select: { court: { select: { operatorApplication: { select: { applicantUserId: true } } } } } } } },
+} satisfies Prisma.MatchSelect;
+
+type ChatMatch = Prisma.MatchGetPayload<{ select: typeof chatMatchSelect }>;
+
+function chatMatchKind(match: ChatMatch) {
+  return match.courtSource === "PARTNER_COURT" ? "COURT" as const : "GENERAL" as const;
+}
+
+function chatHostRole(match: ChatMatch) {
+  return match.courtSource === "PARTNER_COURT" && match.courtSlot?.courtUnit.court.operatorApplication.applicantUserId === match.hostUserId
+    ? "OPERATOR" as const : "HOST" as const;
+}
+
 const conversationInclude = {
-  match: { select: { id: true, title: true, startsAt: true, endsAt: true, status: true, hostUserId: true } },
+  match: { select: chatMatchSelect },
   members: { include: { user: { select: { nickname: true } } } },
 } satisfies Prisma.MatchConversationInclude;
 
-function toMessageView(message: MessageWithSender, viewerUserId?: string) {
+function toMessageView(message: MessageWithSender, match: ChatMatch, viewerUserId?: string) {
   return {
     id: message.id,
     type: message.type,
     body: message.visibility === "HIDDEN" ? "운영 검토로 숨겨진 메시지예요." : message.body,
     isHidden: message.visibility === "HIDDEN",
-    sender: message.sender ? { nickname: message.sender.nickname } : null,
+    sender: message.sender ? {
+      nickname: message.sender.nickname,
+      role: message.sender.id === match.hostUserId ? chatHostRole(match) : "PARTICIPANT" as const,
+    } : null,
     images: message.visibility === "VISIBLE" ? (message.imageUploads ?? []).map((image) => ({ id: image.id })) : [],
     isMine: Boolean(viewerUserId && message.sender?.id === viewerUserId),
     createdAt: message.createdAt.toISOString(),
@@ -163,6 +182,8 @@ function toConversationView(conversation: Prisma.MatchConversationGetPayload<{ i
       startsAt: conversation.match.startsAt.toISOString(),
       endsAt: conversation.match.endsAt.toISOString(),
       status: conversation.match.status,
+      kind: chatMatchKind(conversation.match),
+      hostRole: chatHostRole(conversation.match),
     },
     status: conversation.status,
     canSend: conversation.status === "OPEN" && member.sendingSuspendedAt === null,
@@ -172,7 +193,7 @@ function toConversationView(conversation: Prisma.MatchConversationGetPayload<{ i
   };
 }
 
-function shouldBecomeReadOnlyAfterMatch(conversation: { status: string; match: { endsAt: Date } }, now = new Date()) {
+export function shouldBecomeReadOnlyAfterMatch(conversation: { status: string; match: { endsAt: Date } }, now = new Date()) {
   return conversation.status === "OPEN" && conversation.match.endsAt <= new Date(now.getTime() - 24 * 60 * 60 * 1000);
 }
 
@@ -288,7 +309,7 @@ export async function getMatchConversationMessages(prisma: PrismaClient, userId:
   const chronological = direction === "before" ? [...visible].reverse() : visible;
   const lastSentMessageRead = await getLastSentMessageRead(prisma, conversation, userId);
   return {
-    items: chronological.map((message) => toMessageView(message, userId)),
+    items: chronological.map((message) => toMessageView(message, conversation.match, userId)),
     pageInfo: {
       hasMoreBefore: direction === "before" ? hasMore : Boolean(query.before),
       nextBefore: direction === "before" && hasMore && chronological[0] ? toCursor(chronological[0]) : null,
@@ -309,7 +330,7 @@ export async function sendMatchChatMessage(prisma: PrismaClient, userId: string,
     });
     if (existing) {
       if (existing.conversationId !== conversation.id) throw new DomainError("CHAT_MESSAGE_DUPLICATE", 409, "같은 요청 식별자로 다른 메시지를 보낼 수 없어요.");
-      return { message: toMessageView(existing, userId), created: false };
+      return { message: toMessageView(existing, conversation.match, userId), created: false };
     }
 
     const minuteAgo = new Date(Date.now() - 60_000);
@@ -344,7 +365,7 @@ export async function sendMatchChatMessage(prisma: PrismaClient, userId: string,
     if (!createdMessage) throw new DomainError("MATCH_CONVERSATION_NOT_FOUND", 404, "채팅방을 찾을 수 없어요.");
     await transaction.matchConversationMember.update({ where: { id: member.id }, data: { lastReadMessageId: created.id } });
     await transaction.matchConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
-    return { message: toMessageView(createdMessage, userId), created: true };
+    return { message: toMessageView(createdMessage, conversation.match, userId), created: true };
   };
 
   try {
@@ -355,7 +376,11 @@ export async function sendMatchChatMessage(prisma: PrismaClient, userId: string,
         where: { senderUserId_clientRequestId: { senderUserId: userId, clientRequestId: input.clientRequestId } },
         include: messageInclude,
       });
-      if (existing) return { message: toMessageView(existing, userId), created: false };
+      if (existing) {
+        const { conversation } = await findMatchConversationForMember(prisma, matchId, userId);
+        if (existing.conversationId !== conversation.id) throw new DomainError("CHAT_MESSAGE_DUPLICATE", 409, "같은 요청 식별자로 다른 메시지를 보낼 수 없어요.");
+        return { message: toMessageView(existing, conversation.match, userId), created: false };
+      }
     }
     throw error;
   }
@@ -447,7 +472,7 @@ export async function getMyMatchConversations(prisma: PrismaClient, userId: stri
     include: {
       conversation: {
         include: {
-          match: { select: { id: true, title: true, startsAt: true, endsAt: true, status: true } },
+          match: { select: chatMatchSelect },
           messages: { where: { visibility: "VISIBLE" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1, include: messageInclude },
         },
       },
@@ -468,10 +493,11 @@ export async function getMyMatchConversations(prisma: PrismaClient, userId: stri
         startsAt: membership.conversation.match.startsAt.toISOString(),
         status: membership.conversation.match.status,
         finished: membership.conversation.match.endsAt <= now,
+        kind: chatMatchKind(membership.conversation.match),
       },
       status: shouldBecomeReadOnlyAfterMatch(membership.conversation) ? "READ_ONLY" : membership.conversation.status,
       unreadMessageCount,
-      lastMessage: lastMessage ? toMessageView(lastMessage) : null,
+      lastMessage: lastMessage ? toMessageView(lastMessage, membership.conversation.match) : null,
     };
   }));
 

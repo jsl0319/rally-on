@@ -1,7 +1,8 @@
 import { MatchChatList } from "@/features/chats/match-chat-list";
-import { requireOnboardedPage } from "@/server/auth/require-onboarded-page";
+import { requireActivePage } from "@/server/auth/require-onboarded-page";
 
 export default async function ChatsPage() {
-  await requireOnboardedPage("/chats");
+  // Chat APIs expose only existing memberships, including operators without a player profile.
+  await requireActivePage("/chats");
   return <MatchChatList />;
 }

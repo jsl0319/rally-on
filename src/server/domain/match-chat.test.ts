@@ -25,6 +25,29 @@ function conversationFixture() {
 }
 
 describe("Match Chat input and membership guards", () => {
+  it.each([
+    { courtSource: "EXTERNAL_RESERVED", operatorId: "host-user-id", kind: "GENERAL", hostRole: "HOST" },
+    { courtSource: "PARTNER_COURT", operatorId: "host-user-id", kind: "COURT", hostRole: "OPERATOR" },
+    { courtSource: "PARTNER_COURT", operatorId: "another-operator", kind: "COURT", hostRole: "HOST" },
+  ])("derives $courtSource / $hostRole from ownership, never a sender nickname", async ({ courtSource, operatorId, kind, hostRole }) => {
+    const conversation = {
+      ...conversationFixture(),
+      match: { ...conversationFixture().match, courtSource, courtSlot: { courtUnit: { court: { operatorApplication: { applicantUserId: operatorId } } } } },
+    };
+    const messages = ["host-user-id", userId].map((id, index) => ({
+      id: `${messageId}-${index}`, type: "USER", body: "안녕하세요", visibility: "VISIBLE", createdAt: new Date(),
+      sender: { id, nickname: "같은 닉네임" },
+    }));
+    const prisma = {
+      matchConversation: { findFirst: vi.fn().mockResolvedValue(conversation) },
+      matchChatMessage: { findMany: vi.fn().mockResolvedValue(messages), findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
+    } as unknown as Parameters<typeof getMatchConversation>[0];
+    await expect(getMatchConversation(prisma, userId, matchId)).resolves.toMatchObject({ match: { kind, hostRole } });
+    const result = await getMatchConversationMessages(prisma, userId, matchId, {});
+    expect(result.items.find(m => m.id === messages[0].id)?.sender).toEqual({ nickname: "같은 닉네임", role: hostRole });
+    expect(result.items.find(m => m.id === messages[1].id)?.sender).toEqual({ nickname: "같은 닉네임", role: "PARTICIPANT" });
+  });
+
   it("requires a bounded text message or photo and an idempotency key", () => {
     expect(matchChatMessageInputSchema.parse({ body: "  안녕하세요!  ", clientRequestId }).body).toBe("안녕하세요!");
     expect(matchChatMessageInputSchema.parse({ body: "", imageUploadIds: [imageUploadId], clientRequestId }).imageUploadIds).toEqual([imageUploadId]);
@@ -161,6 +184,7 @@ describe("Match Chat idempotency and state transitions", () => {
     const prisma = {
       $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
       matchChatMessage: { findUnique: vi.fn().mockResolvedValue(saved) },
+      matchConversation: transaction.matchConversation,
     } as unknown as Parameters<typeof sendMatchChatMessage>[0];
     await expect(sendMatchChatMessage(prisma, userId, matchId, { body: saved.body, clientRequestId })).resolves.toMatchObject({ created: false, message: { id: messageId } });
   });

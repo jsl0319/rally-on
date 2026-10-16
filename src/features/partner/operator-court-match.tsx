@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ChatCircle } from "@phosphor-icons/react";
 import { useCourtDetail } from "./use-court-detail";
 import { CourtFreshness } from "./court-freshness";
 import { CourtLateReview } from "./court-late-review";
@@ -87,6 +88,10 @@ export function OperatorCourtMatchDetail({ matchId }: { matchId: string }) {
           <MatchBadge tone="green">{match.approvalMode === "AUTO" ? "선착순 자동 승인" : "직접 승인"}</MatchBadge>
         </div>
       </header>
+      <div className="px-5 pb-5">
+        {match.chatHref ? <Button as={Link} fullWidth href={match.chatHref} variant="secondary"><ChatCircle size={19} aria-hidden />{match.chatReadOnly ? "단체 채팅 기록 보기" : "단체 채팅방"}</Button>
+          : match.confirmedCount === 0 && ["OPEN", "CLOSED"].includes(match.status) ? <p className="text-sm text-[var(--tm-text-secondary)]">첫 참가자가 확정되면 단체 채팅방이 열려요.</p> : null}
+      </div>
       {match.ballContribution ? <p className="px-5 pb-4 text-sm leading-6 text-[var(--tm-text-secondary)]">{match.ballContribution.available ? "공 준비 참가자가 아직 없어요. 모집 마감까지 정해지지 않으면 참가자와 준비 방법을 확인해 주세요." : "공 준비 참가자가 신청했어요. 아래 참가자별 역할을 확인해 주세요."}</p> : null}
       <CourtFreshness checkedAt={checkedAt} error={error} reload={reload} />
 

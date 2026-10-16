@@ -8,9 +8,11 @@ import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { BackButton } from "@/components/navigation/back-button";
 import { Button } from "@/components/ui/button";
 import { matchScheduleText } from "@/matches/schedule";
+import { ChatHostBadge, ChatKindBadge, type ChatKind, type ChatSenderRole } from "./chat-badges";
 
 type Conversation = {
-  match: { id: string; title: string; startsAt: string; endsAt: string; status: string };
+  match: { id: string; title: string; startsAt: string; endsAt: string; status: string; kind: ChatKind; hostRole: "OPERATOR" | "HOST" };
+  members: { nickname: string; role: "HOST" | "PARTICIPANT" }[];
   status: "OPEN" | "READ_ONLY" | "ARCHIVED";
   canSend: boolean;
   sendingSuspended: boolean;
@@ -22,7 +24,7 @@ type Message = {
   body: string;
   isHidden: boolean;
   isMine: boolean;
-  sender: { nickname: string } | null;
+  sender: { nickname: string; role: ChatSenderRole } | null;
   images?: { id: string }[];
   createdAt: string;
   pending?: boolean;
@@ -238,7 +240,7 @@ export function MatchConversation({ params }: { params: Promise<{ matchId: strin
       <header className="sticky top-[var(--rally-safe-top)] z-10 border-b border-[var(--tm-border-default)] bg-[var(--tm-bg-page)] px-4 py-2">
         <div className="mx-auto flex max-w-[560px] items-center gap-2">
           <BackButton className="grid size-11 place-items-center rounded-full text-xl" fallbackPath="/chats" />
-          <div className="min-w-0"><h1 className="truncate text-base font-bold">{conversation.match.title}</h1><p className="mt-0.5 truncate text-xs text-[var(--tm-text-secondary)]">{schedule(conversation.match.startsAt, conversation.match.endsAt)}</p></div>
+          <div className="min-w-0 flex-1"><div className="mb-1 flex flex-wrap items-center gap-2"><ChatKindBadge kind={conversation.match.kind} /><span className="text-[11px] text-[var(--tm-text-secondary)]">{conversation.match.hostRole === "OPERATOR" ? "운영자와 함께 · " : ""}{conversation.members.length}명</span></div><h1 className="truncate text-base font-bold">{conversation.match.title}</h1><p className="mt-0.5 truncate text-xs text-[var(--tm-text-secondary)]">{schedule(conversation.match.startsAt, conversation.match.endsAt)}</p></div>
         </div>
       </header>
       <section aria-live="polite" className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-5 pb-44 pt-3">
@@ -281,7 +283,7 @@ export function MatchConversation({ params }: { params: Promise<{ matchId: strin
 function MessageBubble({ matchId, message, onReport, unreadOtherMemberCount }: { matchId: string; message: Message; onReport: () => void; unreadOtherMemberCount: number }) {
   if (message.type === "SYSTEM") return <div className="py-1 text-center"><p className="inline-block rounded-full bg-[var(--tm-bg-subtle-muted)] px-3 py-2 text-xs leading-5 text-[var(--tm-text-secondary)]">{message.body}</p></div>;
   const images = message.images ?? [];
-  return <div className={`flex ${message.isMine ? "justify-end" : "justify-start"}`}><div className="max-w-[82%]"><div className="flex items-end gap-2"><div className={`rounded-2xl px-3.5 py-2.5 text-sm leading-6 ${message.isMine ? "order-2 bg-[var(--tm-action-primary)] text-white" : "bg-white text-[var(--tm-text-primary)]"}`}>{images.length > 0 ? <div className={`grid gap-2 ${images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>{images.map((image, index) => <ChatImage imageId={image.id} index={index} key={image.id} matchId={matchId} messageId={message.id} />)}</div> : null}{message.body ? <p className={`${images.length > 0 ? "mt-2" : ""} whitespace-pre-wrap break-words`}>{message.body}</p> : null}{message.pending ? <p className="mt-1 text-right text-[10px] text-white/70">보내는 중</p> : null}</div><time className="shrink-0 text-[10px] text-[var(--tm-text-secondary)]">{messageTime(message.createdAt)}</time></div>{message.isMine && unreadOtherMemberCount > 0 ? <p aria-label={`아직 읽지 않은 상대 ${unreadOtherMemberCount}명`} className="mt-1 text-right text-[11px] font-bold text-[var(--tm-tennis-ball-muted)]">{unreadOtherMemberCount}</p> : null}{!message.isMine && !message.pending ? <button className="mt-1 min-h-8 px-1 text-xs text-[var(--tm-text-secondary)] underline" onClick={onReport} type="button">신고</button> : null}</div></div>;
+  return <div className={`flex ${message.isMine ? "justify-end" : "justify-start"}`}><div className="min-w-0 max-w-[82%]">{message.sender && (!message.isMine || message.sender.role !== "PARTICIPANT") ? <div className={`mb-1 flex items-center gap-1.5 ${message.isMine ? "justify-end" : ""}`}><span className="min-w-0 truncate text-xs font-medium text-[var(--tm-text-secondary)]">{message.isMine ? "나" : message.sender.nickname}</span><ChatHostBadge role={message.sender.role} /></div> : null}<div className="flex items-end gap-2"><div className={`rounded-2xl px-3.5 py-2.5 text-sm leading-6 ${message.isMine ? "order-2 bg-[var(--tm-action-primary)] text-white" : "bg-white text-[var(--tm-text-primary)]"}`}>{images.length > 0 ? <div className={`grid gap-2 ${images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>{images.map((image, index) => <ChatImage imageId={image.id} index={index} key={image.id} matchId={matchId} messageId={message.id} />)}</div> : null}{message.body ? <p className={`${images.length > 0 ? "mt-2" : ""} whitespace-pre-wrap break-words`}>{message.body}</p> : null}{message.pending ? <p className="mt-1 text-right text-[10px] text-white/70">보내는 중</p> : null}</div><time className="shrink-0 text-[10px] text-[var(--tm-text-secondary)]">{messageTime(message.createdAt)}</time></div>{message.isMine && unreadOtherMemberCount > 0 ? <p aria-label={`아직 읽지 않은 상대 ${unreadOtherMemberCount}명`} className="mt-1 text-right text-[11px] font-bold text-[var(--tm-tennis-ball-muted)]">{unreadOtherMemberCount}</p> : null}{!message.isMine && !message.pending ? <button className="mt-1 min-h-8 px-1 text-xs text-[var(--tm-text-secondary)] underline" onClick={onReport} type="button">신고</button> : null}</div></div>;
 }
 
 function ChatImage({ matchId, messageId, imageId, index }: { matchId: string; messageId: string; imageId: string; index: number }) {

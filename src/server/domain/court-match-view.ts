@@ -5,6 +5,7 @@ import { assertHandoffAccess } from "./court-transaction-handoff";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { DomainError } from "./profile-service";
 import { reconcileCourtMatch } from "./court-match-service";
+import { shouldBecomeReadOnlyAfterMatch } from "./match-chat-service";
 import { getApplicationDeadline, getLateConfirmationDeadline, getJudgementAt, canAcceptCourtApplication, seatHoldingStatuses } from "./court-match";
 
 import { courtMoneySummary } from "./court-match-money";
@@ -192,8 +193,15 @@ export async function getOperatorCourtMatch(prisma: PrismaClient, viewer: { id: 
     throw new DomainError("COURT_MATCH_OPERATOR_REQUIRED", 403, "이 코트 매칭을 연 운영자만 조회할 수 있어요.");
   }
   const showProfile = !handoff && match.courtSlot?.approvalMode === "OPERATOR";
+  const chatMembership = !handoff && match.conversation && match.conversation.status !== "ARCHIVED"
+    ? await prisma.matchConversationMember.findFirst({
+      where: { userId: viewer.id, role: "HOST", conversation: { matchId: match.id, status: { not: "ARCHIVED" } } },
+      select: { id: true },
+    }) : null;
   return {
     ...summary(match),
+    chatHref: chatMembership ? `/chats/${match.id}` : null,
+    chatReadOnly: Boolean(chatMembership && match.conversation && (match.conversation.status === "READ_ONLY" || shouldBecomeReadOnlyAfterMatch({ status: match.conversation.status, match }))),
     canResolveLateReview: !handoff && match.host.status === "ACTIVE" && describeCourtComposition(match, new Date()).phase === "REVIEW_REQUIRED",
     canCancelForComposition: !handoff && match.host.status === "ACTIVE" && ["OPEN", "CLOSED"].includes(match.status) && describeCourtComposition(match, new Date()).phase === "ACTION_REQUIRED",
     applications: match.applications.map((application) => ({

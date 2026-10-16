@@ -29,6 +29,7 @@ import { getCourtMatchParticipation, getOperatorCourtMatch } from "@/server/doma
 import { reportCourtSupplyIncident } from "@/server/domain/court-slot-service";
 import { acceptApplication, cancelMatch, createApplication, withdrawApplication, getMatchDetail, getMatches, getSentApplications } from "@/server/domain/match-service";
 import { getProfile } from "@/server/domain/profile-service";
+import { getMatchConversation, getMatchConversationMessages, getMyMatchConversations, sendMatchChatMessage } from "@/server/domain/match-chat-service";
 import { createSupportInquiry, listMySupportInquiries } from "@/server/domain/support-service";
 
 import { requireE2eDatabaseUrl } from "../e2e/e2e-environment";
@@ -155,6 +156,52 @@ describe.skipIf(!databaseUrl)("코트 매칭 · 실제 DB", () => {
     });
     return { matchId: match.id, slotId: slot.id, startsAt, courtId: court.id };
   }
+
+  it("확정자만 운영자와 같은 단체방에서 송수신하고 취소하면 접근을 잃는다", async () => {
+    const operator = await makeUser("채팅 운영자", "MALE");
+    const first = await makeUser("첫 참가자", "FEMALE");
+    const second = await makeUser("둘째 참가자", "MALE");
+    const outsider = await makeUser("외부 회원", "MALE");
+    const { matchId } = await makeCourtMatch(operator.id, { approvalMode: "OPERATOR", maxParticipantCount: 3 });
+    await prisma.tennisProfile.delete({ where: { userId: operator.id } });
+    await prisma.user.update({ where: { id: operator.id }, data: { onboardingCompletedAt: null } });
+    const a = await applyToCourtMatch(prisma, first.viewer, matchId);
+    const b = await applyToCourtMatch(prisma, second.viewer, matchId);
+    expect((await getOperatorCourtMatch(prisma, operator, matchId)).chatHref).toBeNull();
+    await expect(getMatchConversation(prisma, first.id, matchId)).rejects.toMatchObject({ status: 404 });
+    await decideCourtMatchApplication(prisma, operator, a.id, { accept: true });
+    // 운영자 승인만으로는 입장할 수 없다.
+    await expect(getMatchConversation(prisma, first.id, matchId)).rejects.toMatchObject({ status: 404 });
+    await receiveAndConfirm(operator, a.id);
+    expect((await getOperatorCourtMatch(prisma, operator, matchId)).chatHref).toBe(`/chats/${matchId}`);
+    expect((await getMyMatchConversations(prisma, operator.id, "HOST"))[0].match.kind).toBe("COURT");
+    for (const user of [second, outsider]) {
+      await expect(getMatchConversationMessages(prisma, user.id, matchId, {})).rejects.toMatchObject({ status: 404 });
+      await expect(sendMatchChatMessage(prisma, user.id, matchId, { body: "허용되지 않은 발신", clientRequestId: randomUUID() })).rejects.toMatchObject({ status: 404 });
+    }
+    const sent = await sendMatchChatMessage(prisma, operator.id, matchId, { body: "1번 코트에서 만나요", clientRequestId: randomUUID() });
+    expect(sent.message.sender?.role).toBe("OPERATOR");
+    await sendMatchChatMessage(prisma, first.id, matchId, { body: "네, 도착하면 말씀드릴게요", clientRequestId: randomUUID() });
+    const history = await getMatchConversationMessages(prisma, operator.id, matchId, {});
+    expect(history.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ body: "1번 코트에서 만나요", sender: { nickname: "채팅 운영자", role: "OPERATOR" } }),
+      expect.objectContaining({ body: "네, 도착하면 말씀드릴게요", sender: { nickname: "첫 참가자", role: "PARTICIPANT" } }),
+    ]));
+    await decideCourtMatchApplication(prisma, operator, b.id, { accept: true });
+    await receiveAndConfirm(operator, b.id);
+    await receiveAndConfirm(operator, b.id);
+    expect(await prisma.matchConversation.count({ where: { matchId } })).toBe(1);
+    expect((await getMatchConversation(prisma, second.id, matchId)).members).toHaveLength(3);
+    await cancelCourtMatchApplication(prisma, first.viewer, a.id);
+    await expect(getMatchConversation(prisma, first.id, matchId)).rejects.toMatchObject({ status: 404 });
+    await expect(sendMatchChatMessage(prisma, first.id, matchId, { body: "취소 후 발신", clientRequestId: randomUUID() })).rejects.toMatchObject({ status: 404 });
+    expect((await getMatchConversation(prisma, second.id, matchId)).members).toHaveLength(2);
+    await prisma.matchConversation.update({ where: { matchId }, data: { status: "READ_ONLY" } });
+    expect((await getOperatorCourtMatch(prisma, operator, matchId)).chatReadOnly).toBe(true);
+    await expect(sendMatchChatMessage(prisma, operator.id, matchId, { body: "종료 후 발신", clientRequestId: randomUUID() })).rejects.toMatchObject({ code: "MATCH_CONVERSATION_NOT_OPEN" });
+    await prisma.matchConversation.update({ where: { matchId }, data: { status: "ARCHIVED" } });
+    expect((await getOperatorCourtMatch(prisma, operator, matchId)).chatHref).toBeNull();
+  });
 
   /** 코트 슬롯은 최대 인원이 2 이상이어야 한다(DB 제약). 자리 하나를 미리 채워 "마지막 한 자리"를 만든다. */
   let seatCounter = 100;
