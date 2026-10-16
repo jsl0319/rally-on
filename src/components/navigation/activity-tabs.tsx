@@ -10,5 +10,6 @@ const tabs: Array<{ id: ActivityTab; href: string; label: string }> = [
 ];
 
 export function ActivityTabs({ current }: { current: ActivityTab }) {
-  return <nav aria-label="신청 활동 구분" className="mt-4 grid grid-cols-2 rounded-xl bg-[var(--tm-bg-subtle)] p-1">{tabs.map(tab => <Link aria-current={current === tab.id ? "page" : undefined} className={`flex min-h-11 items-center justify-center rounded-lg px-2 text-[13px] font-semibold ${current === tab.id ? "bg-white text-[var(--tm-action-primary)] shadow-sm" : "text-[var(--tm-text-secondary)]"}`} href={tab.href} key={tab.id}>{tab.label}</Link>)}</nav>;
+  // 두 목록은 한 활동 화면의 탭이다. 뒤로가기는 탭 진입 전 화면으로 돌아간다.
+  return <nav aria-label="신청 활동 구분" className="mt-4 grid grid-cols-2 rounded-xl bg-[var(--tm-bg-subtle)] p-1">{tabs.map(tab => <Link aria-current={current === tab.id ? "page" : undefined} className={`flex min-h-11 items-center justify-center rounded-lg px-2 text-[13px] font-semibold ${current === tab.id ? "bg-white text-[var(--tm-action-primary)] shadow-sm" : "text-[var(--tm-text-secondary)]"}`} href={tab.href} key={tab.id} replace>{tab.label}</Link>)}</nav>;
 }

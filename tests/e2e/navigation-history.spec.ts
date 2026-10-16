@@ -8,13 +8,20 @@ import { disconnectE2eDatabase, e2eUsers, resetE2eDatabase } from "./fixtures";
 
 const db = new PrismaClient({ adapter: createPrismaPg(requireE2eDatabaseUrl()) });
 test.afterAll(async () => { await db.$disconnect(); await disconnectE2eDatabase(); });
-async function signIn(context: BrowserContext) {
-  const userId = e2eUsers.applicant.id;
+async function signIn(context: BrowserContext, userId: string = e2eUsers.applicant.id) {
   const value = await encode({ token: { sub: userId, userId }, secret: E2E_AUTH_SECRET, salt: "authjs.session-token", maxAge: 3600 });
   await context.addCookies([{ name: "authjs.session-token", value, url: E2E_BASE_URL, httpOnly: true, sameSite: "Lax" }]);
 }
 const back = (page: Page) => page.getByRole("button", { name: "이전 화면으로 돌아가기", exact: true }).click();
 const ready = (page: Page) => expect(page.locator("[data-navigation-loading]")).toHaveCount(0);
+const activityLabels = { received: "내가 만든 매칭", sent: "내가 보낸 신청" } as const;
+async function switchActivity(page: Page, tab: keyof typeof activityLabels) {
+  const link = page.getByRole("navigation", { name: "신청 활동 구분" }).getByRole("link", { name: activityLabels[tab], exact: true });
+  await link.click();
+  await expect(page).toHaveURL(new RegExp(`/activity/${tab}$`));
+  await expect(link).toHaveAttribute("aria-current", "page");
+  await ready(page);
+}
 
 test("알림·마이에서 같은 신청 화면을 열어도 실제 출발 화면과 스크롤로 복귀한다", async ({ page, context }) => {
   await resetE2eDatabase(); await signIn(context);
@@ -26,8 +33,13 @@ test("알림·마이에서 같은 신청 화면을 열어도 실제 출발 화�
   expect(before).toBeGreaterThan(300);
   await notification.click();
   await expect(page.getByRole("heading", { name: "내가 보낸 신청", exact: true })).toBeVisible();
+  for (const tab of ["received", "sent", "received"] as const) await switchActivity(page, tab);
   await back(page);
   await expect(page).toHaveURL(/\/my\/notifications$/); await ready(page);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(before - 8);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(before + 8);
+  await page.goForward(); await expect(page).toHaveURL(/\/activity\/received$/); await ready(page);
+  await page.goBack(); await expect(page).toHaveURL(/\/my\/notifications$/); await ready(page);
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(before - 8);
   await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(before + 8);
   await back(page); await expect(page).toHaveURL(/\/my$/);
@@ -35,6 +47,39 @@ test("알림·마이에서 같은 신청 화면을 열어도 실제 출발 화�
   await expect(page).toHaveURL(/\/activity\/sent$/);
   await back(page); await expect(page).toHaveURL(/\/my$/);
 });
+
+for (const initialTab of ["received", "sent"] as const) {
+  test(`${activityLabels[initialTab]} 진입 후 탭을 반복 전환해도 화살표·브라우저 뒤로가기는 마이로 돌아간다`, async ({ page, context }) => {
+    await resetE2eDatabase(); await signIn(context);
+    await page.goto("/my"); await ready(page);
+    for (const browserBack of [false, true]) {
+      await page.getByRole("link", { name: new RegExp(activityLabels[initialTab]) }).click();
+      await expect(page).toHaveURL(new RegExp(`/activity/${initialTab}$`)); await ready(page);
+      const historySize = await page.evaluate(() => history.length);
+      const other = initialTab === "sent" ? "received" : "sent";
+      for (const tab of [other, initialTab, other, other] as const) await switchActivity(page, tab);
+      expect(await page.evaluate(() => history.length)).toBe(historySize);
+      if (browserBack) await page.goBack(); else await back(page);
+      await expect(page).toHaveURL(/\/my$/); await ready(page);
+    }
+  });
+}
+
+for (const tab of ["received", "sent"] as const) {
+  test(`${activityLabels[tab]} 탭에서 상세를 열면 뒤로가기는 해당 탭을 거쳐 원래 화면으로 돌아간다`, async ({ page, context }) => {
+    const fixture = await resetE2eDatabase();
+    await signIn(context, tab === "received" ? e2eUsers.host.id : e2eUsers.applicant.id);
+    await page.goto("/my"); await ready(page);
+    const other = tab === "sent" ? "received" : "sent";
+    await page.getByRole("link", { name: new RegExp(activityLabels[other]) }).click();
+    await switchActivity(page, tab);
+    await page.locator(`a[href^="/matches/${fixture.fullMatchId}"]`).click();
+    await expect(page).toHaveURL(new RegExp(`/matches/${fixture.fullMatchId}`)); await ready(page);
+    await page.goBack(); await expect(page).toHaveURL(new RegExp(`/activity/${tab}$`)); await ready(page);
+    await expect(page.getByRole("navigation", { name: "신청 활동 구분" }).getByRole("link", { name: activityLabels[tab] })).toHaveAttribute("aria-current", "page");
+    await back(page); await expect(page).toHaveURL(/\/my$/);
+  });
+}
 
 for (const court of [false, true]) {
   test(`${court ? "코트 " : ""}매칭의 필터·정렬·스크롤은 화살표와 브라우저 뒤로가기 모두 유지한다`, async ({ page, context }) => {
@@ -92,6 +137,15 @@ for (const court of [false, true]) {
     await expect(page).toHaveURL(court ? /\/partner-sessions\/[^?]+$/ : /\/matches\/[^?]+/);
     await page.goBack(); await ready(page);
     await expect(page).toHaveURL(expectedUrl);
+    // 목록에서 내 활동에 들어간 뒤 탭을 바꾸어도 출발 목록의 조건과 위치를 복원한다.
+    await page.locator("a.rally-discovery-card").nth(8).scrollIntoViewIfNeeded();
+    const beforeActivity = await page.evaluate(() => scrollY);
+    await page.getByRole("link", { name: court ? /내 신청 내역/ : "내 매칭", exact: !court }).click();
+    await expect(page).toHaveURL(court ? /\/activity\/sent$/ : /\/activity\/received$/); await ready(page);
+    await switchActivity(page, court ? "received" : "sent");
+    await page.goBack(); await expect(page).toHaveURL(expectedUrl); await ready(page);
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(beforeActivity - 8);
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(beforeActivity + 8);
     await page.setViewportSize({ width: 320, height: 568 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
@@ -101,6 +155,10 @@ test("직접 진입은 안전한 기본 화면으로, 로그아웃 뒤 과거 �
   await resetE2eDatabase(); await signIn(context);
   await page.goto("/terms");
   await page.goto("/activity/sent"); await ready(page);
+  await switchActivity(page, "received");
+  await back(page); await expect(page).toHaveURL(/\/my$/);
+  await page.goto("/activity/received"); await ready(page);
+  await switchActivity(page, "sent");
   await back(page); await expect(page).toHaveURL(/\/my$/);
   await page.getByRole("link", { name: /내가 보낸 신청/ }).click();
   await back(page); await expect(page).toHaveURL(/\/my$/);
@@ -113,15 +171,39 @@ test("직접 진입은 안전한 기본 화면으로, 로그아웃 뒤 과거 �
   expect((await context.request.get("/api/v1/me")).status()).toBe(401);
 });
 
-test("약관 목차와 이전 화면은 각각 원래 경로를 유지한다", async ({ page, context }) => {
+test("약관·개인정보 목차 이동 후 뒤로가기는 목차를 거슬러 가지 않고 마이로 돌아간다", async ({ page, context }) => {
   await resetE2eDatabase(); await signIn(context);
   await page.goto("/my"); await ready(page);
-  await page.getByRole("link", { name: "서비스 이용약관", exact: true }).click();
-  await expect(page).toHaveURL(/\/terms\?/);
-  const destination = page.url();
-  await page.getByRole("navigation", { name: /목차/ }).getByRole("link").nth(1).click();
-  await expect(page.locator("#policy-section-2")).toBeInViewport();
-  // An anchor traversal does not load another document (WebKit emits no load event).
-  await page.evaluate(() => history.back()); await expect(page).toHaveURL(destination);
-  await back(page); await expect(page).toHaveURL(/\/my$/);
+  for (const [title, path] of [["서비스 이용약관", "/terms"], ["개인정보 처리방침", "/privacy"]]) {
+    await page.getByRole("link", { name: title, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`${path}\\?`));
+    for (const index of [1, 2]) {
+      await page.getByRole("navigation", { name: /목차/ }).getByRole("link").nth(index).click();
+      await expect(page.locator(`#policy-section-${index + 1}`)).toBeInViewport();
+    }
+    if (path === "/terms") await page.goBack(); else await back(page);
+    await expect(page).toHaveURL(/\/my$/); await ready(page);
+  }
+});
+
+test("코트 매칭의 내 신청·찾아오는 길 바로가기 후에도 한 번에 신청 목록으로 돌아간다", async ({ page, context }) => {
+  const fixture = await resetE2eDatabase(); await signIn(context);
+  const detail = await context.request.get(`/api/v1/partner-session-slots/${fixture.partnerSlotId}`);
+  expect(detail.ok()).toBe(true);
+  const slot = await detail.json();
+  const apply = await context.request.post(`/api/v1/court-matches/${fixture.partnerMatchId}/applications`, {
+    data: { noticeAccepted: true, noticeFingerprint: slot.participation.applicationNotice.fingerprint },
+  });
+  expect(apply.status(), await apply.text()).toBe(201);
+  const application = await apply.json();
+  for (const confirmed of [false, true]) {
+    if (confirmed) await db.matchApplication.update({ where: { id: application.id }, data: { status: "CONFIRMED", confirmedAt: new Date() } });
+    await page.goto("/activity/sent"); await ready(page);
+    await page.locator(`a[href^="/partner-sessions/${fixture.partnerSlotId}"]`).first().click();
+    await expect(page).toHaveURL(new RegExp(`/partner-sessions/${fixture.partnerSlotId}`)); await ready(page);
+    await page.getByRole("link", { name: confirmed ? "찾아오는 길" : "입금 안내 확인", exact: true }).click();
+    await expect(page.locator(confirmed ? "#court-directions" : "#my-application")).toBeInViewport();
+    if (confirmed) await page.goBack(); else await back(page);
+    await expect(page).toHaveURL(/\/activity\/sent$/); await ready(page);
+  }
 });

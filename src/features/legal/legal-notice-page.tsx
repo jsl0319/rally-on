@@ -32,7 +32,7 @@ export function LegalNoticePage({ title, summary, updatedDate, sections, notice,
           <p className="mt-3 text-xs text-[var(--tm-text-secondary)]">안내 갱신일 · {updatedDate}</p>
         </header>
 
-        <nav aria-label={`${title} 목차`} className="rounded-2xl bg-white p-5"><h2 className="mb-2 text-sm font-bold">목차</h2><ol>{sections.map((section, index) => <li key={section.title}><Link className="flex min-h-11 items-center gap-3 py-2 text-[13px] text-[var(--tm-action-primary)] underline-offset-4 hover:underline" href={`#policy-section-${index + 1}`}><span aria-hidden className="w-4 shrink-0 text-[11px] text-[var(--tm-text-secondary)]">{String(index + 1).padStart(2, "0")}</span>{section.title}</Link></li>)}</ol></nav>
+        <nav aria-label={`${title} 목차`} className="rounded-2xl bg-white p-5"><h2 className="mb-2 text-sm font-bold">목차</h2><ol>{sections.map((section, index) => <li key={section.title}><Link className="flex min-h-11 items-center gap-3 py-2 text-[13px] text-[var(--tm-action-primary)] underline-offset-4 hover:underline" href={`#policy-section-${index + 1}`} replace><span aria-hidden className="w-4 shrink-0 text-[11px] text-[var(--tm-text-secondary)]">{String(index + 1).padStart(2, "0")}</span>{section.title}</Link></li>)}</ol></nav>
         <div className="mt-6 divide-y divide-[var(--tm-border-default)]">
           {sections.map((section, index) => (
             <section className="scroll-mt-24 py-6" id={`policy-section-${index + 1}`} key={section.title}>
