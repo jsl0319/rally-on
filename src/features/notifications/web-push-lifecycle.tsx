@@ -1,6 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { getClientEnvironment } from "@/lib/client-environment";
 import { setPushBinding, syncPush } from "./web-push-client";
 
 // Only already registered browsers are checked here; never prompt permission on app launch.
@@ -9,7 +10,7 @@ export function WebPushLifecycle() {
   useEffect(() => {
     let cancelled = false;
     async function sync() {
-      if (!("serviceWorker" in navigator)) return;
+      if (getClientEnvironment().runtime === "native" || !("serviceWorker" in navigator)) return;
       const registration = await navigator.serviceWorker.getRegistration("/");
       if (!registration || cancelled) return;
       try {

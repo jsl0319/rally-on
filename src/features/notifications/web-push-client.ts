@@ -1,9 +1,12 @@
+import { getClientEnvironment } from "@/lib/client-environment";
+
 export type PushStatus = { enabled: boolean; publicKey?: string; subscriptionId: string | null };
-export function pushEnvironment(): "native" | "install" | "unsupported" | "supported" {
-  const native = window as Window & { Capacitor?: { isNativePlatform?: () => boolean }; };
-  if (native.Capacitor?.isNativePlatform?.() || /RallyOnNativePrototype/.test(navigator.userAgent)) return "native";
-  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  if (ios && !window.matchMedia("(display-mode: standalone)").matches && !(navigator as Navigator & { standalone?: boolean }).standalone) return "install";
+export type PushEnvironment = "native-ios" | "native-android" | "native" | "install" | "unsupported" | "supported";
+export function pushEnvironment(): PushEnvironment {
+  if (typeof window === "undefined") return "unsupported";
+  const { os, runtime } = getClientEnvironment();
+  if (runtime === "native") return os === "ios" ? "native-ios" : os === "android" ? "native-android" : "native";
+  if (os === "ios" && runtime !== "standalone") return "install";
   return window.isSecureContext && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window ? "supported" : "unsupported";
 }
 let bindingRevision = 0;

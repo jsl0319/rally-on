@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { NotificationInbox, type NotificationsResponse } from "@/features/notifications/notification-inbox";
 import { PushSettingsView } from "@/features/notifications/web-push-settings";
+import type { PushEnvironment } from "@/features/notifications/web-push-client";
 
 const examples: NotificationsResponse = { unreadCount: 3, items: [
   { id: "1", type: "COURT_MATCH_CONFIRMED", title: "참가가 확정됐어요", body: "서울숲 테니스장 참가비가 확인됐어요. 당일에 만나요.", href: null, read: false, createdAt: "2026-10-14T11:00:00+09:00" },
@@ -15,12 +16,12 @@ export function NotificationsPreview() {
   const [data, setData] = useState(examples);
   const [enabled, setEnabled] = useState(false);
   const [message, setMessage] = useState("");
-  const [environment, setEnvironment] = useState<"supported" | "native" | "install">("supported");
+  const [environment, setEnvironment] = useState<PushEnvironment>("supported");
   return <>
     <NotificationInbox data={data} backHref="/layout-preview/matches" settings={<PushSettingsView status={{ enabled: true, subscriptionId: enabled ? "preview" : null }} environment={environment} message={message} onRetry={() => {}} onAction={action => { if (action !== "test") setEnabled(action === "on"); setMessage("디자인 미리보기예요. 실제 설정·발송은 하지 않아요."); }} />} onRetry={() => {}} onReadAll={() => setData(previous => ({ unreadCount: 0, items: previous.items.map(item => ({ ...item, read: true })) }))} onOpen={opened => setData(previous => { const items = previous.items.map(item => item.id === opened.id ? { ...item, read: true } : item); return { unreadCount: items.filter(item => !item.read).length, items }; })} />
     <aside className="mx-auto flex max-w-[560px] flex-wrap gap-3 px-5 pb-8 text-xs text-[var(--tm-text-secondary)]" aria-label="미리보기 설정">
       <p className="w-full">디자인 예시 · 실제 설정·발송·저장 없음</p>
-      <button className="min-h-11 underline" onClick={() => setEnvironment("supported")}>지원 브라우저</button><button className="min-h-11 underline" onClick={() => setEnvironment("native")}>검증 앱</button><button className="min-h-11 underline" onClick={() => setEnvironment("install")}>아이폰 Safari</button><button className="min-h-11 underline" onClick={() => setData({ unreadCount: 0, items: [] })}>빈 목록</button><button className="min-h-11 underline" onClick={() => setData(examples)}>예시 복원</button>
+      <button className="min-h-11 underline" onClick={() => setEnvironment("supported")}>지원 브라우저</button><button className="min-h-11 underline" onClick={() => setEnvironment("native-ios")}>아이폰 검증 앱</button><button className="min-h-11 underline" onClick={() => setEnvironment("native-android")}>안드로이드 검증 앱</button><button className="min-h-11 underline" onClick={() => setEnvironment("install")}>아이폰·아이패드 웹</button><button className="min-h-11 underline" onClick={() => setEnvironment("unsupported")}>미지원 환경</button><button className="min-h-11 underline" onClick={() => setData({ unreadCount: 0, items: [] })}>빈 목록</button><button className="min-h-11 underline" onClick={() => setData(examples)}>예시 복원</button>
     </aside>
   </>;
 }
