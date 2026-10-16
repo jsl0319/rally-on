@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowLeft,
   ArrowRight,
   CalendarBlank,
   CheckCircle,
@@ -15,6 +14,7 @@ import {
   UsersThree,
 } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
+import { BackButton } from "@/components/navigation/back-button";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { ActionArea, ActionAreaButton, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, SearchField, TextArea, TextField, TextFieldContent } from "@wanteddev/wds";
@@ -322,14 +322,7 @@ export function M4MatchCreate() {
       <section className="mx-auto max-w-[560px]">
         <header className="sticky top-[var(--rally-safe-top)] z-20 bg-[var(--tm-bg-page)]/95 px-5 pb-4 pt-4 backdrop-blur">
           <div className="relative flex min-h-11 items-center">
-            <button
-              aria-label="이전 화면으로 돌아가기"
-              className="grid size-11 shrink-0 place-items-center rounded-full text-[var(--tm-text-primary)] transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)]"
-              onClick={() => router.replace("/")}
-              type="button"
-            >
-              <ArrowLeft aria-hidden size={25} weight="bold" />
-            </button>
+            <BackButton className="grid size-11 shrink-0 place-items-center rounded-full" fallbackPath="/" />
             <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-xl font-bold tracking-[-0.04em]">매칭 개설</h1>
           </div>
         </header>

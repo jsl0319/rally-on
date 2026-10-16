@@ -5,6 +5,7 @@ import { setPushBinding } from "@/features/notifications/web-push-client";
 import { signOut } from "next-auth/react";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { resetNavigationHistory } from "@/navigation/history";
 
 export function LogoutButton({ className = "", onOpenChange }: { className?: string; onOpenChange?: (open: boolean) => void }) {
   const [open, setOpen] = useState(false);
@@ -27,6 +28,7 @@ export function LogoutButton({ className = "", onOpenChange }: { className?: str
     try {
       // The Auth.js event also removes the server binding; a broken worker must not block logout.
       await setPushBinding(null).catch(() => undefined);
+      resetNavigationHistory();
       await signOut({ callbackUrl: "/login" });
     } catch {
       pending.current = false;

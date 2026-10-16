@@ -10,6 +10,13 @@ class RallyMapNavigationPlugin: CAPPlugin, CAPBridgedPlugin {
     let pluginMethods: [CAPPluginMethod] = []
 
     override func shouldOverrideLoad(_ navigationAction: WKNavigationAction) -> NSNumber? {
+        if navigationAction.navigationType == .backForward,
+           let target = navigationAction.request.url,
+           let server = bridge?.config.serverURL {
+            // Authentication pages are not app back destinations. The web layer
+            // separately revalidates history saved before logout/account changes.
+            if !AppNavigation.allowsHistoryDestination(target, from: webView?.url, server: server) { return true }
+        }
         guard navigationAction.targetFrame?.isMainFrame != false,
               let webURL = navigationAction.request.url,
               let routeURL = KakaoMapLinks.route(from: webURL),
@@ -65,6 +72,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private func showInitialLoading(for controller: CAPBridgeViewController) {
         controller.bridge?.registerPluginInstance(RallyMapNavigationPlugin())
         guard let window, let webView = controller.webView else { return }
+        webView.allowsBackForwardNavigationGestures = true
         initialWebView = webView
         let cover = RallyEntryBrandView()
         shownAt = CACurrentMediaTime()

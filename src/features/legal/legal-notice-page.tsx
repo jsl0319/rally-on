@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/navigation/back-button";
 import Link from "next/link";
 
 import { getSafeReturnTo } from "@/navigation/return-to";
@@ -17,19 +18,12 @@ type LegalNoticePageProps = {
   returnTo?: string;
 };
 
-/** 로그인 전 화면에서 열면 `/`가 로그인 화면이고, 로그인 후에는 매칭 목록이다. */
-const backLabels: Record<string, string> = {
-  "/": "로그인 화면으로",
-  "/my": "마이로 돌아가기",
-};
-
 export function LegalNoticePage({ title, summary, updatedDate, sections, notice, returnTo }: LegalNoticePageProps) {
   const backHref = getSafeReturnTo(returnTo, "/");
-  const backLabel = backLabels[backHref] ?? "돌아가기";
 
   return (
     <main className="min-h-app bg-[var(--tm-bg-page)] text-[var(--tm-text-primary)]">
-      <div className="rally-sticky-header border-b border-[var(--tm-border-subtle)]"><div className="mx-auto max-w-[560px] px-5"><Link className="inline-flex min-h-14 items-center gap-2 text-sm font-medium" href={backHref}><span aria-hidden>←</span>{backLabel}</Link></div></div>
+      <div className="rally-sticky-header border-b border-[var(--tm-border-subtle)]"><div className="mx-auto flex min-h-14 max-w-[560px] items-center gap-2 px-5"><BackButton fallbackPath={backHref} /><span className="text-sm font-medium">이전 화면</span></div></div>
       <article className="mx-auto max-w-[560px] px-5 pb-12">
         <header className="pb-6 pt-7">
           <p className="text-[11px] font-semibold tracking-wide text-[var(--tm-action-primary)]">Rally On 비공개 MVP 안내</p>
@@ -38,7 +32,7 @@ export function LegalNoticePage({ title, summary, updatedDate, sections, notice,
           <p className="mt-3 text-xs text-[var(--tm-text-secondary)]">안내 갱신일 · {updatedDate}</p>
         </header>
 
-        <nav aria-label={`${title} 목차`} className="rounded-2xl bg-white p-5"><h2 className="mb-2 text-sm font-bold">목차</h2><ol>{sections.map((section, index) => <li key={section.title}><a className="flex min-h-11 items-center gap-3 py-2 text-[13px] text-[var(--tm-action-primary)] underline-offset-4 hover:underline" href={`#policy-section-${index + 1}`}><span aria-hidden className="w-4 shrink-0 text-[11px] text-[var(--tm-text-secondary)]">{String(index + 1).padStart(2, "0")}</span>{section.title}</a></li>)}</ol></nav>
+        <nav aria-label={`${title} 목차`} className="rounded-2xl bg-white p-5"><h2 className="mb-2 text-sm font-bold">목차</h2><ol>{sections.map((section, index) => <li key={section.title}><Link className="flex min-h-11 items-center gap-3 py-2 text-[13px] text-[var(--tm-action-primary)] underline-offset-4 hover:underline" href={`#policy-section-${index + 1}`}><span aria-hidden className="w-4 shrink-0 text-[11px] text-[var(--tm-text-secondary)]">{String(index + 1).padStart(2, "0")}</span>{section.title}</Link></li>)}</ol></nav>
         <div className="mt-6 divide-y divide-[var(--tm-border-default)]">
           {sections.map((section, index) => (
             <section className="scroll-mt-24 py-6" id={`policy-section-${index + 1}`} key={section.title}>

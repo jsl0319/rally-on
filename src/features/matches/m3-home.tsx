@@ -12,7 +12,8 @@ import { getSafeReturnTo } from "@/navigation/return-to";
 import { EntrySelection } from "@/features/profile/entry-selection";
 import { M2OnboardingFlow } from "@/features/profile/m2-onboarding-flow";
 
-import { DEFAULT_MATCH_FILTERS, MatchDiscoveryFilters, MatchDiscoveryHeader, type MatchFilters } from "./match-discovery-filters";
+import { MatchDiscoveryFilters, MatchDiscoveryHeader } from "./match-discovery-filters";
+import { useDiscoveryParams } from "@/navigation/use-discovery-params";
 
 import { MatchCreateButton } from "./match-create-button";
 import { MatchCard, type MatchCardData } from "./m3-match-card";
@@ -20,6 +21,7 @@ import { MatchCard, type MatchCardData } from "./m3-match-card";
 type MatchListResponse = { items: MatchCardData[] };
 type Screen = "entry" | "onboarding" | "home";
 type ListStatus = "loading" | "ready" | "error";
+const matchSorts = ["recommended", "soonest", "newest"] as const;
 function getApiError(body: unknown) {
   if (typeof body === "object" && body !== null && "error" in body) {
     const error = body.error;
@@ -53,7 +55,7 @@ export function RallyOnHome({ initialScreen, returnTo = "/" }: { initialScreen: 
   const [matches, setMatches] = useState<MatchCardData[]>([]);
   const [listStatus, setListStatus] = useState<ListStatus>("loading");
   const [listError, setListError] = useState("");
-  const [filters, setFilters] = useState<MatchFilters>(DEFAULT_MATCH_FILTERS);
+  const [filters, setFilters] = useDiscoveryParams(matchSorts, "recommended");
   const { gameType, date, sort, availableOnly } = filters;
   const latestListRequest = useRef(0);
 

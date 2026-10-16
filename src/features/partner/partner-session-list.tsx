@@ -12,13 +12,15 @@ import { matchCardSchedule } from "@/matches/schedule";
 import { CourtMedia } from "@/features/matches/court-media";
 import { displayPartnerCourtImage, MatchBadge } from "@/features/matches/match-presentation";
 import { DiscoveryFilters } from "@/features/matches/match-discovery-filters";
-import { defaultCourtFilters, courtSortOptions } from "@/matches/court-discovery";
+import { courtSortOptions } from "@/matches/court-discovery";
+import { useDiscoveryParams } from "@/navigation/use-discovery-params";
 import { ballDiscountKrw, ballMinimumCount } from "@/matches/court-fee";
 import { apiMessage, type PublicCourtSlot } from "./partner-session";
 
+const courtSorts = ["soonest", "priceLow"] as const;
 export function PartnerSessionList() {
   const [slots, setSlots] = useState<PublicCourtSlot[] | null>(null);
-  const [filters, setFilters] = useState(defaultCourtFilters);
+  const [filters, setFilters] = useDiscoveryParams(courtSorts, "soonest");
   const [loading, setLoading] = useState(true);
   const sequence = useRef(0);
   const [error, setError] = useState("");

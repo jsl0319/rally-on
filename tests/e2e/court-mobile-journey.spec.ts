@@ -98,7 +98,7 @@ test("모바일 최초 코트 설정부터 직접 승인·입금 확인·채팅�
     await test.step("입금 계좌가 없으면 공개를 막고 계좌 등록 후 공개한다", async () => {
       await operator.page.getByRole("button", { name: "공개하기", exact: true }).click();
       await expect(operator.page.getByRole("main").getByRole("alert")).toContainText("계좌");
-      await operator.page.getByRole("link", { name: "이전 화면으로 돌아가기" }).click();
+      await operator.page.getByRole("button", { name: "이전 화면으로 돌아가기" }).click();
       await operator.page.getByRole("link", { name: "입금 계좌 등록하기", exact: true }).click();
       await operator.page.getByLabel("은행").selectOption("KB국민은행");
       await operator.page.getByLabel("계좌번호").fill("111-222-333");

@@ -1,6 +1,7 @@
 "use client";
 
 import { PageHeader } from "@/components/ui/page-header";
+import { BackButton } from "@/components/navigation/back-button";
 
 import { ActionArea, ActionAreaButton, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalHeading, ModalNavigation, ModalSummary, SearchField, TextArea, TextField } from "@wanteddev/wds";
 import Link from "next/link";
@@ -135,7 +136,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
 }
 
 function BackLink({ href }: { href: string }) {
-  return <Link aria-label="이전 화면으로 돌아가기" className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--tm-text-secondary)]" href={href}>← 돌아가기</Link>;
+  return <BackButton fallbackPath={href} />;
 }
 
 function LoadingOrError({ error, label, onRetry }: { error: string; label: string; onRetry: () => void }) {

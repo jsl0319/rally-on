@@ -1,5 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { resetNavigationHistory } from "@/navigation/history";
 import { useCallback, useEffect, useState } from "react";
 import { ActionArea, ActionAreaButton, Modal, ModalContainer, ModalContent, ModalContentItem, ModalHeading } from "@wanteddev/wds";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ export function WithdrawalModal({ onCancel }: { onCancel: () => void }) {
         if (data.error?.code === "WITHDRAWAL_PREVIEW_CHANGED") await load();
         throw new Error(apiMessage(data, "탈퇴하지 못했어요."));
       }
+      resetNavigationHistory();
       router.replace("/account/transactions");
       router.refresh();
     } catch (e) { setError(e instanceof Error ? e.message : "처리 결과를 확인해 주세요."); setBusy(false); }

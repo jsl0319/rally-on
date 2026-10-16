@@ -4,7 +4,7 @@ type CourtRallyLoaderProps = {
 };
 
 export function CourtRallyLoader({ label, className = "" }: CourtRallyLoaderProps) {
-  return <section aria-busy="true" aria-live="polite" className={`flex min-h-[260px] w-full flex-col items-center justify-center ${className}`} role="status">
+  return <section data-navigation-loading aria-busy="true" aria-live="polite" className={`flex min-h-[260px] w-full flex-col items-center justify-center ${className}`} role="status">
     <div aria-hidden="true" className="relative h-[76px] w-[116px] overflow-hidden rounded-2xl bg-[var(--tm-action-primary)]">
       <span className="absolute inset-y-2 left-1/2 w-px -translate-x-1/2 bg-white/75" />
       <span className="absolute left-2.5 right-2.5 top-1/2 h-px -translate-y-1/2 bg-white/75" />

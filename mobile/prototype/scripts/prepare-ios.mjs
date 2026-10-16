@@ -11,8 +11,9 @@ export async function prepareIOS(root) {
   const current = await readFile(target, 'utf8');
   const sceneSource = await readFile(`${root}native/ios/SceneDelegate.swift`, 'utf8');
   const mapSource = await readFile(`${root}native/ios/KakaoMapLinks.swift`, 'utf8');
+  const navigationSource = await readFile(`${root}native/ios/AppNavigation.swift`, 'utf8');
   // Keep one generated compilation unit; no manual Xcode project edits are required.
-  const source = sceneSource + '\n' + mapSource;
+  const source = sceneSource + '\n' + mapSource + '\n' + navigationSource;
   let previous = '';
   try { previous = (await readFile(stamp, 'utf8')).trim(); } catch (error) {
     if (error.code !== 'ENOENT') throw error;

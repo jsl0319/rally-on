@@ -131,7 +131,9 @@ test("마이·프로필·공지·문의·약관은 작은 화면에서 실제 �
     const entry = page.getByRole("navigation", { name: /목차/ }).getByRole("link").nth(1);
     await entry.click();
     await expect(page.locator("#policy-section-2")).toBeInViewport();
-    await page.getByRole("link", { name: "마이로 돌아가기" }).click();
+    await page.getByRole("button", { name: "이전 화면으로 돌아가기" }).click();
+    await expect(page).toHaveURL(new RegExp(`/${route}\\?returnTo=%2Fmy$`));
+    await page.getByRole("button", { name: "이전 화면으로 돌아가기" }).click();
     await expect(page).toHaveURL(/\/my$/);
   }
   for (const path of ["/my", "/my/profile", "/notices", "/support/inquiry", "/terms", "/privacy"]) {

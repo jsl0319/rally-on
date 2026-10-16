@@ -20,24 +20,26 @@ async function fixture(t) {
   }
   const source = await readFile(new URL('../native/ios/SceneDelegate.swift', import.meta.url), 'utf8');
   const mapSource = await readFile(new URL('../native/ios/KakaoMapLinks.swift', import.meta.url), 'utf8');
+  const navigationSource = await readFile(new URL('../native/ios/AppNavigation.swift', import.meta.url), 'utf8');
+  await writeFile(`${root}native/ios/AppNavigation.swift`, navigationSource);
   await writeFile(`${root}native/ios/KakaoMapLinks.swift`, mapSource);
   await writeFile(`${root}native/ios/SceneDelegate.swift`, source);
-  await writeFile(`${root}ios/App/App/SceneDelegate.swift`, source + '\n' + mapSource);
+  await writeFile(`${root}ios/App/App/SceneDelegate.swift`, source + '\n' + mapSource + '\n' + navigationSource);
   const launch = await readFile(new URL('../native/ios/LaunchScreen.storyboard', import.meta.url), 'utf8');
   await writeFile(`${root}native/ios/LaunchScreen.storyboard`, launch);
   await writeFile(`${root}ios/App/App/Base.lproj/LaunchScreen.storyboard`, launch);
-  return { root, source, mapSource, target: `${root}ios/App/App/SceneDelegate.swift` };
+  return { root, source, mapSource, navigationSource, target: `${root}ios/App/App/SceneDelegate.swift` };
 }
 
 test('플랫폼 재준비는 반복 가능하고 추적 소스 갱신을 반영한다', async t => {
-  const { root, source, mapSource, target } = await fixture(t);
+  const { root, source, mapSource, navigationSource, target } = await fixture(t);
   await prepareIOS(root);
   await prepareIOS(root);
   assert.match(await readFile(`${root}ios/App/App/Info.plist`, 'utf8'), /<string>랠리온 검증<\/string>/);
   assert.deepEqual(await readFile(`${root}ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`), await readFile(`${root}native/ios/AppIcon.appiconset/AppIcon-512@2x.png`));
   await writeFile(`${root}native/ios/SceneDelegate.swift`, source + '\n// updated\n');
   await prepareIOS(root);
-  assert.equal(await readFile(target, 'utf8'), source + '\n// updated\n\n' + mapSource);
+  assert.equal(await readFile(target, 'utf8'), source + '\n// updated\n\n' + mapSource + '\n' + navigationSource);
 });
 
 test('시작 화면도 별도 수정을 보존한다', async t => {
